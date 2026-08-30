@@ -278,7 +278,5 @@ Public REST paths, MCP tool schemas, configuration versions, issuer derivation, 
 
 ## Open questions
 
-- Sweep 2 after these docs land (see [skeptic-notes.md](skeptic-notes.md)).
-- Whether first implementation serves management HTTP only on loopback or also terminates TLS on the management port.
+- Sweep 2 recorded 2026-08-30 in [skeptic-notes.md](skeptic-notes.md) (**ACCEPT**). Management in slice 1 is loopback HTTP; remote management TLS is a later deployment choice. PHC: unknown id fails closed; family precedent Argon2id; parameters in CFG at LOGIN-001.
 - JWKS key-rotation UX beyond file-ref replace + apply.
-- Exact PHC algorithms accepted for password file refs (document in CFG when implemented).

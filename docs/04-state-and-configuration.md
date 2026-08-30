@@ -131,7 +131,7 @@ Source of truth in v1. User: `id`, `username`, `passwordRef` or `passwordHashRef
 
 - `entraGraphStub`: bool.
 - `oktaFailAt`: int, default 100.
-- Generic safety cap: document a default in CFG (e.g. 200) even if omitted from the minimal sketch.
+- Generic safety cap: default **200** (sweep 2). Exact field name lands in CFG / OVR-001; omitted from the minimal sketch.
 
 ### `spec.ui`
 
@@ -224,4 +224,4 @@ Field names, duration syntax, vendor enum, and export shape are public. Adding o
 
 - Canonical membership ownership (user→groups vs group→members).
 - Whether `issuer` in YAML is required when derivation env is set, or forbidden, or must match.
-- Generic group safety-cap default numeric.
+- Generic group safety-cap field name (sweep 2: numeric default **200**; field name lands in CFG / OVR-001).

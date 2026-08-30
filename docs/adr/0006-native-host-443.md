@@ -6,7 +6,7 @@ Last reviewed: 2026-08-30
 
 ## Context
 
-Integrator rule 15: LabSSO is a **dest-443** service. SUTs already speak HTTPS to an IdP on 443. LabMITM is a forward proxy and must **not** take 443; copying that rule here would force every SUT to set a non-default dest port.
+Integrator rule 15 is the *class* (IANA/standard dest on the host for protocol data planes SUTs already speak). The rule’s current enumerated list is DNS/NTP/LDAP/SMTP/AAA/NFS; it does not name LabSSO or 443. LabSSO dest-443 is the same class and is decided **in this repository**. SUTs already speak HTTPS to an IdP on 443. LabMITM is a forward proxy and must **not** take 443; copying that rule here would force every SUT to set a non-default dest port. Do not file an integrator FR from this repo.
 
 The container process is unprivileged (UID 65532) and cannot bind host 443 itself. dockerd (or an equivalent) publishes `443:10443`. `EACCES`/`EPERM` on the container listen is not occupancy.
 

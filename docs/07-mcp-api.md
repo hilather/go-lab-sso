@@ -39,7 +39,7 @@ Primary transport:
 - Authentication and authorization shared with REST (bearer; cookies ignored).
 - Explicit protocol-version negotiation. Default: require `Mcp-Protocol-Version: 2026-07-28`.
 
-`spec.management.mcp.allowLegacyClients: true` skips that HTTP pin so older SDK clients (MCPJungle) can initialize without `MCP-Protocol-Version`. It does not add a claimed protocol version and does not disable bearer auth.
+`spec.management.mcp.allowLegacyClients: true` skips that HTTP pin so older SDK clients (MCPJungle) can initialize without `Mcp-Protocol-Version`. It does not add a claimed protocol version and does not disable bearer auth.
 
 Optional developer transport:
 

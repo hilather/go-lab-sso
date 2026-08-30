@@ -8,7 +8,7 @@ Honest residuals for the design phase and the first implementation slices. This 
 ## Design phase
 
 - **No implementation.** There is no `labsso` binary, no image, and no CI.
-- **Sweep 2 pending** after these documents land. See [skeptic-notes.md](skeptic-notes.md).
+- **Sweep 2 recorded** 2026-08-30: review-plan **READY**, skeptic sweep 1 **ACCEPT**. See [skeptic-notes.md](skeptic-notes.md).
 - Implementation is **not scheduled**.
 
 ## First implementation (expected)

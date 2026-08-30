@@ -16,8 +16,8 @@ The design is accepted when all of the following are true on `main`:
 6. `testdata/config/invalid/unknown-field.yaml` demonstrates KnownFields reject.
 7. `examples/compose.sketch.yaml` maps `443:10443`, management loopback, UID 65532, and is marked NOT runnable.
 8. No `go.mod`, no server Dockerfile, no CI, no Makefile, no vendored agent-skills.
-9. Sweep-1 blockers are folded into [skeptic-notes.md](skeptic-notes.md) and the ADRs.
-10. Repo description and topics are set on GitHub.
+9. Sweep-1 blockers are folded into [skeptic-notes.md](skeptic-notes.md) and the ADRs. Sweep 2 (2026-08-30) is **ACCEPT**.
+10. Repo description and topics are set on GitHub (human admin if the landing agent’s token cannot `gh repo edit`).
 
 ## Later implementation — foundation (slice 1)
 
