@@ -9,6 +9,7 @@ This project will use [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ### Added
 
+- Operator docs: README rewrite with header banner, YAML and state-API quick starts, and `docs/user-guide.md`. Onboarding no longer talks like the CLI is future work.
 - VEN-001: Entra and Okta clothes on the exact issuer (`internal/vendor`, snapshot `Clothes`, path dispatch). Optional `spec.profile.tenantId` (compile default, not Normalized). Cookie names `labsso_entra` / `labsso_okta`. Entra `oid`/`tid`/`ver` on id_token and userinfo. Entra token errors add `error_codes` + `trace_id`. `POST /v1/tunables/vendor:swap` / `sso_tunable_vendor_swap` merges profile and purges protocol memory (not pause/force-fail/inject).
 - VEN-002: Remaining enum clothes (`ping`, `adfs`, `google`, `keycloak`, `iam-identity-center`) on the exact issuer. Keycloak realm = `metadata.name` (empty → `lab`). WS-Fed passive (`internal/wsfed`): `wsfed.enabled: false` 404s; metadata EntityID = issuer; `wa=wsignin1.0` auto-POST `wresult`/`wctx` to `wreply`; ADFS path clothes. Forbidden hosts include `accounts.google.com`, `pingidentity.com`, `sso.amazonaws.com`. Duo / SiteMinder / Shibboleth stay out of the enum.
 - IMP-001: Allow-list import (`entra-manifest` | `okta-app` | `saml-metadata` | `oidc-client`). `sso.import.plan` / `sso.import.apply`. `imported.unmapped` in the response. `redirect:rewrite`.
