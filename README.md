@@ -1,12 +1,13 @@
-<p align="center">
-  <img src="docs/assets/header.svg" alt="LabSSO — Laboratory Identity Provider" width="100%">
-</p>
+![LabSSO — laboratory identity provider for OIDC, SAML, and WS-Fed](docs/assets/header.svg)
+
+# LabSSO
+
+**A laboratory identity provider.** Point a product under test at it the way you would point at Entra, Okta, Ping, ADFS, Google, Keycloak, or IAM Identity Center. Desired state is one YAML file. Live edits go through REST or MCP and vanish when you reset or restart.
+
+This is a lab box. It is not production SSO, and it does not pretend to be `login.microsoftonline.com`.
 
 <p align="center">
-  <strong>A lab identity provider you can stand up, dress like a customer SSO, and reset.</strong>
-</p>
-
-<p align="center">
+  <a href="https://github.com/hilather/go-lab-sso/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/hilather/go-lab-sso/ci.yml?branch=main&label=CI" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-4F8EF7.svg" alt="Apache-2.0"></a>
   <a href="go.mod"><img src="https://img.shields.io/badge/Go-1.26-00ADD8.svg" alt="Go 1.26"></a>
   <a href="docs/02-protocols.md"><img src="https://img.shields.io/badge/OIDC-OAuth2-2de2c5.svg" alt="OIDC / OAuth2"></a>
@@ -14,20 +15,18 @@
   <a href="docs/07-mcp-api.md"><img src="https://img.shields.io/badge/MCP-2026--07--28-6E56CF.svg" alt="MCP"></a>
 </p>
 
-LabSSO is the SSO box for a test lab. Point a product under test at it the way you would point at Entra, Okta, Ping, ADFS, Google, Keycloak, or IAM Identity Center. Desired state lives in one YAML file. Live changes go through REST or MCP and disappear when you reset or restart.
-
-This is a lab appliance, not a production IdP and not a clone of `login.microsoftonline.com`.
-
-New here? Read the [user guide](docs/user-guide.md). Want the short version? Stay on this page.
+New here? Read the [user guide](docs/user-guide.md). Short path: [START-HERE.md](START-HERE.md).
 
 ---
 
-## What you get
+## Why this exists
+
+Labs need an IdP they can dress like a customer, break on purpose, and put back. LabSSO is that box.
 
 | You need | LabSSO does |
 |---|---|
 | An IdP that looks like the customer's | One exact issuer, plus vendor-shaped paths and claims |
-| A way to add users, clients, and sessions from a script or an agent | One operation list behind REST `/v1` and MCP `/mcp` |
+| Users, clients, and sessions from a script or an agent | One operation list behind REST `/v1` and MCP `/mcp` |
 | HTTPS on port 443, the way real apps talk to SSO | Host `443` maps to an unprivileged listener inside the container (`:10443`) |
 | Git as the source of truth | Read-only YAML bootstrap, export the drift, reset back to the file |
 | Forced login, consent, or token failures | Documented tunables |
@@ -165,28 +164,13 @@ profile:
 
 Vendor values: `generic`, `entra`, `okta`, `ping`, `adfs`, `google`, `keycloak`, `iam-identity-center`.
 
-Full field list: [docs/04-state-and-configuration.md](docs/04-state-and-configuration.md). More walkthroughs: [user guide](docs/user-guide.md).
+Full field list: [docs/04-state-and-configuration.md](docs/04-state-and-configuration.md). Walkthroughs: [user guide](docs/user-guide.md).
 
 ---
 
 ## State loading APIs
 
 The file on disk is the bootstrap. Runtime state is an overlay in memory. Revisions tell you whether they still match.
-
-| Call | What it does |
-|---|---|
-| `labsso validate --config PATH` | Load, normalize, compile. Print `ok revision=sha256:…` |
-| `labsso canonicalize --config PATH` | Same, then print canonical YAML (secret values stay refs) |
-| `GET /v1/state` | Bootstrap revision, runtime revision, generation, drift flag, canonical doc |
-| `POST /v1/state:validate` | Decode a document without swapping live state |
-| `GET /v1/state:export` | Canonical YAML/JSON you can commit |
-| `POST /v1/changes:plan` | Diff + impact, no swap |
-| `POST /v1/changes:apply` | Plan, then atomic swap if the expected revision still matches |
-| `POST /v1/state:reset` | Re-read the mounted file. If the file is now bad, live state stays |
-
-MCP twins: `sso_state_get`, `sso_state_validate`, `sso_change_plan`, `sso_change_apply`, `sso_state_export`, `sso_state_reset`.
-
-Load pipeline:
 
 ```text
 read file
@@ -201,6 +185,19 @@ read file
 ```
 
 A bad bootstrap file does not listen.
+
+| Call | What it does |
+|---|---|
+| `labsso validate --config PATH` | Load, normalize, compile. Print `ok revision=sha256:…` |
+| `labsso canonicalize --config PATH` | Same, then print canonical YAML (secret values stay refs) |
+| `GET /v1/state` | Bootstrap revision, runtime revision, generation, drift flag, canonical doc |
+| `POST /v1/state:validate` | Decode a document without swapping live state |
+| `GET /v1/state:export` | Canonical YAML/JSON you can commit |
+| `POST /v1/changes:plan` | Diff + impact, no swap |
+| `POST /v1/changes:apply` | Plan, then atomic swap if the expected revision still matches |
+| `POST /v1/state:reset` | Re-read the mounted file. If the file is now bad, live state stays |
+
+MCP twins: `sso_state_get`, `sso_state_validate`, `sso_change_plan`, `sso_change_apply`, `sso_state_export`, `sso_state_reset`.
 
 ### Read current state
 
@@ -278,7 +275,7 @@ curl -sS 'http://127.0.0.1:8080/v1/state:export?format=yaml'
 curl -sS -X POST http://127.0.0.1:8080/v1/state:reset
 ```
 
-Reset never writes the bootstrap file. Restart has the same effect as reset: memory overlay is gone, the mounted YAML is loaded again.
+Reset never writes the bootstrap file. Restart has the same effect as reset: the memory overlay is gone, and the mounted YAML is loaded again.
 
 Details: [docs/04-state-and-configuration.md](docs/04-state-and-configuration.md), [docs/06-rest-api.md](docs/06-rest-api.md), [docs/07-mcp-api.md](docs/07-mcp-api.md).
 
@@ -300,7 +297,7 @@ labsso version
 
 ---
 
-## What is implemented
+## What is in the box
 
 OIDC/OAuth2 with PKCE, login and consent pages, vendor clothes for the full vendor list, group overage, SP-initiated SAML, WS-Fed, operator UI, allow-list import, REST, and MCP.
 
