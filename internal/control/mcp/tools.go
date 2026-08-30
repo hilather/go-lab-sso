@@ -143,6 +143,18 @@ func (s *Server) registerTools() {
 	}) (any, error) {
 		return map[string]any{"code": in.Code}, s.app.InjectError(actor, in.Code)
 	})
+	add(s, "sso_tunable_vendor_swap", true, true, func(ctx context.Context, actor auth.Actor, in struct {
+		Vendor           string  `json:"vendor"`
+		TenantID         *string `json:"tenantId,omitempty"`
+		ExpectedRevision string  `json:"expectedRevision"`
+		IdempotencyKey   string  `json:"idempotencyKey,omitempty"`
+		Reason           string  `json:"reason,omitempty"`
+	}) (any, error) {
+		return s.app.SwapVendor(actor, app.SwapVendorIn{
+			Vendor: in.Vendor, TenantID: in.TenantID,
+			ExpectedRevision: in.ExpectedRevision, IdempotencyKey: in.IdempotencyKey, Reason: in.Reason,
+		})
+	})
 }
 
 func add[In any](s *Server, name string, mutating, idempotent bool, h func(context.Context, auth.Actor, In) (any, error)) {

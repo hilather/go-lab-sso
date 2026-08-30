@@ -1,6 +1,6 @@
 # Security Architecture
 
-Status: FND + OIDC + login implemented; clothes/SPA later
+Status: FND + OIDC + login + entra/okta clothes implemented; SPA later
 Owners: Security, Protocols, Control Plane
 Last reviewed: 2026-08-30
 Related ADRs: 0002, 0003, 0004, 0005, 0006, 0008, 0009
@@ -66,7 +66,7 @@ LabSSO does **not** trust vendor-cloud hostnames and does not present them.
 
 Operator console authenticates with an in-process session table and cookie `labsso_session` (`HttpOnly`, `SameSite=Lax`, `Path=/`, host-only, `Secure` iff TLS). CSRF in memory / JSON, never `localStorage`. MCP ignores cookies.
 
-`spec.ui.enabled: false` 404s SPA only. Data-plane login cookie is `labsso_login` (`HttpOnly`, `SameSite=Lax`, `Path=/` on the issuer host, host-only, `Secure` iff TLS). Do not reuse `labsso_session`.
+`spec.ui.enabled: false` 404s SPA only. Data-plane login cookies (`HttpOnly`, `SameSite=Lax`, `Path=/` on the issuer host, host-only, `Secure` iff TLS): generic `labsso_login`, entra `labsso_entra`, okta `labsso_okta`. Do not reuse `labsso_session`. Clothes swap orphans the previous cookie name.
 
 ## Secret management
 

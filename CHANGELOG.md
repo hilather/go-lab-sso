@@ -7,6 +7,10 @@ This project will use [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added
+
+- VEN-001: Entra and Okta clothes on the exact issuer (`internal/vendor`, snapshot `Clothes`, path dispatch). Optional `spec.profile.tenantId` (compile default, not Normalized). Cookie names `labsso_entra` / `labsso_okta`. Entra `oid`/`tid`/`ver` on id_token and userinfo. Entra token errors add `error_codes` + `trace_id`. `POST /v1/tunables/vendor:swap` / `sso_tunable_vendor_swap` merges profile and purges protocol memory (not pause/force-fail/inject). Unimplemented vendors compile-reject.
+
 ### Design
 
 - Landed the LabSSO design plan: two-plane IdP (HTTPS data plane + REST/MCP management), fail-closed YAML `labsso.dev/v1alpha1`, vendor clothes (not hostname clones), native host 443, no LabNTP time bus, allow-list customer-config import, and sequential protocol slices.

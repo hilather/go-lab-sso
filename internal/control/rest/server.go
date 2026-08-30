@@ -58,6 +58,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST "+p+"/tunables/token:resume", s.authed(s.resumeToken))
 	mux.HandleFunc("POST "+p+"/tunables/auth:force-fail", s.authed(s.forceFail))
 	mux.HandleFunc("POST "+p+"/tunables/error:inject", s.authed(s.injectError))
+	mux.HandleFunc("POST "+p+"/tunables/vendor:swap", s.authed(s.swapVendor))
 	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !auth.LoopbackHostAllowed(r.RemoteAddr, r.Host) {
 			http.Error(w, "forbidden host", http.StatusForbidden)
@@ -322,6 +323,43 @@ func (s *Server) forceFail(w http.ResponseWriter, r *http.Request, actor auth.Ac
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"on": body.On})
+}
+
+func (s *Server) swapVendor(w http.ResponseWriter, r *http.Request, actor auth.Actor) {
+	var body struct {
+		Vendor           string  `json:"vendor"`
+		TenantID         *string `json:"tenantId"`
+		ExpectedRevision string  `json:"expectedRevision"`
+		IdempotencyKey   string  `json:"idempotencyKey"`
+		Reason           string  `json:"reason"`
+	}
+	if err := decodeJSON(r, &body); err != nil {
+		writeError(w, err)
+		return
+	}
+	expected := body.ExpectedRevision
+	if expected == "" {
+		expected = strings.Trim(r.Header.Get(headerIfMatch), `"`)
+	}
+	if expected == "" {
+		expected = r.Header.Get(headerExpected)
+	}
+	key := body.IdempotencyKey
+	if key == "" {
+		key = r.Header.Get(headerIdempotency)
+	}
+	out, err := s.app.SwapVendor(actor, app.SwapVendorIn{
+		Vendor:           body.Vendor,
+		TenantID:         body.TenantID,
+		ExpectedRevision: expected,
+		IdempotencyKey:   key,
+		Reason:           body.Reason,
+	})
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 func (s *Server) injectError(w http.ResponseWriter, r *http.Request, actor auth.Actor) {

@@ -177,3 +177,26 @@ func TestParityValidatePlanApply(t *testing.T) {
 		t.Fatal("apply did not change revision")
 	}
 }
+
+func TestParityVendorSwap(t *testing.T) {
+	a, rh, cs := bootBoth(t)
+	rev := a.Status().RuntimeRevision
+	body := map[string]any{"vendor": "entra", "expectedRevision": rev, "reason": "parity"}
+	rr := restJSON(t, rh, "POST", "/v1/tunables/vendor:swap", body)
+	if rr["applied"] != true {
+		t.Fatalf("REST swap %v", rr)
+	}
+	if a.Store().Load().Clothes.Vendor != "entra" {
+		t.Fatal("REST swap did not change clothes")
+	}
+	rev2 := a.Status().RuntimeRevision
+	mr := mcpTool(t, cs, "sso_tunable_vendor_swap", map[string]any{
+		"vendor": "okta", "expectedRevision": rev2, "reason": "parity",
+	})
+	if mr["applied"] != true {
+		t.Fatalf("MCP swap %v", mr)
+	}
+	if a.Store().Load().Clothes.Vendor != "okta" {
+		t.Fatal("MCP swap did not change clothes")
+	}
+}

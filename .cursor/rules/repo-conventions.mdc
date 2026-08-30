@@ -7,9 +7,9 @@ alwaysApply: true
 
 Read `AGENTS.md` for the full rules. Non-negotiables:
 
-- Default ship (FND-001 + OIDC-001 + LOGIN-001) is implemented. Do not
-  vendor Origin/Cursor agent-skills. Makefile targets that are not
-  implemented must `false`. Clothes/SAML/SPA/import/integrator are later.
+- Default ship (FND-001 + OIDC-001 + LOGIN-001) plus VEN-001 is
+  implemented. Do not vendor Origin/Cursor agent-skills. Makefile
+  targets that are not implemented must `false`. Overage/SAML/SPA/import/integrator are later.
 - Documentation ships with the change. Stale docs are a defect. Do not
   change an architectural invariant without an ADR.
 - REST and MCP are adapters over one operation registry. Never implement

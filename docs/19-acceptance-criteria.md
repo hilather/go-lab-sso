@@ -37,9 +37,14 @@ The design is accepted when all of the following are true on `main`:
 - Login and consent HTML work. `ui.enabled: false` does not 404 them.
 - MFA modes `never` | `always` | `force-fail` behave as documented.
 
-## Later implementation — clothes and overage (slices 4–5)
+## Clothes (VEN-001, implemented)
 
-- `entra` / `okta` change paths and claims, not hostname / `iss`.
+- `entra` / `okta` change paths, claims extras, login cookie names, and entra token-error extras — not hostname / `iss`.
+- Active clothes paths only; discovery lists only the active endpoints.
+- Unimplemented vendor enum values compile-reject.
+
+## Later implementation — overage (OVR-001)
+
 - Entra overage uses LabSSO Graph-shaped stub; no Microsoft egress.
 - Okta fails token at `oktaFailAt`.
 - Generic embeds groups with a safety cap.

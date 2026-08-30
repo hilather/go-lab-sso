@@ -1,10 +1,21 @@
 package app
 
 import (
+	"encoding/json"
+
 	"github.com/hilather/go-lab-sso/internal/auth"
 	"github.com/hilather/go-lab-sso/internal/domainerr"
+	"github.com/hilather/go-lab-sso/internal/model"
 	"github.com/hilather/go-lab-sso/internal/oidc"
 )
+
+type SwapVendorIn struct {
+	Vendor           string
+	TenantID         *string
+	ExpectedRevision string
+	IdempotencyKey   string
+	Reason           string
+}
 
 func (a *App) ListSessions(actor auth.Actor) ([]oidc.LoginSession, error) {
 	if err := a.authorize(actor, "sso.sessions.list"); err != nil {
@@ -61,4 +72,39 @@ func (a *App) InjectError(actor auth.Actor, code string) error {
 	a.oidc.Runtime().SetInject(code)
 	a.audit.EmitOK(actor, "sso.tunable.error.inject", code, "", "")
 	return nil
+}
+
+func (a *App) SwapVendor(actor auth.Actor, in SwapVendorIn) (*ApplyResult, error) {
+	if err := a.authorize(actor, "sso.tunable.vendor.swap"); err != nil {
+		return nil, err
+	}
+	if in.Vendor == "" {
+		return nil, domainerr.Validation("vendor is required")
+	}
+	if !model.ValidVendor(in.Vendor) {
+		return nil, domainerr.Validation("spec.profile.vendor is not a known vendor")
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	prev := a.store.Load()
+	if prev == nil || prev.Canonical == nil {
+		return nil, domainerr.Validation("no active snapshot")
+	}
+	profile := prev.Canonical.Spec.Profile
+	profile.Vendor = in.Vendor
+	if in.TenantID != nil {
+		profile.TenantID = *in.TenantID
+	}
+	val, err := json.Marshal(profile)
+	if err != nil {
+		return nil, err
+	}
+	return a.applyLocked(actor, "sso.tunable.vendor.swap", ChangeIn{
+		ExpectedRevision: in.ExpectedRevision,
+		IdempotencyKey:   in.IdempotencyKey,
+		Reason:           in.Reason,
+		Operations: []model.Operation{{
+			Op: model.OpUpdate, Target: model.Target{Kind: model.TargetProfile}, Value: val,
+		}},
+	})
 }

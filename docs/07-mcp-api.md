@@ -89,6 +89,8 @@ sso_tunable_overage_set
 sso_tunable_vendor_swap
 sso_tunable_redirect_rewrite
 
+Implemented tunables today: `sso_tunable_token_pause`, `sso_tunable_token_resume`, `sso_tunable_auth_force_fail`, `sso_tunable_error_inject`, `sso_tunable_vendor_swap`. `sso_tunable_vendor_swap` input: `vendor` (required), `tenantId` (optional merge), `expectedRevision`, `reason`, `idempotencyKey`. Same domain types as REST `POST /v1/tunables/vendor:swap`.
+
 sso_audit_query
 sso_audit_get
 ```

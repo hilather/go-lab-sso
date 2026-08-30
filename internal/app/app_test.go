@@ -10,6 +10,7 @@ import (
 
 	"github.com/hilather/go-lab-sso/internal/app"
 	"github.com/hilather/go-lab-sso/internal/auth"
+	"github.com/hilather/go-lab-sso/internal/capabilities"
 	"github.com/hilather/go-lab-sso/internal/config"
 	"github.com/hilather/go-lab-sso/internal/domainerr"
 	"github.com/hilather/go-lab-sso/internal/model"
@@ -325,6 +326,84 @@ func TestValidateDoesNotMutateLive(t *testing.T) {
 	items, err := a.ListClients(admin())
 	if err != nil || len(items) != 1 || items[0].ClientID != "app-1" {
 		t.Fatalf("canonical list mutated: %+v %v", items, err)
+	}
+}
+
+func TestSwapVendorScopes(t *testing.T) {
+	a, _ := bootApp(t)
+	writer := auth.Actor{ID: "w", Scopes: []string{capabilities.ScopeWrite}}
+	_, err := a.SwapVendor(writer, app.SwapVendorIn{
+		Vendor: "entra", ExpectedRevision: a.Status().RuntimeRevision, Reason: "x",
+	})
+	if domainerr.CodeOf(err) != domainerr.CodeForbidden {
+		t.Fatalf("write without tunables: %v", err)
+	}
+	tun := auth.Actor{ID: "t", Scopes: []string{capabilities.ScopeTunables}}
+	if _, err := a.SwapVendor(tun, app.SwapVendorIn{
+		Vendor: "entra", ExpectedRevision: a.Status().RuntimeRevision, Reason: "x",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if a.Store().Load().Clothes.Vendor != "entra" {
+		t.Fatal("swap did not compile entra clothes")
+	}
+}
+
+func TestSwapVendorMergesTenantID(t *testing.T) {
+	a, _ := bootApp(t)
+	tid := "11111111-1111-1111-1111-111111111111"
+	val, _ := json.Marshal(model.Profile{Vendor: "entra", TenantID: tid})
+	if _, err := a.Apply(admin(), app.ChangeIn{
+		ExpectedRevision: a.Status().RuntimeRevision, Reason: "set tid",
+		Operations: []model.Operation{{Op: model.OpUpdate, Target: model.Target{Kind: model.TargetProfile}, Value: val}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.SwapVendor(admin(), app.SwapVendorIn{
+		Vendor: "okta", ExpectedRevision: a.Status().RuntimeRevision, Reason: "omit tid",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if got := a.Store().Load().Canonical.Spec.Profile.TenantID; got != tid {
+		t.Fatalf("omit tenantId must keep Canonical %q, got %q", tid, got)
+	}
+	empty := ""
+	if _, err := a.SwapVendor(admin(), app.SwapVendorIn{
+		Vendor: "okta", TenantID: &empty, ExpectedRevision: a.Status().RuntimeRevision, Reason: "clear tid",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if got := a.Store().Load().Canonical.Spec.Profile.TenantID; got != "" {
+		t.Fatalf("empty tenantId must clear Canonical, got %q", got)
+	}
+	val, _ = json.Marshal(model.Profile{Vendor: "entra", TenantID: tid})
+	if _, err := a.Apply(admin(), app.ChangeIn{
+		ExpectedRevision: a.Status().RuntimeRevision, Reason: "restore tid",
+		Operations: []model.Operation{{Op: model.OpUpdate, Target: model.Target{Kind: model.TargetProfile}, Value: val}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	wipe, _ := json.Marshal(model.Profile{Vendor: "okta"})
+	if _, err := a.Apply(admin(), app.ChangeIn{
+		ExpectedRevision: a.Status().RuntimeRevision, Reason: "full replace",
+		Operations: []model.Operation{{Op: model.OpUpdate, Target: model.Target{Kind: model.TargetProfile}, Value: wipe}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if got := a.Store().Load().Canonical.Spec.Profile.TenantID; got != "" {
+		t.Fatalf("Apply TargetProfile full replace must zero tenantId, got %q", got)
+	}
+}
+
+func TestApplyPingRejected(t *testing.T) {
+	a, _ := bootApp(t)
+	val, _ := json.Marshal(model.Profile{Vendor: "ping"})
+	_, err := a.Apply(admin(), app.ChangeIn{
+		ExpectedRevision: a.Status().RuntimeRevision, Reason: "ping",
+		Operations: []model.Operation{{Op: model.OpUpdate, Target: model.Target{Kind: model.TargetProfile}, Value: val}},
+	})
+	if err == nil || !strings.Contains(err.Error(), "clothes not implemented") {
+		t.Fatalf("want clothes not implemented, got %v", err)
 	}
 }
 

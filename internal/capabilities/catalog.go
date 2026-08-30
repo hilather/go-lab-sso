@@ -38,6 +38,7 @@ var catalog = []Capability{
 	parity("sso.tunable.token.resume", "Resume token", "POST", "/v1/tunables/token:resume", "sso_tunable_token_resume", "", []string{ScopeTunables}, true, true),
 	parity("sso.tunable.auth.force_fail", "Force auth fail", "POST", "/v1/tunables/auth:force-fail", "sso_tunable_auth_force_fail", "", []string{ScopeTunables}, true, true),
 	parity("sso.tunable.error.inject", "Inject error", "POST", "/v1/tunables/error:inject", "sso_tunable_error_inject", "", []string{ScopeTunables}, true, true),
+	parity("sso.tunable.vendor.swap", "Swap vendor clothes", "POST", "/v1/tunables/vendor:swap", "sso_tunable_vendor_swap", "", []string{ScopeTunables}, true, true),
 }
 
 func restOnly(id, title, method, path string, scopes []string, idempotent bool) Capability {

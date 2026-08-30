@@ -61,7 +61,8 @@ type MCPConfig struct {
 }
 
 type Profile struct {
-	Vendor string `yaml:"vendor" json:"vendor"`
+	Vendor   string `yaml:"vendor" json:"vendor"`
+	TenantID string `yaml:"tenantId,omitempty" json:"tenantId,omitempty"`
 }
 
 type Protocols struct {

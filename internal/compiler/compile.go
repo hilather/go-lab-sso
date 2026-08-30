@@ -13,6 +13,7 @@ import (
 	"github.com/hilather/go-lab-sso/internal/domainerr"
 	"github.com/hilather/go-lab-sso/internal/model"
 	"github.com/hilather/go-lab-sso/internal/snapshot"
+	"github.com/hilather/go-lab-sso/internal/vendor"
 )
 
 type Options struct {
@@ -38,6 +39,10 @@ func compile(doc model.Document, opt Options) (*snapshot.Snapshot, error) {
 	config.Normalize(&doc)
 	if err := doc.ValidateIDs(); err != nil {
 		return nil, err
+	}
+	clothes, err := vendor.Resolve(doc.Spec.Profile.Vendor, doc.Spec.Profile.TenantID)
+	if err != nil {
+		return nil, domainerr.Validation("clothes not implemented")
 	}
 	issuer, err := ResolveIssuer(doc.Spec.Issuer, opt.Env)
 	if err != nil {
@@ -136,6 +141,7 @@ func compile(doc model.Document, opt Options) (*snapshot.Snapshot, error) {
 		ClientsByClientID: clientsByClientID,
 		UsersByID:         usersByID,
 		GroupsByID:        groupsByID,
+		Clothes:           clothes,
 	}, nil
 }
 

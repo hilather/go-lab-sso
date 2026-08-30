@@ -3,6 +3,7 @@ package config_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/hilather/go-lab-sso/internal/config"
@@ -82,6 +83,68 @@ func mustReject(t *testing.T, rel string) {
 	_, err := config.LoadFile(filepath.Join(root, rel), config.Options{BaseDir: root})
 	if err == nil {
 		t.Fatalf("expected reject for %s", rel)
+	}
+}
+
+func TestUnknownProfileField(t *testing.T) {
+	mustReject(t, "testdata/config/invalid/unknown-profile-field.yaml")
+}
+
+func TestLoadOktaAccepted(t *testing.T) {
+	root := repoRoot(t)
+	doc, err := config.LoadFile(filepath.Join(root, "testdata/config/valid/okta.yaml"), config.Options{BaseDir: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if doc.Spec.Profile.Vendor != "okta" {
+		t.Fatalf("vendor %s", doc.Spec.Profile.Vendor)
+	}
+}
+
+func TestLoadPingAccepted(t *testing.T) {
+	root := repoRoot(t)
+	doc, err := config.LoadFile(filepath.Join(root, "testdata/config/compile-reject/ping.yaml"), config.Options{BaseDir: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if doc.Spec.Profile.Vendor != "ping" {
+		t.Fatalf("vendor %s", doc.Spec.Profile.Vendor)
+	}
+}
+
+func TestTenantIDOmitSetRoundTrip(t *testing.T) {
+	root := repoRoot(t)
+	omit, err := config.LoadFile(filepath.Join(root, "testdata/config/valid/entra.yaml"), config.Options{BaseDir: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if omit.Spec.Profile.TenantID != "" {
+		t.Fatalf("omit tenantId want empty, got %q", omit.Spec.Profile.TenantID)
+	}
+	canon, err := config.CanonicalYAML(omit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(canon), "tenantId") {
+		t.Fatalf("empty tenantId should omit from canonicalize: %s", canon)
+	}
+	set, err := config.LoadFile(filepath.Join(root, "testdata/config/valid/entra-tenant.yaml"), config.Options{BaseDir: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if set.Spec.Profile.TenantID != "11111111-1111-1111-1111-111111111111" {
+		t.Fatalf("set tenantId %s", set.Spec.Profile.TenantID)
+	}
+	setCanon, err := config.CanonicalYAML(set)
+	if err != nil {
+		t.Fatal(err)
+	}
+	again, err := config.Load(setCanon, config.Options{BaseDir: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again.Spec.Profile.TenantID != set.Spec.Profile.TenantID {
+		t.Fatalf("round-trip tenantId %s", again.Spec.Profile.TenantID)
 	}
 }
 

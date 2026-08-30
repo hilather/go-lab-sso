@@ -1,6 +1,6 @@
 # Vendor Profiles
 
-Status: design (not implemented)
+Status: entra and okta clothes implemented (VEN-001). Overage (OVR-001) and later vendors are not started.
 Owners: Protocols, Application
 Last reviewed: 2026-08-30
 Related ADRs: 0005
@@ -20,7 +20,7 @@ A lab that “looks like Entra” is useful only if SUT clients can be pointed a
 ## Non-goals
 
 - Serving TLS as `login.microsoftonline.com` or `*.okta.com`.
-- Cloning vendor admin consoles or Graph / Okta Management APIs except the minimal Entra group-overage stub.
+- Cloning vendor admin consoles or Graph / Okta Management APIs except the minimal Entra group-overage stub (OVR-001).
 - Per-vendor processes or images.
 - Changing the issuer hostname when clothes swap.
 
@@ -37,7 +37,7 @@ keycloak
 iam-identity-center
 ```
 
-Unknown values reject at decode. Default: `generic`.
+Unknown values reject at decode. Default: `generic`. Implemented clothes: `generic`, `entra`, `okta`. Other enum values load and canonicalize but **compile-reject** (`clothes not implemented`). They must not silently act as generic.
 
 ## What clothes cover
 
@@ -46,69 +46,78 @@ Unknown values reject at decode. Default: `generic`.
 | Issuer | Display strings in HTML | The exact issuer URL |
 | Authorize / token / jwks / userinfo / logout paths | Templates | Being on that issuer |
 | Claim names | `oid`/`tid`/`ver` vs `groups` vs Ping / ADFS names | `iss` value |
-| Error JSON | Field names, error codes shown to the SUT | Management-plane domain codes |
-| Cookies | Cookie names and flags on the login host | Operator SPA cookie name (`labsso_session` planned) |
-| Group overage | Entra stub vs Okta fail-at vs generic cap | Inventing a second issuer |
-| HTML chrome | Labels, CSS class names | Merging login HTML into the operator SPA |
+| Error JSON | Token JSON extras (`error_codes`, `trace_id` for entra) | Authorize query params (RFC 6749); management-plane domain codes |
+| Cookies | Login cookie name on the login host | Operator SPA cookie name (`labsso_session` planned) |
+| Group overage | Entra stub vs Okta fail-at vs generic cap (OVR-001) | Inventing a second issuer |
+| HTML chrome | Titles, headings | Merging login HTML into the operator SPA |
 
-## Clothes table
+## Clothes table (normative paths)
 
-Paths below are illustrative templates relative to the exact issuer. Implementation freezes them in a generated catalog. Hosts are **never** vendor-cloud hosts.
+Paths are relative to the exact lab issuer. Hosts are **never** vendor-cloud hosts.
 
-| Vendor | Typical authorize path | Typical token path | Distinct claims / behavior | Cookies / errors | Overage | Slice |
-|---|---|---|---|---|---|---|
-| `generic` | `/oauth2/authorize` | `/oauth2/token` | Standard OIDC (`sub`, `email`, `groups`) | RFC 6749 JSON | Embed groups with safety cap | 2–3 |
-| `entra` | Entra-shaped `/oauth2/v2.0/authorize` (on lab issuer) | `/oauth2/v2.0/token` | `oid`, `tid`, `ver`; optional `_claim_names` / `_claim_sources` | Entra-like error JSON and login cookies | Graph-shaped stub on LabSSO | 4–5 |
-| `okta` | Okta-shaped `/oauth2/{authServerId}/v1/authorize` | `/oauth2/{authServerId}/v1/token` | Okta `groups`; `vid`/`ver` style only if needed for the SUT | Okta-like error dialect | Fail token after `oktaFailAt` (default 100) | 4–5 |
-| `ping` | Ping-shaped authorize | Ping-shaped token | Ping claim names | Ping error dialect | Later; default generic cap until specified | 9 |
-| `adfs` | ADFS-shaped OIDC and later WS-Fed | ADFS-shaped token | ADFS claim names | ADFS error / cookie dialect | Later | 9 |
-| `google` | Google-shaped `/o/oauth2/v2/auth` | Google-shaped token | `hd`, Google-ish profile claims | Google-like errors | Later | 9 |
-| `keycloak` | `/realms/{realm}/protocol/openid-connect/auth` | `…/token` | `realm_access` / `resource_access` shapes | Keycloak error dialect | Later | 9 |
-| `iam-identity-center` | IAM IC-shaped authorize | IAM IC-shaped token | AWS IC-ish claims | IAM IC error dialect | Later | 9 |
+| Vendor | Authorize | Token | JWKS | UserInfo | Logout | Claims / cookies / errors | Overage | Slice |
+|---|---|---|---|---|---|---|---|---|
+| `generic` | `GET /oauth2/authorize` | `POST /oauth2/token` | `GET /oauth2/jwks` | `GET /oauth2/userinfo` | `GET /oauth2/logout` | Standard OIDC; cookie `labsso_login`; RFC 6749 JSON | Embed groups (cap in OVR-001) | 2–3 |
+| `entra` | `GET /oauth2/v2.0/authorize` | `POST /oauth2/v2.0/token` | `GET /oauth2/v2.0/jwks` | `GET /oauth2/v2.0/userinfo` | `GET /oauth2/v2.0/logout` | `oid`=`user.id`, `tid`, `ver=2.0` on id_token and userinfo; cookie `labsso_entra`; token errors add `error_codes` + `trace_id` | Graph-shaped stub (OVR-001) | 4 |
+| `okta` | `GET /oauth2/default/v1/authorize` | `POST /oauth2/default/v1/token` | `GET /oauth2/default/v1/jwks` | `GET /oauth2/default/v1/userinfo` | `GET /oauth2/default/v1/logout` | Same claims as generic; cookie `labsso_okta`; RFC 6749 token JSON. `authServerId` is clothes constant `default` | Fail at `oktaFailAt` (OVR-001) | 4 |
+| `ping` | later | later | later | later | later | later | later | 9 |
+| `adfs` | later | later | later | later | later | later | later | 9 |
+| `google` | later | later | later | later | later | later | later | 9 |
+| `keycloak` | later | later | later | later | later | later | later | 9 |
+| `iam-identity-center` | later | later | later | later | later | later | later | 9 |
 
 Duo, SiteMinder, Shibboleth: **later clothes**, same issuer rule, not rows in v1 enum until an ADR adds them.
+
+`GET /.well-known/openid-configuration` is served for every implemented vendor and lists only the **active** clothed endpoints. After an entra swap, generic `/oauth2/authorize` (and the rest of the generic set) **404**. Entra also serves `GET /{tenantId}/v2.0/.well-known/openid-configuration` with the same `iss` (404 unless `{tenantId}` equals the compiled tenant id).
+
+Login and consent stay `/login` and `/consent` for all clothes.
+
+## `spec.profile.tenantId`
+
+Optional. `yaml:"tenantId,omitempty"`. Empty stays empty in Canonical, export, and `GET /v1/state`. The compiler fills `snapshot.Clothes.TenantID` with `00000000-0000-0000-0000-000000000001` when omitted. Entra `tid` and the Entra discovery alias use that compiled value. Do not Normalize the default into Canonical.
 
 ## Swap behavior
 
 `spec.profile.vendor` is a snapshot field. Plan/apply that swaps clothes:
 
 - Recompiles path tables and claim maps.
-- Invalidates in-flight authorization codes (client still exists; path the SUT POSTs to may change).
+- Invalidates in-flight authorization codes, pending requests, refresh tokens, and login sessions (`Runtime.PurgeProtocol`) when **vendor** changes. A tenantId-only update does not purge. Pause / force-fail / inject overlays survive.
 - Does **not** change `iss`.
 - Does **not** rewrite `LAB_PUBLIC_HOST`.
 - Audits the swap as a high-visibility mutation.
 
-Agents may use the “swap vendor clothes” tunable, which is this field change plus the same mutation contract.
+`POST /v1/tunables/vendor:swap` / MCP `sso_tunable_vendor_swap` (`sso.tunable.vendor.swap`, scope `sso.tunables`) merges `vendor` and optional `tenantId` onto the current profile and applies through the same compile/swap path. Omit `tenantId` to keep the current Canonical value; send `tenantId: ""` to clear it (compile default still fills Clothes). It is not `sso.change.apply`. Write-scoped `POST /v1/changes:apply` of `TargetProfile` remains a full replace (a `{vendor}`-only value zeros `tenantId`).
 
-## Entra clothes (slice 4–5)
+## Entra clothes (VEN-001)
 
 - Paths resemble Entra v2 on the **lab issuer**.
-- Claims: `oid` (user object id from YAML), `tid` (lab tenant id from YAML or a documented default), `ver` (`2.0`).
-- Group overage: when group count exceeds the Entra-shaped threshold, tokens carry `_claim_names` / `_claim_sources` pointing at LabSSO’s Graph-shaped stub. `spec.groupOverage.entraGraphStub: true` enables the stub routes.
-- The stub is **not** Microsoft Graph. It answers the group-list shape overage clients fetch. It does not implement directory objects, apps, or mail.
+- Claims: `oid` (YAML `user.id`), `tid` (compiled tenant id), `ver` (`2.0`) on id_token and userinfo. Access token stays `token_use` + `scope`.
+- Groups embed when `groups` is in scope. `_claim_names` / Graph stub land in OVR-001.
 
-## Okta clothes (slice 4–5)
+## Okta clothes (VEN-001)
 
-- Paths resemble an Okta custom authorization server on the **lab issuer**.
-- Groups are embedded until `oktaFailAt` (default 100). At or above the cap, the token request **fails** (configurable). This matches the lab need to reproduce Okta’s “too many groups” failure, not to silently truncate.
+- Paths resemble an Okta custom authorization server id `default` on the **lab issuer**.
+- Groups embed when scoped. `oktaFailAt` lands in OVR-001.
+- Okta `/keys` JWKS alias is later if a SUT needs it.
 
 ## HTML chrome
 
-Login and consent pages may change titles, logos-as-CSS, and field labels per clothes. They remain LabSSO pages on the lab issuer. Do not load vendor JavaScript from the Internet. Do not frame vendor login pages.
+Login and consent pages may change titles and headings per clothes. They remain LabSSO pages on the lab issuer. Do not load vendor JavaScript from the Internet. Do not frame vendor login pages.
 
 ## Failure modes
 
 - Unknown vendor enum: decode reject.
-- Clothes swap mid-flight: codes issued under old paths fail `invalid_grant` on the new token path; clients must restart the authorize.
-- Graph stub disabled while Entra overage is triggered: fail closed at compile or at token time with a clothed error — do not call the real Internet.
+- Unimplemented vendor (`ping`, …): compile / validate / apply reject.
+- Clothes swap mid-flight: codes issued under old paths fail `invalid_grant`; clients must restart the authorize.
+- Graph stub disabled while Entra overage is triggered: OVR-001; do not call the real Internet.
 
 ## Testing strategy
 
-- Discovery `iss` identical across all vendor values for a fixed host+port.
+- Discovery `iss` identical across implemented vendor values for a fixed host+port.
 - Path tables differ; token `iss` does not.
-- Entra stub is served by LabSSO and does not egress.
-- Okta fail-at is exact (99 groups succeed, 100 fail when cap is 100).
-- Hostname literals for vendor clouds never appear in generated discovery except as documentation comments in this repo.
+- Inactive clothes paths 404.
+- Hostname literals for vendor clouds never appear in generated discovery or token JSON.
+- Entra stub / Okta fail-at: OVR-001.
 
 ## Compatibility implications
 
@@ -116,6 +125,5 @@ Adding a vendor value is additive. Removing or renaming one is breaking. Changin
 
 ## Open questions
 
-- Exact Entra overage YAML field name (sweep 2: lab numeric default **200**; field name lands in CFG / slice 5). Microsoft’s production threshold is not a lab requirement.
-- Whether Okta `authServerId` is a YAML field or a clothes constant (`default` / `aus…` lab id).
+- Exact Entra overage YAML field name (sweep 2: lab numeric default **200**; field name lands in CFG / OVR-001). Microsoft’s production threshold is not a lab requirement.
 - Keycloak `realm` name source (`metadata.name` vs explicit field).

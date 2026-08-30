@@ -212,13 +212,23 @@ func (r *Runtime) purgeUserLocked(userID string) {
 	}
 }
 
-func (r *Runtime) Reset() {
+func (r *Runtime) PurgeProtocol() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.purgeProtocolLocked()
+}
+
+func (r *Runtime) purgeProtocolLocked() {
 	r.pending = map[string]Pending{}
 	r.codes = map[string]AuthCode{}
 	r.refresh = map[string]Refresh{}
 	r.sessions = map[string]LoginSession{}
+}
+
+func (r *Runtime) Reset() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.purgeProtocolLocked()
 	r.paused = false
 	r.forceFail = false
 	r.inject = ""

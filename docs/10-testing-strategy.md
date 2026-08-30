@@ -1,6 +1,6 @@
 # Testing Strategy
 
-Status: design (not implemented)
+Status: FND + OIDC + login + VEN-001 tests implemented; overage/SAML later
 Owners: Quality, Application, Protocols
 Last reviewed: 2026-08-30
 Related ADRs: 0001, 0004
@@ -29,7 +29,7 @@ Once LabSSO is implemented, protocol mistakes become “the lab does not look li
 | Unit | Model, normalize, clothes tables, rewriter allow-lists |
 | Config fixtures | `testdata/config/valid/*` accept; `invalid/*` reject |
 | Protocol | Authorization code + PKCE, discovery `iss`, JWKS, refresh, login HTML |
-| Vendor | Path clothes change; `iss` does not; Entra stub local; Okta fail-at |
+| Vendor | Path clothes change; `iss` does not; inactive paths 404; no vendor-cloud hostnames. Entra stub / Okta fail-at: OVR-001 |
 | Import | Goldens + XXE reject |
 | REST contract | OpenAPI / handler goldens |
 | MCP | Protocol 2026-07-28, allowLegacyClients matrix, official SDK |

@@ -57,6 +57,10 @@ func (a *App) SchemaConfig(actor auth.Actor) (map[string]any, error) {
 		"generated":  false,
 		"note":       "hand-described labsso.dev/v1alpha1 surface; not a generated OpenAPI document",
 		"membership": "user.groupIds",
+		"profile": map[string]any{
+			"vendor":   "generic|entra|okta implemented; other ValidVendor values compile-reject",
+			"tenantId": "optional; compile default 00000000-0000-0000-0000-000000000001 (not written into Canonical)",
+		},
 	}, nil
 }
 

@@ -1,6 +1,6 @@
 # Control Plane and REST/MCP Parity
 
-Status: FND catalog + REST/MCP adapters implemented; `make test-parity` is the cross-transport gate
+Status: FND catalog + REST/MCP adapters implemented; VEN-001 adds `sso.tunable.vendor.swap`; `make test-parity` is the cross-transport gate
 Owners: Application, REST, MCP, UI
 Last reviewed: 2026-08-30
 Related ADRs: 0004

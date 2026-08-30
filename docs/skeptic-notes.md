@@ -137,6 +137,8 @@ Sweep-2 suggested questions, written down (not product reversals):
 | Entra overage numeric threshold? | Not Microsoft production. Lab default **200** (same magnitude as the generic-cap example). Exact YAML field name is slice 5 / CFG. Do not add it to `minimal.yaml` in this sweep. |
 | Management TLS in slice 1 vs loopback HTTP? | Slice 1: management **HTTP on loopback**. Remote management TLS is a later deployment choice (`docs/01-architecture.md`). |
 
+VEN-001 CFG (2026-08-30): Okta `authServerId` is clothes constant `default` (not YAML). Optional `spec.profile.tenantId` compiles to `00000000-0000-0000-0000-000000000001` when omitted and is not Normalized into Canonical.
+
 Other notes:
 
 - “Integrator rule 15 ⇒ LabSSO dest-443” is class analogy, not a line in the current rule-15 port list. Decision lives in ADR 0006. No integrator FR.

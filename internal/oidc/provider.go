@@ -11,6 +11,7 @@ import (
 
 	"github.com/hilather/go-lab-sso/internal/model"
 	"github.com/hilather/go-lab-sso/internal/snapshot"
+	"github.com/hilather/go-lab-sso/internal/vendor"
 )
 
 const CookieLogin = "labsso_login"
@@ -30,12 +31,64 @@ func (p *Provider) Runtime() *Runtime { return p.rt }
 func (p *Provider) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /.well-known/openid-configuration", p.discovery)
-	mux.HandleFunc("GET /oauth2/authorize", p.authorize)
-	mux.HandleFunc("POST /oauth2/token", p.token)
-	mux.HandleFunc("GET /oauth2/jwks", p.jwks)
-	mux.HandleFunc("GET /oauth2/userinfo", p.userinfo)
-	mux.HandleFunc("GET /oauth2/logout", p.logout)
+	mux.HandleFunc("GET /{tid}/v2.0/.well-known/openid-configuration", p.entraDiscovery)
+	for _, path := range []string{"/oauth2/authorize", "/oauth2/v2.0/authorize", "/oauth2/default/v1/authorize"} {
+		mux.HandleFunc("GET "+path, p.requirePath(func(c snapshot.Clothes) string { return c.AuthorizePath }, p.authorize))
+	}
+	for _, path := range []string{"/oauth2/token", "/oauth2/v2.0/token", "/oauth2/default/v1/token"} {
+		mux.HandleFunc("POST "+path, p.requirePath(func(c snapshot.Clothes) string { return c.TokenPath }, p.token))
+	}
+	for _, path := range []string{"/oauth2/jwks", "/oauth2/v2.0/jwks", "/oauth2/default/v1/jwks"} {
+		mux.HandleFunc("GET "+path, p.requirePath(func(c snapshot.Clothes) string { return c.JWKSPath }, p.jwks))
+	}
+	for _, path := range []string{"/oauth2/userinfo", "/oauth2/v2.0/userinfo", "/oauth2/default/v1/userinfo"} {
+		mux.HandleFunc("GET "+path, p.requirePath(func(c snapshot.Clothes) string { return c.UserInfoPath }, p.userinfo))
+	}
+	for _, path := range []string{"/oauth2/logout", "/oauth2/v2.0/logout", "/oauth2/default/v1/logout"} {
+		mux.HandleFunc("GET "+path, p.requirePath(func(c snapshot.Clothes) string { return c.LogoutPath }, p.logout))
+	}
 	return mux
+}
+
+func (p *Provider) requirePath(sel func(snapshot.Clothes) string, next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		snap := p.snapOIDC(w)
+		if snap == nil {
+			return
+		}
+		want := sel(clothesOf(snap))
+		if want == "" || r.URL.Path != want {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		next(w, r)
+	}
+}
+
+func clothesOf(snap *snapshot.Snapshot) snapshot.Clothes {
+	if snap == nil {
+		return snapshot.Clothes{}
+	}
+	if snap.Clothes.AuthorizePath != "" {
+		return snap.Clothes
+	}
+	vendorName, tid := "", ""
+	if snap.Canonical != nil {
+		vendorName = snap.Canonical.Spec.Profile.Vendor
+		tid = snap.Canonical.Spec.Profile.TenantID
+	}
+	c, err := vendor.Resolve(vendorName, tid)
+	if err != nil {
+		return snap.Clothes
+	}
+	return c
+}
+
+func CookieName(snap *snapshot.Snapshot) string {
+	if c := clothesOf(snap); c.CookieName != "" {
+		return c.CookieName
+	}
+	return CookieLogin
 }
 
 func (p *Provider) snapOIDC(w http.ResponseWriter) *snapshot.Snapshot {
@@ -56,14 +109,31 @@ func (p *Provider) discovery(w http.ResponseWriter, r *http.Request) {
 	if snap == nil {
 		return
 	}
+	p.writeDiscovery(w, snap)
+}
+
+func (p *Provider) entraDiscovery(w http.ResponseWriter, r *http.Request) {
+	snap := p.snapOIDC(w)
+	if snap == nil {
+		return
+	}
+	if snap.Clothes.Vendor != "entra" || r.PathValue("tid") != snap.Clothes.TenantID {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	p.writeDiscovery(w, snap)
+}
+
+func (p *Provider) writeDiscovery(w http.ResponseWriter, snap *snapshot.Snapshot) {
 	iss := strings.TrimRight(snap.Issuer, "/")
+	c := clothesOf(snap)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"issuer":                                iss,
-		"authorization_endpoint":                iss + "/oauth2/authorize",
-		"token_endpoint":                        iss + "/oauth2/token",
-		"jwks_uri":                              iss + "/oauth2/jwks",
-		"userinfo_endpoint":                     iss + "/oauth2/userinfo",
-		"end_session_endpoint":                  iss + "/oauth2/logout",
+		"authorization_endpoint":                iss + c.AuthorizePath,
+		"token_endpoint":                        iss + c.TokenPath,
+		"jwks_uri":                              iss + c.JWKSPath,
+		"userinfo_endpoint":                     iss + c.UserInfoPath,
+		"end_session_endpoint":                  iss + c.LogoutPath,
 		"response_types_supported":              []string{"code"},
 		"grant_types_supported":                 []string{"authorization_code", "refresh_token"},
 		"code_challenge_methods_supported":      []string{"S256"},
@@ -145,7 +215,7 @@ func (p *Provider) authorize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	iss := strings.TrimRight(snap.Issuer, "/")
-	if sid, err := r.Cookie(CookieLogin); err == nil && sid.Value != "" {
+	if sid, err := r.Cookie(CookieName(snap)); err == nil && sid.Value != "" {
 		if sess, ok := p.rt.GetSession(sid.Value); ok {
 			if cl.PreConsent {
 				code := randomID()
@@ -189,19 +259,19 @@ func (p *Provider) token(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !p.limit.allow(clientIP(r)) {
-		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "temporarily_unavailable", "error_description": "rate limited"})
+		writeTokenError(w, snap, http.StatusTooManyRequests, "temporarily_unavailable", "rate limited")
 		return
 	}
 	if p.rt.Paused() {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "temporarily_unavailable", "error_description": "token endpoint paused"})
+		writeTokenError(w, snap, http.StatusServiceUnavailable, "temporarily_unavailable", "token endpoint paused")
 		return
 	}
 	if err := r.ParseForm(); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_request"})
+		writeTokenError(w, snap, http.StatusBadRequest, "invalid_request", "")
 		return
 	}
 	if inj := p.rt.TakeInject(); inj != "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": inj, "error_description": "injected"})
+		writeTokenError(w, snap, http.StatusBadRequest, inj, "injected")
 		return
 	}
 	grant := r.FormValue("grant_type")
@@ -211,14 +281,14 @@ func (p *Provider) token(w http.ResponseWriter, r *http.Request) {
 	case "refresh_token":
 		p.tokenRefresh(w, r, snap)
 	default:
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unsupported_grant_type"})
+		writeTokenError(w, snap, http.StatusBadRequest, "unsupported_grant_type", "")
 	}
 }
 
 func (p *Provider) tokenCode(w http.ResponseWriter, r *http.Request, snap *snapshot.Snapshot) {
 	_, clientID, err := p.clientFromRequest(r, snap)
 	if err != nil {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid_client"})
+		writeTokenError(w, snap, http.StatusUnauthorized, "invalid_client", "")
 		return
 	}
 	code := r.FormValue("code")
@@ -226,11 +296,11 @@ func (p *Provider) tokenCode(w http.ResponseWriter, r *http.Request, snap *snaps
 	redirect := r.FormValue("redirect_uri")
 	c, ok := p.rt.TakeCode(code)
 	if !ok || time.Now().After(c.Expires) || c.RedirectURI != redirect || c.ClientID != clientID {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_grant"})
+		writeTokenError(w, snap, http.StatusBadRequest, "invalid_grant", "")
 		return
 	}
 	if !verifyPKCE(c.Challenge, "S256", verifier) {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_grant", "error_description": "PKCE verifier mismatch"})
+		writeTokenError(w, snap, http.StatusBadRequest, "invalid_grant", "PKCE verifier mismatch")
 		return
 	}
 	p.writeTokens(w, snap, c.ClientID, c.UserID, c.Username, c.Scope, c.Nonce)
@@ -239,13 +309,13 @@ func (p *Provider) tokenCode(w http.ResponseWriter, r *http.Request, snap *snaps
 func (p *Provider) tokenRefresh(w http.ResponseWriter, r *http.Request, snap *snapshot.Snapshot) {
 	_, clientID, err := p.clientFromRequest(r, snap)
 	if err != nil {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid_client"})
+		writeTokenError(w, snap, http.StatusUnauthorized, "invalid_client", "")
 		return
 	}
 	tok := r.FormValue("refresh_token")
 	ref, ok := p.rt.TakeRefresh(tok)
 	if !ok || time.Now().After(ref.Expires) || ref.ClientID != clientID {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_grant"})
+		writeTokenError(w, snap, http.StatusBadRequest, "invalid_grant", "")
 		return
 	}
 	p.writeTokens(w, snap, ref.ClientID, ref.UserID, ref.Username, ref.Scope, "")
@@ -280,7 +350,7 @@ func (p *Provider) clientFromRequest(r *http.Request, snap *snapshot.Snapshot) (
 func (p *Provider) writeTokens(w http.ResponseWriter, snap *snapshot.Snapshot, clientID, userID, username, scope, nonce string) {
 	sig, err := newSigner(snap.SigningKey)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "server_error"})
+		writeTokenError(w, snap, http.StatusInternalServerError, "server_error", "")
 		return
 	}
 	extra := map[string]any{}
@@ -295,14 +365,15 @@ func (p *Provider) writeTokens(w http.ResponseWriter, snap *snapshot.Snapshot, c
 			extra["groups"] = groupNames(snap, user)
 		}
 	}
+	applyClothesClaims(extra, snap, userID)
 	idTok, err := sig.mint(snap.Issuer, userID, clientID, nonce, time.Hour, extra)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "server_error"})
+		writeTokenError(w, snap, http.StatusInternalServerError, "server_error", "")
 		return
 	}
 	access, err := sig.mint(snap.Issuer, userID, clientID, "", time.Hour, map[string]any{"token_use": "access", "scope": scope})
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "server_error"})
+		writeTokenError(w, snap, http.StatusInternalServerError, "server_error", "")
 		return
 	}
 	ref := randomID()
@@ -349,6 +420,7 @@ func (p *Provider) userinfo(w http.ResponseWriter, r *http.Request) {
 			out["groups"] = groupNames(snap, user)
 		}
 	}
+	applyClothesClaims(out, snap, c.Subject)
 	writeJSON(w, http.StatusOK, out)
 }
 
@@ -391,15 +463,17 @@ func (p *Provider) DenyConsent(pendingID string) (string, error) {
 }
 
 func (p *Provider) logout(w http.ResponseWriter, r *http.Request) {
-	if p.snapOIDC(w) == nil {
+	snap := p.snapOIDC(w)
+	if snap == nil {
 		return
 	}
-	if c, err := r.Cookie(CookieLogin); err == nil && c.Value != "" {
+	name := CookieName(snap)
+	if c, err := r.Cookie(name); err == nil && c.Value != "" {
 		p.rt.ExpireSession(c.Value)
 	}
 	secure := r.TLS != nil
 	http.SetCookie(w, &http.Cookie{
-		Name: CookieLogin, Value: "", Path: "/", MaxAge: -1,
+		Name: name, Value: "", Path: "/", MaxAge: -1,
 		HttpOnly: true, SameSite: http.SameSiteLaxMode, Secure: secure,
 	})
 	post := r.URL.Query().Get("post_logout_redirect_uri")
@@ -493,6 +567,46 @@ func hasScope(scope, want string) bool {
 		}
 	}
 	return false
+}
+
+func applyClothesClaims(extra map[string]any, snap *snapshot.Snapshot, userID string) {
+	if snap == nil || snap.Clothes.Vendor != "entra" {
+		return
+	}
+	extra["oid"] = userID
+	extra["tid"] = snap.Clothes.TenantID
+	extra["ver"] = "2.0"
+}
+
+func writeTokenError(w http.ResponseWriter, snap *snapshot.Snapshot, status int, code, desc string) {
+	body := map[string]any{"error": code}
+	if desc != "" {
+		body["error_description"] = desc
+	}
+	if snap != nil && snap.Clothes.Vendor == "entra" {
+		body["error_codes"] = []int{entraTokenErrorCode(code)}
+		body["trace_id"] = randomID()
+	}
+	writeJSON(w, status, body)
+}
+
+func entraTokenErrorCode(code string) int {
+	switch code {
+	case "invalid_client":
+		return 700016
+	case "invalid_grant":
+		return 70008
+	case "invalid_request":
+		return 90014
+	case "temporarily_unavailable":
+		return 50058
+	case "unsupported_grant_type":
+		return 90014
+	case "server_error":
+		return 50000
+	default:
+		return 0
+	}
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

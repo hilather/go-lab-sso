@@ -174,6 +174,126 @@ func TestConsentDenyRedirectsClient(t *testing.T) {
 	}
 }
 
+func clothedLoginToken(t *testing.T, vendorName, authorizePath, tokenPath, cookie string) {
+	t.Helper()
+	a := bootLogin(t, true)
+	if _, err := a.SwapVendor(auth.AdminActor(), app.SwapVendorIn{
+		Vendor: vendorName, ExpectedRevision: a.Status().RuntimeRevision, Reason: "clothes",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	h := a.HTTPSHandler()
+	verifier := "pkce-verifier-value-1234567890"
+	ch := pkceS256(verifier)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("GET", authorizePath+"?response_type=code&client_id=app-1&redirect_uri="+url.QueryEscape("https://sut.example.net/cb")+"&code_challenge="+ch+"&code_challenge_method=S256&state=st&scope=openid", nil))
+	if rec.Code != 302 || !strings.Contains(rec.Header().Get("Location"), "/login?pending=") {
+		t.Fatalf("%s authorize %d %s", vendorName, rec.Code, rec.Header().Get("Location"))
+	}
+	loc, _ := url.Parse(rec.Header().Get("Location"))
+	pending := loc.Query().Get("pending")
+	form := url.Values{"pending": {pending}, "username": {"alice"}, "password": {"alice-password"}}
+	req := httptest.NewRequest("POST", "/login", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != 302 {
+		t.Fatalf("%s login %d %s", vendorName, rec.Code, rec.Body)
+	}
+	if !strings.Contains(rec.Header().Get("Set-Cookie"), cookie) {
+		t.Fatalf("%s cookie %s", vendorName, rec.Header().Get("Set-Cookie"))
+	}
+	redir, _ := url.Parse(rec.Header().Get("Location"))
+	code := redir.Query().Get("code")
+	if code == "" {
+		t.Fatal(rec.Header().Get("Location"))
+	}
+	tokForm := url.Values{"grant_type": {"authorization_code"}, "code": {code}, "redirect_uri": {"https://sut.example.net/cb"}, "code_verifier": {verifier}, "client_id": {"app-1"}}
+	req = httptest.NewRequest("POST", tokenPath, strings.NewReader(tokForm.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != 200 || !strings.Contains(rec.Body.String(), "id_token") {
+		t.Fatalf("%s token %d %s", vendorName, rec.Code, rec.Body)
+	}
+}
+
+func TestEntraAuthorizeLoginToken(t *testing.T) {
+	clothedLoginToken(t, "entra", "/oauth2/v2.0/authorize", "/oauth2/v2.0/token", "labsso_entra")
+}
+
+func TestOktaAuthorizeLoginToken(t *testing.T) {
+	clothedLoginToken(t, "okta", "/oauth2/default/v1/authorize", "/oauth2/default/v1/token", "labsso_okta")
+}
+
+func TestEntraConsentUsesClothesCookie(t *testing.T) {
+	a := bootLogin(t, false)
+	if _, err := a.SwapVendor(auth.AdminActor(), app.SwapVendorIn{
+		Vendor: "entra", ExpectedRevision: a.Status().RuntimeRevision, Reason: "clothes",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	h := a.HTTPSHandler()
+	ch := pkceS256("v")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "/oauth2/v2.0/authorize?response_type=code&client_id=app-1&redirect_uri="+url.QueryEscape("https://sut.example.net/cb")+"&code_challenge="+ch+"&code_challenge_method=S256", nil))
+	pending, _ := url.Parse(rec.Header().Get("Location"))
+	form := url.Values{"pending": {pending.Query().Get("pending")}, "username": {"alice"}, "password": {"alice-password"}}
+	req := httptest.NewRequest("POST", "/login", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != 302 || !strings.Contains(rec.Header().Get("Location"), "/consent") {
+		t.Fatalf("want consent, got %s", rec.Header().Get("Location"))
+	}
+	if !strings.Contains(rec.Header().Get("Set-Cookie"), "labsso_entra") {
+		t.Fatalf("cookie %s", rec.Header().Get("Set-Cookie"))
+	}
+	cform := url.Values{"pending": {pending.Query().Get("pending")}, "approve": {"1"}}
+	req = httptest.NewRequest("POST", "/consent", strings.NewReader(cform.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Cookie", rec.Header().Get("Set-Cookie"))
+	rec2 := httptest.NewRecorder()
+	h.ServeHTTP(rec2, req)
+	if rec2.Code != 302 || !strings.Contains(rec2.Header().Get("Location"), "code=") {
+		t.Fatalf("entra consent %d %s", rec2.Code, rec2.Header().Get("Location"))
+	}
+}
+
+func TestEntraLoginChromeAndUIDisabled(t *testing.T) {
+	a := bootLogin(t, true)
+	if _, err := a.SwapVendor(auth.AdminActor(), app.SwapVendorIn{
+		Vendor: "entra", ExpectedRevision: a.Status().RuntimeRevision, Reason: "clothes",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	rec := httptest.NewRecorder()
+	a.HTTPSHandler().ServeHTTP(rec, httptest.NewRequest("GET", "/login", nil))
+	if rec.Code != 200 || !strings.Contains(rec.Body.String(), "LabSSO Entra login") || !strings.Contains(rec.Body.String(), "Sign in") {
+		t.Fatalf("entra chrome %d %s", rec.Code, rec.Body)
+	}
+	val, _ := json.Marshal(model.UI{Enabled: model.Ptr(false)})
+	if _, err := a.Apply(auth.AdminActor(), app.ChangeIn{
+		ExpectedRevision: a.Status().RuntimeRevision, Reason: "ui off",
+		Operations: []model.Operation{{Op: model.OpUpdate, Target: model.Target{Kind: model.TargetUI}, Value: val}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	rec = httptest.NewRecorder()
+	a.HTTPSHandler().ServeHTTP(rec, httptest.NewRequest("GET", "/login", nil))
+	if rec.Code != 200 || !strings.Contains(rec.Body.String(), "LabSSO Entra login") {
+		t.Fatalf("ui disabled login %d %s", rec.Code, rec.Body)
+	}
+	form := url.Values{"pending": {"x"}, "username": {"alice"}, "password": {"alice-password"}}
+	req := httptest.NewRequest("POST", "/login", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec = httptest.NewRecorder()
+	a.HTTPSHandler().ServeHTTP(rec, req)
+	if !strings.Contains(rec.Header().Get("Set-Cookie"), "labsso_entra") {
+		t.Fatalf("cookie %s", rec.Header().Get("Set-Cookie"))
+	}
+}
+
 func TestUIDisabledStillServesLogin(t *testing.T) {
 	a := bootLogin(t, true)
 	val, _ := json.Marshal(model.UI{Enabled: model.Ptr(false)})

@@ -1,6 +1,6 @@
 # System Architecture
 
-Status: default ship implemented (FND-001 + OIDC-001 + LOGIN-001)
+Status: default ship + VEN-001 implemented (FND-001 + OIDC-001 + LOGIN-001 + VEN-001)
 Owners: Architecture, Protocols, Control Plane, Deployment
 Last reviewed: 2026-08-30
 Related ADRs: 0001, 0002, 0003, 0004, 0005, 0006, 0007, 0009

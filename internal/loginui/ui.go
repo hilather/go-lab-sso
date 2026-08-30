@@ -37,7 +37,7 @@ func (u *UI) Mount(mux *http.ServeMux) {
 
 func (u *UI) getLogin(w http.ResponseWriter, r *http.Request) {
 	pending := r.URL.Query().Get("pending")
-	writeHTML(w, loginPage(pending, "", false))
+	writeHTML(w, loginPage(u.store.Load(), pending, "", false))
 }
 
 func (u *UI) postLogin(w http.ResponseWriter, r *http.Request) {
@@ -50,7 +50,7 @@ func (u *UI) postLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if u.oidc.Runtime().ForceFail() {
-		writeHTML(w, loginPage(r.FormValue("pending"), "access denied", false))
+		writeHTML(w, loginPage(u.store.Load(), r.FormValue("pending"), "access denied", false))
 		return
 	}
 	pending := r.FormValue("pending")
@@ -64,11 +64,11 @@ func (u *UI) postLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	rec, ok := findUser(snap, user)
 	if !ok {
-		writeHTML(w, loginPage(pending, "invalid credentials", false))
+		writeHTML(w, loginPage(snap, pending, "invalid credentials", false))
 		return
 	}
 	if err := u.checkPassword(rec, []byte(pass)); err != nil {
-		writeHTML(w, loginPage(pending, "invalid credentials", false))
+		writeHTML(w, loginPage(snap, pending, "invalid credentials", false))
 		return
 	}
 	mode := snap.Canonical.Spec.Auth.MFA.Mode
@@ -76,11 +76,11 @@ func (u *UI) postLogin(w http.ResponseWriter, r *http.Request) {
 		mode = "never"
 	}
 	if mode == "force-fail" {
-		writeHTML(w, loginPage(pending, "MFA failed", true))
+		writeHTML(w, loginPage(snap, pending, "MFA failed", true))
 		return
 	}
 	if mode == "always" && mfa != totpStub {
-		writeHTML(w, loginPage(pending, "", true))
+		writeHTML(w, loginPage(snap, pending, "", true))
 		return
 	}
 	ttl := time.Hour
@@ -92,7 +92,7 @@ func (u *UI) postLogin(w http.ResponseWriter, r *http.Request) {
 	})
 	secure := r.TLS != nil
 	http.SetCookie(w, &http.Cookie{
-		Name: oidc.CookieLogin, Value: sess.ID, Path: "/", HttpOnly: true,
+		Name: oidc.CookieName(snap), Value: sess.ID, Path: "/", HttpOnly: true,
 		SameSite: http.SameSiteLaxMode, Secure: secure,
 	})
 	cl, _ := snap.ClientsByClientID[pendingClient(u, pending)]
@@ -109,7 +109,7 @@ func (u *UI) postLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (u *UI) getConsent(w http.ResponseWriter, r *http.Request) {
-	writeHTML(w, consentPage(r.URL.Query().Get("pending")))
+	writeHTML(w, consentPage(u.store.Load(), r.URL.Query().Get("pending")))
 }
 
 func (u *UI) postConsent(w http.ResponseWriter, r *http.Request) {
@@ -127,7 +127,7 @@ func (u *UI) postConsent(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, loc, http.StatusFound)
 		return
 	}
-	c, err := r.Cookie(oidc.CookieLogin)
+	c, err := r.Cookie(oidc.CookieName(u.store.Load()))
 	if err != nil {
 		http.Redirect(w, r, "/login?pending="+pending, http.StatusFound)
 		return
@@ -184,7 +184,14 @@ func findUser(snap *snapshot.Snapshot, username string) (model.User, bool) {
 	return model.User{}, false
 }
 
-func loginPage(pending, errMsg string, mfa bool) string {
+func loginPage(snap *snapshot.Snapshot, pending, errMsg string, mfa bool) string {
+	title, heading := "LabSSO login", "Sign in"
+	if snap != nil && snap.Clothes.HTMLTitle != "" {
+		title = snap.Clothes.HTMLTitle
+		if snap.Clothes.HTMLHeading != "" {
+			heading = snap.Clothes.HTMLHeading
+		}
+	}
 	extra := ""
 	if mfa {
 		extra = `<label>TOTP (lab stub: lab-totp)</label><input name="mfa" autocomplete="one-time-code"/>`
@@ -193,8 +200,8 @@ func loginPage(pending, errMsg string, mfa bool) string {
 	if errMsg != "" {
 		msg = `<p class="err">` + html.EscapeString(errMsg) + `</p>`
 	}
-	return `<!doctype html><html><head><title>LabSSO login</title></head><body>
-<h1>Sign in</h1>` + msg + `
+	return `<!doctype html><html><head><title>` + html.EscapeString(title) + `</title></head><body>
+<h1>` + html.EscapeString(heading) + `</h1>` + msg + `
 <form method="post" action="/login">
 <input type="hidden" name="pending" value="` + html.EscapeString(pending) + `"/>
 <label>Username</label><input name="username" autocomplete="username"/>
@@ -204,8 +211,12 @@ func loginPage(pending, errMsg string, mfa bool) string {
 </form></body></html>`
 }
 
-func consentPage(pending string) string {
-	return `<!doctype html><html><head><title>LabSSO consent</title></head><body>
+func consentPage(snap *snapshot.Snapshot, pending string) string {
+	title := "LabSSO consent"
+	if snap != nil && snap.Clothes.ConsentTitle != "" {
+		title = snap.Clothes.ConsentTitle
+	}
+	return `<!doctype html><html><head><title>` + html.EscapeString(title) + `</title></head><body>
 <h1>Consent</h1>
 <form method="post" action="/consent">
 <input type="hidden" name="pending" value="` + html.EscapeString(pending) + `"/>

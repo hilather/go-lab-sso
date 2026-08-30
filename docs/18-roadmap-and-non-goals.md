@@ -1,6 +1,6 @@
 # Roadmap and Non-Goals
 
-Status: default ship implemented (FND-001 + OIDC-001 + LOGIN-001)
+Status: default ship + VEN-001 implemented (FND-001 + OIDC-001 + LOGIN-001 + VEN-001)
 Owners: Architecture, Program
 Last reviewed: 2026-08-30
 Related ADRs: 0001–0009
@@ -16,7 +16,7 @@ Implementation is opened at FND-001. Remaining slice order is:
 1. **Repo foundation** — Go 1.26 module `github.com/hilather/go-lab-sso`, YAML schema, snapshot/plan/apply, REST+MCP registry, CLI `validate|canonicalize|serve`, scratch image, example compose mapping `443:10443`.
 2. **OIDC/OAuth2** — authorization code + PKCE + discovery + JWKS + id_token/access_token + refresh (generic clothes).
 3. **Data-plane login + consent HTML** — required; distinct from operator SPA. MFA knobs `never` | `always` | `force-fail` (TOTP stub later).
-4. **Vendor clothes** — `entra`, `okta` (paths, claims `oid`/`tid`/`ver` vs Okta groups, cookies, error dialect).
+4. **Vendor clothes** — `entra`, `okta` (paths, claims `oid`/`tid`/`ver` vs Okta groups, cookies, error dialect). **Implemented.**
 5. **Group overage** — Entra `_claim_names`/`_claim_sources` + minimal Graph-shaped stub served by LabSSO (not real Microsoft Graph). Okta: fail the token request after 100 groups (configurable). Generic: embed groups with a safety cap.
 6. **SAML 2.0** — SP-initiated SSO + IdP metadata.
 7. **Operator SPA** — REST+MCP+UI parity. **Mira reviews after first UI implementation.** Do not build UI in this design landing.

@@ -3,6 +3,7 @@ package compiler_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/hilather/go-lab-sso/internal/compiler"
@@ -75,5 +76,41 @@ func TestCompileIssuerEnvMatch(t *testing.T) {
 	}
 	if snap.Issuer != "https://lab.example.net" {
 		t.Fatalf("issuer %q", snap.Issuer)
+	}
+}
+
+func TestCompileEntraClothesDefaultTenant(t *testing.T) {
+	root := repoRoot(t)
+	doc, err := config.LoadFile(filepath.Join(root, "testdata/config/valid/entra.yaml"), config.Options{BaseDir: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	snap, err := compiler.Compile(doc, compiler.Options{BaseDir: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snap.Canonical.Spec.Profile.TenantID != "" {
+		t.Fatalf("canonical tenantId should stay empty, got %q", snap.Canonical.Spec.Profile.TenantID)
+	}
+	if snap.Clothes.Vendor != "entra" || snap.Clothes.AuthorizePath != "/oauth2/v2.0/authorize" {
+		t.Fatalf("clothes %+v", snap.Clothes)
+	}
+	if snap.Clothes.TenantID != "00000000-0000-0000-0000-000000000001" {
+		t.Fatalf("compiled tid %s", snap.Clothes.TenantID)
+	}
+	if snap.Clothes.CookieName != "labsso_entra" {
+		t.Fatalf("cookie %s", snap.Clothes.CookieName)
+	}
+}
+
+func TestCompilePingRejected(t *testing.T) {
+	root := repoRoot(t)
+	doc, err := config.LoadFile(filepath.Join(root, "testdata/config/compile-reject/ping.yaml"), config.Options{BaseDir: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = compiler.Compile(doc, compiler.Options{BaseDir: root})
+	if err == nil || !strings.Contains(err.Error(), "clothes not implemented") {
+		t.Fatalf("want clothes not implemented, got %v", err)
 	}
 }

@@ -16,7 +16,7 @@ Honest residuals for the design phase and the first implementation slices. This 
 - Single process, single replica. Runtime sessions and refresh handles are memory. Restart drops them.
 - No database. No multi-replica consensus.
 - OIDC first; SAML and WS-Fed later.
-- Generic clothes first; Entra/Okta opt-in; other vendors later.
+- Entra/Okta clothes implemented; other vendors compile-reject until VEN-002.
 - MFA TOTP is a stub after knobs exist.
 - Operator SPA is a later slice; Mira review is after first UI, not now.
 - LDAP bind is not v1.

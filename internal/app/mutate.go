@@ -28,6 +28,10 @@ func (a *App) Apply(actor auth.Actor, in ChangeIn) (*ApplyResult, error) {
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	return a.applyLocked(actor, "sso.change.apply", in)
+}
+
+func (a *App) applyLocked(actor auth.Actor, capID string, in ChangeIn) (*ApplyResult, error) {
 	fp, err := fingerprintChange(in)
 	if err != nil {
 		return nil, err
@@ -47,14 +51,24 @@ func (a *App) Apply(actor auth.Actor, in ChangeIn) (*ApplyResult, error) {
 		return nil, err
 	}
 	prev := a.store.Swap(cand)
+	if vendorChanged(prev, cand) && a.oidc != nil {
+		a.oidc.Runtime().PurgeProtocol()
+	}
 	res := &ApplyResult{Plan: *p, Applied: true, Generation: cand.Generation}
 	prevRev := ""
 	if prev != nil {
 		prevRev = prev.Revision
 	}
-	res.AuditEventID = a.audit.EmitOK(actor, "sso.change.apply", in.Reason, cand.Revision, prevRev)
+	res.AuditEventID = a.audit.EmitOK(actor, capID, in.Reason, cand.Revision, prevRev)
 	a.idemp.store(in.IdempotencyKey, fp, p, res)
 	return res, nil
+}
+
+func vendorChanged(prev, next *snapshot.Snapshot) bool {
+	if prev == nil || next == nil || prev.Canonical == nil || next.Canonical == nil {
+		return false
+	}
+	return prev.Canonical.Spec.Profile.Vendor != next.Canonical.Spec.Profile.Vendor
 }
 
 func (a *App) planLocked(in ChangeIn) (*Plan, error) {

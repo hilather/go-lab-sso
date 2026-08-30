@@ -6,11 +6,11 @@ Desired state is a versioned YAML file. Runtime mutations are ephemeral, revisio
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-Status: **M2 default ship (generic OIDC + login HTML)** · Module [`github.com/hilather/go-lab-sso`](https://github.com/hilather/go-lab-sso) · Image `ghcr.io/hilather/labsso` · Binary `labsso` · Language: **Go 1.26** · Clothes/SAML/SPA/import/integrator still later
+Status: **M2 default ship + VEN-001 (entra/okta clothes)** · Module [`github.com/hilather/go-lab-sso`](https://github.com/hilather/go-lab-sso) · Image `ghcr.io/hilather/labsso` · Binary `labsso` · Language: **Go 1.26** · Overage/SAML/SPA/import/integrator still later
 
 New here? Start with [START-HERE.md](START-HERE.md). Architecture, task lists, and ADRs are indexed in [Documentation](#documentation).
 
-FND-001, OIDC-001, and LOGIN-001 are implemented: generic OIDC plus data-plane login/consent HTML. Vendor clothes, SAML, the operator SPA, import, and the integrator pin are still later.
+FND-001, OIDC-001, LOGIN-001, and VEN-001 are implemented: generic OIDC, login/consent HTML, and Entra/Okta clothes. Overage, SAML, the operator SPA, import, and the integrator pin are still later.
 
 ---
 

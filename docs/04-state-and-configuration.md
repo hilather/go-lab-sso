@@ -1,6 +1,6 @@
 # State and Configuration
 
-Status: default ship implemented (FND-001 + OIDC-001 + LOGIN-001)
+Status: default ship + VEN-001 implemented (FND-001 + OIDC-001 + LOGIN-001 + VEN-001)
 Owners: Configuration, Application
 Last reviewed: 2026-08-30
 Related ADRs: 0003, 0008
@@ -76,7 +76,7 @@ spec:
     tokenRef: testdata/secrets/labsso-token
 ```
 
-Invalid fixtures: [unknown-field.yaml](../testdata/config/invalid/unknown-field.yaml), [bare-duration.yaml](../testdata/config/invalid/bare-duration.yaml), [inline-secret.yaml](../testdata/config/invalid/inline-secret.yaml), [member-user-ids.yaml](../testdata/config/invalid/member-user-ids.yaml), [dangling-group-ids.yaml](../testdata/config/invalid/dangling-group-ids.yaml).
+Invalid fixtures: [unknown-field.yaml](../testdata/config/invalid/unknown-field.yaml), [unknown-profile-field.yaml](../testdata/config/invalid/unknown-profile-field.yaml), [bare-duration.yaml](../testdata/config/invalid/bare-duration.yaml), [inline-secret.yaml](../testdata/config/invalid/inline-secret.yaml), [member-user-ids.yaml](../testdata/config/invalid/member-user-ids.yaml), [dangling-group-ids.yaml](../testdata/config/invalid/dangling-group-ids.yaml).
 
 ## Decode rules
 
@@ -113,7 +113,11 @@ Exact issuer string. If `LAB_PUBLIC_HOST` is set, the compiled issuer must match
 
 ### `spec.profile.vendor`
 
-Enum: `generic` | `entra` | `okta` | `ping` | `adfs` | `google` | `keycloak` | `iam-identity-center`.
+Enum: `generic` | `entra` | `okta` | `ping` | `adfs` | `google` | `keycloak` | `iam-identity-center`. Implemented clothes: `generic`, `entra`, `okta`. Other values load and canonicalize but compile-reject.
+
+### `spec.profile.tenantId`
+
+Optional. Omitted or empty stays empty in Canonical / export. Compiler uses `00000000-0000-0000-0000-000000000001` as Entra `tid` and the Entra discovery alias when omitted.
 
 ### `spec.protocols`
 

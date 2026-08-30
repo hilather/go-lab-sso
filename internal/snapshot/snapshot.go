@@ -6,6 +6,20 @@ import (
 	"github.com/hilather/go-lab-sso/internal/model"
 )
 
+type Clothes struct {
+	Vendor        string
+	TenantID      string
+	CookieName    string
+	AuthorizePath string
+	TokenPath     string
+	JWKSPath      string
+	UserInfoPath  string
+	LogoutPath    string
+	HTMLTitle     string
+	HTMLHeading   string
+	ConsentTitle  string
+}
+
 type Snapshot struct {
 	Canonical         *model.Document
 	Revision          string
@@ -22,6 +36,7 @@ type Snapshot struct {
 	ClientsByClientID map[string]model.Client
 	UsersByID         map[string]model.User
 	GroupsByID        map[string]model.Group
+	Clothes           Clothes
 }
 
 func (s *Snapshot) Drifted() bool {

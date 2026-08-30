@@ -1,6 +1,6 @@
 # Protocols
 
-Status: OIDC-001 + LOGIN-001 implemented (default ship)
+Status: OIDC-001 + LOGIN-001 + VEN-001 implemented (generic + entra + okta clothes)
 Owners: Protocols, Application
 Last reviewed: 2026-08-30
 Related ADRs: 0002, 0005, 0009
@@ -60,7 +60,7 @@ First implementation implements:
 | Discovery (`/.well-known/openid-configuration` plus vendor path clothes) | Required |
 | JWKS | Required |
 | UserInfo | Required |
-| RP-initiated logout | Required (generic path; vendor path clothes later). `post_logout_redirect_uri` must match a registered client redirect URI; otherwise 400. Missing URI returns a logged-out HTML page. |
+| RP-initiated logout | Required (generic and entra/okta path clothes). `post_logout_redirect_uri` must match a registered client redirect URI; otherwise 400. Missing URI returns a logged-out HTML page. |
 | Client credentials | Out of first OIDC slice |
 | Device code | Out of first OIDC slice |
 | Implicit / hybrid | Reject |
@@ -72,8 +72,8 @@ Confidential clients authenticate at the token endpoint with a secret file ref. 
 - `id_token` and `access_token` are JWTs signed with keys from file refs.
 - `iss` is the exact issuer string. No vendor-cloud issuer alias.
 - Generic clothes use standard OIDC claims (`sub`, `aud`, `exp`, `iat`, `nonce`, `email`, `groups` when in scope).
-- Entra clothes add `oid`, `tid`, `ver` and Entra-shaped group overage. They do not change `iss` to a Microsoft tenant URL.
-- Okta clothes add Okta-shaped `groups` handling and fail-closed overage.
+- Entra clothes add `oid`, `tid`, `ver` on id_token and userinfo. They do not change `iss` to a Microsoft tenant URL. Entra-shaped group overage is OVR-001.
+- Okta clothes use `/oauth2/default/v1/…` paths. Fail-closed group overage is OVR-001.
 - Refresh tokens are opaque handles in process memory, not JWTs, in the first slice. Restart invalidates them.
 
 ### Endpoints (generic clothes)
@@ -93,7 +93,30 @@ GET  {issuer}/consent        (HTML)
 POST {issuer}/consent
 ```
 
-Vendor clothes replace the path templates. See [docs/03-vendor-profiles.md](03-vendor-profiles.md).
+Vendor clothes replace the path templates. Active clothes only: inactive vendor paths 404. See [docs/03-vendor-profiles.md](03-vendor-profiles.md).
+
+Entra (lab issuer):
+
+```text
+GET  {issuer}/oauth2/v2.0/authorize
+POST {issuer}/oauth2/v2.0/token
+GET  {issuer}/oauth2/v2.0/jwks
+GET  {issuer}/oauth2/v2.0/userinfo
+GET  {issuer}/oauth2/v2.0/logout
+GET  {issuer}/{tenantId}/v2.0/.well-known/openid-configuration
+```
+
+Okta (`authServerId` clothes constant `default`):
+
+```text
+GET  {issuer}/oauth2/default/v1/authorize
+POST {issuer}/oauth2/default/v1/token
+GET  {issuer}/oauth2/default/v1/jwks
+GET  {issuer}/oauth2/default/v1/userinfo
+GET  {issuer}/oauth2/default/v1/logout
+```
+
+Login and consent stay `{issuer}/login` and `{issuer}/consent`.
 
 Discovery document `issuer` is always the exact issuer. `authorization_endpoint`, `token_endpoint`, `jwks_uri`, `userinfo_endpoint`, and `end_session_endpoint` use the clothed paths on that issuer.
 
@@ -109,7 +132,7 @@ Clients list exact redirect URIs. No wildcard in v1. An agent tunable may rewrit
 
 ### Error dialect
 
-Generic clothes use RFC 6749 JSON (`error`, `error_description`). Vendor clothes may reshape field names and HTML error pages. Domain error codes in the management plane stay family-stable (`invalid_client`, `invalid_grant`, `access_denied`, …) and map to the clothed data-plane JSON.
+Authorize redirect errors stay RFC 6749 query params (`error`, `error_description`) for every vendor. Token JSON is RFC 6749 (`error`, `error_description`) for generic and okta. Entra token errors add `error_codes` (array of ints) and `trace_id`. Domain error codes in the management plane stay family-stable (`invalid_client`, `invalid_grant`, `access_denied`, …).
 
 ## Login, consent, MFA
 
