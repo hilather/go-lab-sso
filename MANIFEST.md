@@ -1,16 +1,22 @@
 # Pack Manifest
 
-Status: design (not implemented)
+Status: default ship (FND-001 + OIDC-001 + LOGIN-001)
 Last reviewed: 2026-08-30
 
-This inventory is the design pack. There is no generated OpenAPI, MCP manifest, JSON Schema, or container image in this repository yet.
+This inventory is the design pack plus FND-001 implementation. There is no generated OpenAPI or MCP manifest. OIDC is not started.
 
 ## Root guidance
 
 - `README.md`: product one-liner, status, why LabSSO, two-plane mermaid, YAML sketch, documentation map.
-- `START-HERE.md`: this repo is the design; implementation is not scheduled.
+- `START-HERE.md`: FND-001 implemented; OIDC not started.
+- `go.mod`: module `github.com/hilather/go-lab-sso`, Go 1.26.
+- `Makefile`: real format/lint/test/parity/container targets; unused stay `false`.
+- `Dockerfile`: scratch image, UID 65532.
+- `.github/workflows/ci.yml`: jobs for implemented Make targets.
 - `docs/README.md`: full documentation catalog.
 - `AGENTS.md`: mandatory repository instructions.
+- `.cursor/rules/`: Cursor summaries of `AGENTS.md` (`repo-conventions.mdc`,
+  `go-tests.mdc`). Not vendored Origin/Cursor agent-skills.
 - `CONTRIBUTING.md`: contribution workflow.
 - `SECURITY.md`: top-level security policy (GitHub private advisories).
 - `CHANGELOG.md`: curated unreleased history (design-only).
@@ -59,14 +65,15 @@ This inventory is the design pack. There is no generated OpenAPI, MCP manifest, 
 
 - `testdata/config/valid/minimal.yaml`
 - `testdata/config/invalid/unknown-field.yaml`
-- `examples/compose.sketch.yaml` (NOT runnable until implemented)
+- `testdata/secrets/tls/tls.crt`, `testdata/secrets/tls/tls.key` (self-signed leaf, `0644`)
+- `testdata/secrets/oidc/signing.pem` (JWT signing key, `0644`)
+- `testdata/secrets/labsso-token` (management bearer, `0644`)
+- `examples/compose.yaml` (runnable `443:10443`)
 
 ## Explicitly absent (by design)
 
-- `go.mod`, `go.sum`, `cmd/`, `internal/`
-- Dockerfile that claims to build a server
-- CI workflows
-- Makefile
+- Dockerfile that claims to build a server (until Wave 5)
+- CI workflows (until Wave 5)
 - Vendored Origin/Cursor agent-skills
 - Header / social images
 - Fake CI / Go / Release badges

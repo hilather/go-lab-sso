@@ -1,6 +1,6 @@
 # Protocols
 
-Status: design (not implemented)
+Status: OIDC-001 + LOGIN-001 implemented (default ship)
 Owners: Protocols, Application
 Last reviewed: 2026-08-30
 Related ADRs: 0002, 0005, 0009
@@ -60,7 +60,7 @@ First implementation implements:
 | Discovery (`/.well-known/openid-configuration` plus vendor path clothes) | Required |
 | JWKS | Required |
 | UserInfo | Required |
-| RP-initiated logout | Required (generic path; vendor path clothes later) |
+| RP-initiated logout | Required (generic path; vendor path clothes later). `post_logout_redirect_uri` must match a registered client redirect URI; otherwise 400. Missing URI returns a logged-out HTML page. |
 | Client credentials | Out of first OIDC slice |
 | Device code | Out of first OIDC slice |
 | Implicit / hybrid | Reject |

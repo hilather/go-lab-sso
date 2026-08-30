@@ -6,11 +6,11 @@ Desired state is a versioned YAML file. Runtime mutations are ephemeral, revisio
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-Status: **design (not implemented)** · Future module [`github.com/hilather/go-lab-sso`](https://github.com/hilather/go-lab-sso) · Future image `ghcr.io/hilather/labsso` · Future binary `labsso` · Language when implemented: **Go 1.26**
+Status: **M2 default ship (generic OIDC + login HTML)** · Module [`github.com/hilather/go-lab-sso`](https://github.com/hilather/go-lab-sso) · Image `ghcr.io/hilather/labsso` · Binary `labsso` · Language: **Go 1.26** · Clothes/SAML/SPA/import/integrator still later
 
 New here? Start with [START-HERE.md](START-HERE.md). Architecture, task lists, and ADRs are indexed in [Documentation](#documentation).
 
-This repository holds the design. There is no `go.mod`, no server image, and no runnable binary yet. Implementation is not scheduled.
+FND-001, OIDC-001, and LOGIN-001 are implemented: generic OIDC plus data-plane login/consent HTML. Vendor clothes, SAML, the operator SPA, import, and the integrator pin are still later.
 
 ---
 
@@ -114,7 +114,7 @@ labsso canonicalize --config lab.yaml --format yaml
 labsso serve --config lab.yaml
 ```
 
-Future hardened image: distroless/scratch, unprivileged UID **65532**, read-only root, `cap_drop: ALL`. Host publish: **TCP 443** → container `:10443`. Management stays on a high port (e.g. host 18443 or 8080-family). See [docs/11-deployment.md](docs/11-deployment.md) and the non-runnable [examples/compose.sketch.yaml](examples/compose.sketch.yaml).
+Hardened image: scratch, unprivileged UID **65532**, read-only root, `cap_drop: ALL`. Host publish: **TCP 443** → container `:10443`. Management stays on a high port (e.g. host 18443 or 8080-family). See [docs/11-deployment.md](docs/11-deployment.md) and [examples/compose.yaml](examples/compose.yaml).
 
 MCP protocol pin: **2026-07-28**, official `go-sdk` **v1.7.0**. `spec.management.mcp.allowLegacyClients: true` is required for MCPJungle.
 

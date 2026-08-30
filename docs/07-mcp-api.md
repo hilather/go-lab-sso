@@ -1,6 +1,6 @@
 # MCP API Design
 
-Status: design (not implemented)
+Status: FND MCP adapter implemented (`internal/control/mcp`, protocol 2026-07-28, SDK v1.7.0)
 Owners: MCP, Application
 Last reviewed: 2026-08-30
 Target protocol baseline: 2026-07-28
@@ -110,7 +110,9 @@ labsso://groups/{id}
 labsso://audit/recent
 ```
 
-A resource mirrors a REST representation. Authorization matches the equivalent GET capability. Secret values never appear.
+Registered now: `labsso://state`, `labsso://capabilities`, `labsso://status`, `labsso://schema/config`, and templates `labsso://clients/{id}`, `labsso://users/{id}`, `labsso://groups/{id}`. `labsso://audit/recent` is not implemented (audit is emit-only; no list/get APIs).
+
+A resource mirrors a REST representation. Authorization matches the equivalent GET capability. Secret values never appear. Tool errors include a structured `code` matching the REST domain code.
 
 ## Prompts
 

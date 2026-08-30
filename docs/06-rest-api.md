@@ -1,6 +1,6 @@
 # REST API Design
 
-Status: design (not implemented)
+Status: FND REST adapter implemented (`internal/control/rest`)
 Owners: REST, Application
 Last reviewed: 2026-08-30
 Related ADRs: 0004, 0008

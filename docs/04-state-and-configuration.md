@@ -1,6 +1,6 @@
 # State and Configuration
 
-Status: design (not implemented)
+Status: default ship implemented (FND-001 + OIDC-001 + LOGIN-001)
 Owners: Configuration, Application
 Last reviewed: 2026-08-30
 Related ADRs: 0003, 0008
@@ -40,6 +40,8 @@ spec:
   listeners:
     https:
       address: ":10443"
+      certRef: testdata/secrets/tls/tls.crt
+      keyRef: testdata/secrets/tls/tls.key
     management:
       address: ":8080"
       restPath: /v1
@@ -56,6 +58,8 @@ spec:
       enabled: false
     wsfed:
       enabled: false
+  signing:
+    keyRef: testdata/secrets/oidc/signing.pem
   clients: []
   users: []
   groups: []
@@ -69,10 +73,10 @@ spec:
   ui:
     enabled: true
   access:
-    tokenRef: /run/secrets/labsso-token
+    tokenRef: testdata/secrets/labsso-token
 ```
 
-Invalid fixture: [testdata/config/invalid/unknown-field.yaml](../testdata/config/invalid/unknown-field.yaml) — any unknown field under `spec` (or elsewhere) must reject.
+Invalid fixtures: [unknown-field.yaml](../testdata/config/invalid/unknown-field.yaml), [bare-duration.yaml](../testdata/config/invalid/bare-duration.yaml), [inline-secret.yaml](../testdata/config/invalid/inline-secret.yaml), [member-user-ids.yaml](../testdata/config/invalid/member-user-ids.yaml), [dangling-group-ids.yaml](../testdata/config/invalid/dangling-group-ids.yaml).
 
 ## Decode rules
 
@@ -96,6 +100,7 @@ This is the v1 design surface. Implementation may add optional fields only with 
 ### `spec.listeners`
 
 - `https.address`: container bind, default `:10443`. Unprivileged.
+- `https.certRef` / `https.keyRef`: TLS leaf file refs (PEM). Not the OIDC signing key.
 - `management.address`: container bind, default `:8080`.
 - `management.restPath`: `/v1`.
 - `management.mcpPath`: `/mcp`.
@@ -104,7 +109,7 @@ This is the v1 design surface. Implementation may add optional fields only with 
 
 ### `spec.issuer`
 
-Exact issuer string. In integrator deployments this is derived from `LAB_PUBLIC_HOST` + published HTTPS port (omit iff 443). A bootstrap may set it explicitly; compile must fail if it disagrees with the derived value when derivation env is present. Standalone `labsso serve` may take the YAML value as-is.
+Exact issuer string. If `LAB_PUBLIC_HOST` is set, the compiled issuer must match this field or compile fails. Standalone `labsso serve` without that env uses the YAML value as-is. Derived form: `https://$LAB_PUBLIC_HOST` when the published HTTPS port is 443, otherwise `https://$LAB_PUBLIC_HOST:$LABSSO_HTTPS_PORT`.
 
 ### `spec.profile.vendor`
 
@@ -120,12 +125,13 @@ List of client objects (empty in minimal). Planned fields: `id`, `clientId`, `re
 
 ### `spec.users` / `spec.groups`
 
-Source of truth in v1. User: `id`, `username`, `passwordRef` or `passwordHashRef` (PHC file), `groupIds`, `enabled`. Group: `id`, `name`, `memberUserIds` or membership via user `groupIds` (pick one ownership in CFG; do not allow silent dual writes).
+Source of truth in v1. User: `id`, `username`, optional `email`, `passwordRef` or `passwordHashRef` (PHC file), `groupIds`, `enabled`. Usernames are unique. Group: `id`, `name`. Membership is **only** `user.groupIds`. `group.memberUserIds` is **not a field**; a document that contains it is an unknown-field reject. Dangling `groupIds` reject at validate.
 
 ### `spec.auth`
 
 - `sessionTTL`: Go duration.
 - `mfa.mode`: `never` | `always` | `force-fail`.
+- PHC (LOGIN-001): `passwordHashRef` files must be Argon2id (`$argon2id$v=19$m=65536,t=3,p=4$…`). Unknown PHC id fail-closed. Plaintext/unsalted hash material is rejected. `passwordRef` files are compared with constant-time equality (lab plaintext).
 
 ### `spec.groupOverage`
 
@@ -137,11 +143,15 @@ Source of truth in v1. User: `id`, `username`, `passwordRef` or `passwordHashRef
 
 - `enabled`: operator SPA only. Default true in the sketch. `false` 404s SPA, not login HTML.
 
+### `spec.signing`
+
+- `keyRef`: OIDC/JWT signing private key file (PEM). **Not** the TLS leaf. Missing file fail-closes at compile.
+
 ### `spec.access`
 
-- `tokenRef`: management bearer file.
+- `tokenRef`: management bearer file. Must resolve at `serve` (no omit-token exception in FND-001).
 
-TLS leaf refs (`spec.listeners.https.certRef` / `keyRef` or equivalent) will be added in CFG; integrator uses `secrets/labsso-tls/`. Do not invent inline PEMs.
+TLS leaf refs are `spec.listeners.https.certRef` / `keyRef`. Integrator later uses `secrets/labsso-tls/`. Do not invent inline PEMs.
 
 ## Load pipeline
 
@@ -161,7 +171,7 @@ Invalid bootstrap does **not** listen.
 
 ## Revisions
 
-- `bootstrapRevision`: hash of the mounted file bytes after canonicalize-or-raw policy (pick one in CFG; LabDNS uses compiled canonical). Design: hash of canonical exported form of the loaded document, excluding secret values.
+- `bootstrapRevision`: SHA-256 (hex, `sha256:` prefix) of the canonical exported form of the loaded document, excluding secret values.
 - `runtimeRevision`: hash of the active canonical overlay.
 - `generation`: monotonic integer, increments on successful apply and reset.
 - `drifted`: `bootstrapRevision != runtimeRevision`.
@@ -214,7 +224,7 @@ labsso serve --config PATH
 
 ## Testing strategy
 
-Valid, invalid, normalization, round-trip, secret-redaction, revision-conflict, and reset-does-not-write tests. The two fixtures in `testdata/config/` are the minimum; CFG adds packs.
+Valid, invalid, normalization, round-trip, secret-redaction, revision-conflict, reset-does-not-write, and reset-bad-file-keeps-live tests live under `internal/config`, `internal/compiler`, and `internal/app`. Invalid packs are listed above.
 
 ## Compatibility implications
 
@@ -222,6 +232,4 @@ Field names, duration syntax, vendor enum, and export shape are public. Adding o
 
 ## Open questions
 
-- Canonical membership ownership (user→groups vs group→members).
-- Whether `issuer` in YAML is required when derivation env is set, or forbidden, or must match.
-- Generic group safety-cap field name (sweep 2: numeric default **200**; field name lands in CFG / OVR-001).
+- Generic group safety-cap field name (sweep 2: numeric default **200**; field name lands in OVR-001). Membership SoT, bootstrapRevision hash, and issuer-when-env are frozen above.

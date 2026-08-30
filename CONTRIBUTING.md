@@ -2,7 +2,7 @@
 
 ## Status
 
-This repository is **design (not implemented)**. Contributions in this phase are documentation, ADRs, YAML sketches, and program-board edits. Do not open a pull request that adds `go.mod`, application Go, a server Dockerfile, or CI that would fail.
+This repository has **opened implementation at FND-001**. Contributions may add Go under `internal/` and `cmd/labsso` for the current slice. Do not open a PR that adds OIDC, login HTML, SPA, import, or integrator wiring before those slices. Missing Make targets must `false`. Do not add CI until Wave 5.
 
 When implementation is opened:
 

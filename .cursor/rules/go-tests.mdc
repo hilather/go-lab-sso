@@ -1,0 +1,18 @@
+---
+description: Test requirements once Go implementation exists
+globs: **/*.go
+alwaysApply: false
+---
+
+# Go changes require regression tests
+
+Read `AGENTS.md` section “Tests and regressions (once code exists)”.
+
+- Every area must have regression tests. A bug fix must begin with or
+  include a test that fails before the fix and passes after it.
+- New REST needs contract tests and shared-domain tests. New MCP needs
+  protocol tests and REST/MCP parity tests. Configuration changes need
+  valid, invalid, normalization, round-trip, and backward-compatibility
+  tests.
+- When a test target exists, run it before finishing. Do not invent
+  `make test` or `make smoke` here.

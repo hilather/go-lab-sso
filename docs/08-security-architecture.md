@@ -1,6 +1,6 @@
 # Security Architecture
 
-Status: design (not implemented)
+Status: FND + OIDC + login implemented; clothes/SPA later
 Owners: Security, Protocols, Control Plane
 Last reviewed: 2026-08-30
 Related ADRs: 0002, 0003, 0004, 0005, 0006, 0008, 0009
@@ -48,8 +48,8 @@ LabSSO does **not** trust vendor-cloud hostnames and does not present them.
 - Shared auth middleware for REST and MCP.
 - Lab static bearer from `tokenRef`.
 - Resource-aware RBAC (scopes in [docs/05-control-plane-and-parity.md](05-control-plane-and-parity.md)).
-- Origin validation for MCP and browser-reachable REST.
-- Strict body, header, rate, and timeout limits.
+- Origin validation for MCP and browser-reachable REST (`http.CrossOriginProtection`). Loopback management requests (REST and MCP) whose `Host` is not localhost / 127.0.0.1 / `::1` (or the httptest default `example.com`) are 403 (DNS-rebinding defense).
+- Strict body, header, rate, and timeout limits. Login POST is 10/min per IP; authorize and token are 60/min per IP. Pending authorization requests expire after 10 minutes.
 - No permissive CORS by default.
 - `allowLegacyClients` skips only the MCP protocol-version header pin.
 
@@ -66,7 +66,7 @@ LabSSO does **not** trust vendor-cloud hostnames and does not present them.
 
 Operator console authenticates with an in-process session table and cookie `labsso_session` (`HttpOnly`, `SameSite=Lax`, `Path=/`, host-only, `Secure` iff TLS). CSRF in memory / JSON, never `localStorage`. MCP ignores cookies.
 
-`spec.ui.enabled: false` 404s SPA only. Data-plane login cookies are a different name and path on the HTTPS issuer.
+`spec.ui.enabled: false` 404s SPA only. Data-plane login cookie is `labsso_login` (`HttpOnly`, `SameSite=Lax`, `Path=/` on the issuer host, host-only, `Secure` iff TLS). Do not reuse `labsso_session`.
 
 ## Secret management
 

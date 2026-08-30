@@ -1,17 +1,17 @@
 # Program Board
 
-Status: design (not implemented) — all slices not-started
+Status: default ship done (FND-001 + OIDC-001 + LOGIN-001)
 Last reviewed: 2026-08-30
 
-Implementation is **not scheduled**. This board is the ordered contract for a later opening.
+Implementation is **opened** at FND-001. Later slices stay not-started until their wave.
 
 ## Work packages
 
 | Order | Slice | ID | Depends on | Primary output | Status |
 |---:|---|---|---|---|---|
-| 1 | Repo foundation + YAML schema + snapshot/plan/apply + REST+MCP registry + CLI `validate\|canonicalize\|serve` + scratch image + compose mapping `443:10443` | FND-001 | Design accepted | Module, schema, registry, CLI, scratch image, sketch becomes runnable | not-started |
-| 2 | OIDC/OAuth2 authorization code + PKCE + discovery + JWKS + id_token/access_token + refresh (generic clothes) | OIDC-001 | FND-001 | Generic OP | not-started |
-| 3 | Data-plane login + consent HTML; MFA knobs `never` \| `always` \| `force-fail` (TOTP stub later) | LOGIN-001 | OIDC-001 | Login/consent HTML ≠ operator SPA | not-started |
+| 1 | Repo foundation + YAML schema + snapshot/plan/apply + REST+MCP registry + CLI `validate\|canonicalize\|serve` + scratch image + compose mapping `443:10443` | FND-001 | Design accepted | Module, schema, registry, CLI, scratch image, compose runnable | done |
+| 2 | OIDC/OAuth2 authorization code + PKCE + discovery + JWKS + id_token/access_token + refresh (generic clothes) | OIDC-001 | FND-001 | Generic OP | done |
+| 3 | Data-plane login + consent HTML; MFA knobs `never` \| `always` \| `force-fail` (TOTP stub later) | LOGIN-001 | OIDC-001 | Login/consent HTML ≠ operator SPA | done |
 | 4 | Vendor clothes: `entra`, `okta` (paths, claims, cookies, error dialect) | VEN-001 | LOGIN-001 | Clothes tables | not-started |
 | 5 | Group overage: Entra `_claim_names`/`_claim_sources` + Graph-shaped stub; Okta fail-at; generic cap | OVR-001 | VEN-001 | Overage behaviors | not-started |
 | 6 | SAML 2.0 SP-initiated SSO + IdP metadata | SAML-001 | OVR-001 | SAML IdP | not-started |

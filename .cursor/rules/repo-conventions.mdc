@@ -1,0 +1,26 @@
+---
+description: Core conventions for LabSSO
+alwaysApply: true
+---
+
+# LabSSO conventions
+
+Read `AGENTS.md` for the full rules. Non-negotiables:
+
+- Default ship (FND-001 + OIDC-001 + LOGIN-001) is implemented. Do not
+  vendor Origin/Cursor agent-skills. Makefile targets that are not
+  implemented must `false`. Clothes/SAML/SPA/import/integrator are later.
+- Documentation ships with the change. Stale docs are a defect. Do not
+  change an architectural invariant without an ADR.
+- REST and MCP are adapters over one operation registry. Never implement
+  MCP by proxying REST. Never implement REST by calling MCP. Handlers
+  must not implement independent business logic.
+- Secrets are file refs, never inline in YAML, logs, diffs, MCP
+  resources, or audit payloads. Unknown YAML fields reject. The service
+  must not write the bootstrap configuration file.
+- LabSSO is dest-443 (host TCP 443 → unprivileged container listen).
+  No LabNTP time bus. Vendor profiles are path and claim clothes on one
+  exact issuer — do not impersonate vendor hostnames. Integrator pin in
+  `hilather/mcp-integration-lab` is last.
+- Do not flatten Cloud notes or Origin SHAs into README. There is no
+  Cloud section in this repo; local desktop uses global agent-hints.

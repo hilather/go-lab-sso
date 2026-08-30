@@ -1,0 +1,8 @@
+/labsso
+/dist/
+/secrets/
+.idea/
+.vscode/
+*.exe
+*.test
+coverage.out

@@ -1,6 +1,6 @@
 # Acceptance Criteria
 
-Status: design (not implemented)
+Status: M2 default ship implemented (FND-001 + OIDC-001 + LOGIN-001)
 Owners: Program, Quality
 Last reviewed: 2026-08-30
 
@@ -14,22 +14,23 @@ The design is accepted when all of the following are true on `main`:
 4. Required docs, ADRs, tasks, fixtures, and compose sketch exist and are real content (not one-paragraph stubs for architecture/API).
 5. `testdata/config/valid/minimal.yaml` matches the normative sketch.
 6. `testdata/config/invalid/unknown-field.yaml` demonstrates KnownFields reject.
-7. `examples/compose.sketch.yaml` maps `443:10443`, management loopback, UID 65532, and is marked NOT runnable.
+7. `examples/compose.yaml` maps `443:10443`, management loopback, UID 65532 (runnable).
 8. No `go.mod`, no server Dockerfile, no CI, no Makefile, no vendored agent-skills.
 9. Sweep-1 blockers are folded into [skeptic-notes.md](skeptic-notes.md) and the ADRs. Sweep 2 (2026-08-30) is **ACCEPT**.
 10. Repo description and topics are set on GitHub (human admin if the landing agent’s token cannot `gh repo edit`).
 
-## Later implementation — foundation (slice 1)
+## M1 foundation (FND-001) — implemented
 
-- `labsso validate|canonicalize|serve` exist.
+- `labsso validate|canonicalize|serve|healthcheck|version` exist.
 - Unknown YAML fields reject.
 - Process never writes bootstrap.
 - Scratch image, UID 65532, read-only, cap_drop ALL.
-- Compose can publish `443:10443`.
+- Compose publishes `443:10443` ([examples/compose.yaml](../examples/compose.yaml)). Container tests use an ephemeral host port mapped to `:10443` and still assert the compose file publishes `443:10443`.
 - REST `/v1` and MCP `/mcp` share one registry. MCP is not a REST proxy.
 - Protocol 2026-07-28, go-sdk v1.7.0, `allowLegacyClients` honored.
+- Data-plane HTTPS binds real TLS. OIDC protocol routes are 404 until OIDC-001.
 
-## Later implementation — OIDC + login (slices 2–3)
+## M2 browser IdP (OIDC-001 + LOGIN-001) — implemented
 
 - Authorization code + PKCE S256 works against the exact issuer.
 - Discovery `iss` matches host+port derivation (port omitted iff 443).

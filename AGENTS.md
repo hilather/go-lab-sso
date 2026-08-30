@@ -2,7 +2,7 @@
 
 These instructions apply to every human or AI agent working in this repository. More specific `AGENTS.md` files may add stricter rules but may not weaken this file.
 
-This repository is **design (not implemented)**. Do not add a Go module, a server Dockerfile, failing CI, or a Makefile whose missing targets succeed as no-ops. Do not vendor Origin/Cursor agent-skills.
+This repository has **implemented the default ship (FND-001 + OIDC-001 + LOGIN-001)**. Vendor clothes, SAML, SPA, import, and the integrator pin are not started. Do not vendor Origin/Cursor agent-skills. Makefile targets that are not implemented must `false`, not no-op.
 
 ## Required reading
 

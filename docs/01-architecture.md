@@ -1,6 +1,6 @@
 # System Architecture
 
-Status: design (not implemented)
+Status: default ship implemented (FND-001 + OIDC-001 + LOGIN-001)
 Owners: Architecture, Protocols, Control Plane, Deployment
 Last reviewed: 2026-08-30
 Related ADRs: 0001, 0002, 0003, 0004, 0005, 0006, 0007, 0009

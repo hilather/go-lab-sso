@@ -1,6 +1,6 @@
 # Container Deployment
 
-Status: design (not implemented)
+Status: FND-001 implemented (CLI, scratch image, runnable compose 443:10443)
 Owners: Deployment, Operations, Security
 Last reviewed: 2026-08-30
 Related ADRs: 0003, 0006, 0007
@@ -32,7 +32,7 @@ Image: **`ghcr.io/hilather/labsso`**. Multi-stage build to **scratch** or distro
 - User numeric **`65532:65532`**.
 - Runtime: `read_only: true`, `cap_drop: [ALL]`, `security_opt: [no-new-privileges:true]`, tmpfs `/tmp`.
 
-Do not add a Dockerfile in this repo until FND/DEP that actually builds the binary. A Dockerfile that claims to build a server while `go.mod` is absent is a lie.
+Image: `ghcr.io/hilather/labsso`. The repo `Dockerfile` builds a scratch image with `/labsso` as UID 65532.
 
 ## Ports
 
@@ -89,7 +89,7 @@ The process never writes `--config`.
 
 ## Compose sketch
 
-See [examples/compose.sketch.yaml](../examples/compose.sketch.yaml). It is **not runnable** until the image exists. Shape:
+See [examples/compose.yaml](../examples/compose.yaml). Runnable: `443:10443`, management `127.0.0.1:8080:8080`, UID 65532, W0 testdata secret mounts. Shape:
 
 - `443:10443` for HTTPS.
 - `127.0.0.1:8080:8080` for management.

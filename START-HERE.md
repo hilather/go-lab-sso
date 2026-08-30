@@ -1,6 +1,6 @@
 # Start here
 
-LabSSO is a from-scratch Go laboratory Identity Provider in the hilather lab-appliance family. This repository is the **design**. Implementation is **not scheduled**. There is no binary, no `go.mod`, and no image that claims to serve OIDC today.
+LabSSO is a from-scratch Go laboratory Identity Provider in the hilather lab-appliance family. The **default ship** is implemented: generic OIDC plus data-plane login/consent HTML. Vendor clothes, SAML, the operator SPA, import, and the integrator pin are later.
 
 If you want to understand the product, stay on this page, then read architecture and the program board. If you want to change the design, read [AGENTS.md](AGENTS.md) before touching a file.
 
@@ -10,9 +10,7 @@ If you want to understand the product, stay on this page, then read architecture
 2. Read [docs/01-architecture.md](docs/01-architecture.md) — two planes, snapshot, issuer, ports, TLS.
 3. Read [docs/04-state-and-configuration.md](docs/04-state-and-configuration.md) and the YAML sketch in [testdata/config/valid/minimal.yaml](testdata/config/valid/minimal.yaml).
 4. Read [docs/05-control-plane-and-parity.md](docs/05-control-plane-and-parity.md) so REST and MCP stay adapters.
-5. Read [tasks/00-program-board.md](tasks/00-program-board.md) for the ordered slices. Do not start implementation from a task summary while this repo is design-only.
-
-There is no `labsso serve` yet. Do not invent a local build path.
+5. Read [tasks/00-program-board.md](tasks/00-program-board.md) for the ordered slices. Default ship is done; clothes/SAML/SPA/import/integrator are later.
 
 ## What to read next
 
@@ -32,13 +30,13 @@ The full catalog is in [docs/README.md](docs/README.md) and linked from the [REA
 
 ## For contributors and agents
 
-This repo is docs-only until a later implementation slice is explicitly opened. Before changing the design:
+Implementation is opened at FND-001. Before changing design or code:
 
 1. Read [AGENTS.md](AGENTS.md) completely.
 2. Read architecture, protocols, vendor clothes, state, control-plane parity, security, and testing: [docs/01-architecture.md](docs/01-architecture.md), [docs/02-protocols.md](docs/02-protocols.md), [docs/03-vendor-profiles.md](docs/03-vendor-profiles.md), [docs/04-state-and-configuration.md](docs/04-state-and-configuration.md), [docs/05-control-plane-and-parity.md](docs/05-control-plane-and-parity.md), [docs/08-security-architecture.md](docs/08-security-architecture.md), [docs/10-testing-strategy.md](docs/10-testing-strategy.md).
 3. Read every ADR that affects the change (`docs/adr/`).
 4. Update every affected document in the same change.
-5. Do not add `go.mod`, a server `Dockerfile`, failing CI, or a Makefile whose missing targets no-op.
+5. Do not add a server Dockerfile or CI until Wave 5 Make targets are real. Missing Make targets must `false`.
 6. Do not vendor Origin/Cursor agent-skills.
 7. Do not implement LabSSO inside [mcp-integration-lab](https://github.com/hilather/mcp-integration-lab). The integrator pin is last; document the wiring only.
 

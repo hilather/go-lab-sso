@@ -4,7 +4,7 @@ Operator front door: [README.md](../README.md). Onboarding: [START-HERE.md](../S
 
 This page is the catalog. Normative design documents win over task summaries.
 
-Status: **design (not implemented)**. Last reviewed: 2026-08-30.
+Status: **default ship (generic OIDC + login HTML)**. Last reviewed: 2026-08-30.
 
 ## Root
 
@@ -81,4 +81,4 @@ See [tasks/README.md](../tasks/README.md) and the [program board](../tasks/00-pr
 |---|---|
 | [testdata/config/valid/minimal.yaml](../testdata/config/valid/minimal.yaml) | Minimal valid document |
 | [testdata/config/invalid/unknown-field.yaml](../testdata/config/invalid/unknown-field.yaml) | KnownFields reject |
-| [examples/compose.sketch.yaml](../examples/compose.sketch.yaml) | Non-runnable 443:10443 sketch |
+| [examples/compose.yaml](../examples/compose.yaml) | Runnable 443:10443 compose |

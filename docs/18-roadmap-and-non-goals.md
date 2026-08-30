@@ -1,6 +1,6 @@
 # Roadmap and Non-Goals
 
-Status: design (not implemented)
+Status: default ship implemented (FND-001 + OIDC-001 + LOGIN-001)
 Owners: Architecture, Program
 Last reviewed: 2026-08-30
 Related ADRs: 0001–0009
@@ -11,7 +11,7 @@ LabSSO is easy to over-scope (wrap Keycloak, clone Entra hostnames, add a time b
 
 ## Sequential slices (normative)
 
-Implementation is not scheduled. When it opens, order is:
+Implementation is opened at FND-001. Remaining slice order is:
 
 1. **Repo foundation** — Go 1.26 module `github.com/hilather/go-lab-sso`, YAML schema, snapshot/plan/apply, REST+MCP registry, CLI `validate|canonicalize|serve`, scratch image, example compose mapping `443:10443`.
 2. **OIDC/OAuth2** — authorization code + PKCE + discovery + JWKS + id_token/access_token + refresh (generic clothes).
