@@ -89,10 +89,13 @@ sso_tunable_overage_set
 sso_tunable_vendor_swap
 sso_tunable_redirect_rewrite
 
-Implemented tunables today: `sso_tunable_token_pause`, `sso_tunable_token_resume`, `sso_tunable_auth_force_fail`, `sso_tunable_error_inject`, `sso_tunable_vendor_swap`. `sso_tunable_vendor_swap` input: `vendor` (required), `tenantId` (optional merge), `expectedRevision`, `reason`, `idempotencyKey`. Same domain types as REST `POST /v1/tunables/vendor:swap`.
+Implemented tunables today: `sso_tunable_token_pause`, `sso_tunable_token_resume`, `sso_tunable_auth_force_fail`, `sso_tunable_error_inject`, `sso_tunable_vendor_swap`, `sso_tunable_overage_set`, `sso_tunable_consent_force`, `sso_tunable_token_mint`, `sso_tunable_redirect_rewrite`. `sso_tunable_overage_set` input: optional `entraGraphStub` / `oktaFailAt` / `genericCap` pointers, `expectedRevision`, `reason`, `idempotencyKey`. Same domain types as REST.
 
 sso_audit_query
 sso_audit_get
+sso_sessions_expire_all
+
+`sso_audit_query` / `sso_audit_get` are implemented (`sso.audit.read`). Resource `labsso://audit/recent`. Browser session tools stay REST-only.
 ```
 
 Health live/ready have no tools. Browser session create/delete have no tools.
@@ -112,7 +115,7 @@ labsso://groups/{id}
 labsso://audit/recent
 ```
 
-Registered now: `labsso://state`, `labsso://capabilities`, `labsso://status`, `labsso://schema/config`, and templates `labsso://clients/{id}`, `labsso://users/{id}`, `labsso://groups/{id}`. `labsso://audit/recent` is not implemented (audit is emit-only; no list/get APIs).
+Registered now: `labsso://state`, `labsso://capabilities`, `labsso://status`, `labsso://schema/config`, `labsso://audit/recent`, and templates `labsso://clients/{id}`, `labsso://users/{id}`, `labsso://groups/{id}`.
 
 A resource mirrors a REST representation. Authorization matches the equivalent GET capability. Secret values never appear. Tool errors include a structured `code` matching the REST domain code.
 

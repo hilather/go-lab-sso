@@ -97,12 +97,13 @@ See [examples/compose.yaml](../examples/compose.yaml). Runnable: `443:10443`, ma
 - read-only, cap_drop ALL, tmpfs `/tmp`.
 - bootstrap YAML and token file mounts.
 
-## Integrator last (mcp-integration-lab)
+## Integrator last (INT-001)
 
-Documented here so agents do not invent an overlay. **Do not implement in mcp-integration-lab from this repo.**
+This repository **documents** the pin. **Do not implement the integrator compose from this repo** (`AGENTS.md`). The actual pin is last, in `hilather/mcp-integration-lab`.
 
-LabMITM-style service in the **main** `docker-compose.yaml` (not an overlay):
+Recipe (when that repo lands the pin):
 
+- LabMITM-style service in the **main** `docker-compose.yaml` (not an overlay).
 - BOM: vendor pin, `profile.env`, `publishedPortSpecs`, `CanonicalReloadApps`.
 - `secrets.go`: token **0o644** for UID 65532.
 - `register.go`.
@@ -110,6 +111,7 @@ LabMITM-style service in the **main** `docker-compose.yaml` (not an overlay):
 - mcpjungle `servers/labsso.json`.
 - New TLS leaf under `secrets/labsso-tls/` (lab-CA signed; **new leaf**, do not reuse LabMITM or LabLDAP cert).
 - `allowLegacyClients: true`.
+- Host-443 occupancy stays an integrator `ports.go` / `mcplab` check (rule 15). LabSSO does not inspect host `:443` from inside the unprivileged container.
 
 ## Kubernetes guidance (later)
 

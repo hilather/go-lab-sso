@@ -85,6 +85,9 @@ func Normalize(doc *model.Document) {
 	if doc.Spec.GroupOverage.OktaFailAt == 0 {
 		doc.Spec.GroupOverage.OktaFailAt = 100
 	}
+	if doc.Spec.GroupOverage.GenericCap == 0 {
+		doc.Spec.GroupOverage.GenericCap = 200
+	}
 	if doc.Spec.UI.Enabled == nil {
 		doc.Spec.UI.Enabled = model.Ptr(true)
 	}

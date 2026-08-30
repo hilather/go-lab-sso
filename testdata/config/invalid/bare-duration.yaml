@@ -37,6 +37,7 @@ spec:
   groupOverage:
     entraGraphStub: true
     oktaFailAt: 100
+    genericCap: 200
   ui:
     enabled: true
   access:

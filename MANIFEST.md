@@ -1,14 +1,14 @@
 # Pack Manifest
 
-Status: default ship (FND-001 + OIDC-001 + LOGIN-001)
+Status: through VEN-002; INT-001 documented; SCIM design-only
 Last reviewed: 2026-08-30
 
-This inventory is the design pack plus FND-001 implementation. There is no generated OpenAPI or MCP manifest. OIDC is not started.
+This inventory is the design pack plus implementation through VEN-002. There is no generated OpenAPI or MCP manifest.
 
 ## Root guidance
 
 - `README.md`: product one-liner, status, why LabSSO, two-plane mermaid, YAML sketch, documentation map.
-- `START-HERE.md`: FND-001 implemented; OIDC not started.
+- `START-HERE.md`: through VEN-002; integrator pin last; SCIM design-only.
 - `go.mod`: module `github.com/hilather/go-lab-sso`, Go 1.26.
 - `Makefile`: real format/lint/test/parity/container targets; unused stay `false`.
 - `Dockerfile`: scratch image, UID 65532.
@@ -37,6 +37,8 @@ This inventory is the design pack plus FND-001 implementation. There is no gener
 - `docs/11-deployment.md`
 - `docs/18-roadmap-and-non-goals.md`
 - `docs/19-acceptance-criteria.md`
+- `docs/22-operator-spa.md`
+- `docs/23-scim-outbound.md`
 - `docs/20-threat-model.md`
 - `docs/21-standards-and-references.md`
 - `docs/known-limitations.md`

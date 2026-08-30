@@ -1,6 +1,6 @@
 # Acceptance Criteria
 
-Status: M2 default ship implemented (FND-001 + OIDC-001 + LOGIN-001)
+Status: through VEN-002 implemented; INT-001 documented; SCIM design-only
 Owners: Program, Quality
 Last reviewed: 2026-08-30
 
@@ -41,20 +41,25 @@ The design is accepted when all of the following are true on `main`:
 
 - `entra` / `okta` change paths, claims extras, login cookie names, and entra token-error extras — not hostname / `iss`.
 - Active clothes paths only; discovery lists only the active endpoints.
-- Unimplemented vendor enum values compile-reject.
+- Unimplemented (non-enum) vendor strings compile-reject. All enum clothes are implemented (VEN-002).
 
-## Later implementation — overage (OVR-001)
+## Overage (OVR-001, implemented)
 
-- Entra overage uses LabSSO Graph-shaped stub; no Microsoft egress.
-- Okta fails token at `oktaFailAt`.
-- Generic embeds groups with a safety cap.
+- Entra overage uses LabSSO Graph-shaped stub on the exact issuer; no Microsoft egress; never `graph.microsoft.com`.
+- `entraGraphStub: false` + overage triggered fails the token with clothed entra error.
+- Okta fails token at `oktaFailAt` (code and refresh); does not truncate.
+- Generic embeds at most `genericCap` (default 200); excess omitted + audit warning.
+- When `groups` is scoped, access token carries the same groups / Entra overage claims as id_token + userinfo.
+- `overage:set` merges policy pointers; membership counts stay user/group apply.
 
 ## Later implementation — SAML / SPA / import / integrator
 
-- Slice 6: SP-initiated SAML + metadata; hardened XML.
-- Slice 7: SPA parity; Mira review recorded; no `localStorage` tokens.
-- Slice 8: import allow-list rewriter; unmapped parked; plan/apply only.
-- Slice 11: mcp-integration-lab main compose, new `secrets/labsso-tls` leaf, labinfo `connection` block, token 0o644, `allowLegacyClients: true`.
+- Slice 6 (SAML-001, implemented): SP-initiated SAML + metadata; EntityID = issuer; hardened XML; lab cert from `signing.keyRef`; login pending branches OIDC vs SAML.
+- Slice 7 (UI-001, implemented): SPA cookie+CSRF; no `localStorage` tokens; `ui.enabled` 404s SPA only; audit list/get; Mira checklist in `docs/22-operator-spa.md`.
+- Slice 8 (IMP-001, implemented): import allow-list rewriter; unmapped parked; plan/apply only; `redirect:rewrite`.
+- Slice 9 (VEN-002, implemented): remaining enum clothes + WS-Fed passive; Keycloak realm = `metadata.name`; no hostname impersonation.
+- Slice 10 (SCIM-001): design-only outbound client ([docs/23-scim-outbound.md](23-scim-outbound.md)); no inbound server; no YAML/catalog until a later implementation wave.
+- Slice 11 (INT-001): documented in [docs/11-deployment.md](11-deployment.md). Pin is last, in mcp-integration-lab, not from this repo.
 
 ## Cross-cutting
 

@@ -1,0 +1,9 @@
+{
+  "id": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+  "appId": "11111111-2222-3333-4444-555555555555",
+  "displayName": "Contoso App",
+  "signInAudience": "AzureADMyOrg",
+  "replyUrlsWithType": [{"url": "https://sut.example.net/callback", "type": "Web"}],
+  "oauth2AllowIdTokenImplicitFlow": true,
+  "groupMembershipClaims": "SecurityGroup"
+}

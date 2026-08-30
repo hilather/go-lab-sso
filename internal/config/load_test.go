@@ -103,7 +103,7 @@ func TestLoadOktaAccepted(t *testing.T) {
 
 func TestLoadPingAccepted(t *testing.T) {
 	root := repoRoot(t)
-	doc, err := config.LoadFile(filepath.Join(root, "testdata/config/compile-reject/ping.yaml"), config.Options{BaseDir: root})
+	doc, err := config.LoadFile(filepath.Join(root, "testdata/config/valid/ping.yaml"), config.Options{BaseDir: root})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -156,5 +156,8 @@ func TestNormalizeDefaults(t *testing.T) {
 	}
 	if !doc.Spec.Protocols.OIDC.IsEnabled(false) || doc.Spec.Protocols.SAML.IsEnabled(true) {
 		t.Fatal("protocol defaults")
+	}
+	if doc.Spec.GroupOverage.OktaFailAt != 100 || doc.Spec.GroupOverage.GenericCap != 200 {
+		t.Fatalf("overage defaults %+v", doc.Spec.GroupOverage)
 	}
 }

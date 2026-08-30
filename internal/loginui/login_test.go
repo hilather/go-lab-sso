@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"io"
+	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
@@ -121,6 +122,34 @@ func TestAuthorizeLoginConsentToken(t *testing.T) {
 	h.ServeHTTP(rec, req)
 	if rec.Code != 200 || !strings.Contains(rec.Body.String(), "id_token") {
 		t.Fatal(rec.Body.String())
+	}
+}
+
+func TestForceConsentIgnoresPreConsent(t *testing.T) {
+	a := bootLogin(t, true)
+	if err := a.ForceConsent(auth.AdminActor(), true); err != nil {
+		t.Fatal(err)
+	}
+	h := a.HTTPSHandler()
+	ch := pkceS256("v")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "/oauth2/authorize?response_type=code&client_id=app-1&redirect_uri="+url.QueryEscape("https://sut.example.net/cb")+"&code_challenge="+ch+"&code_challenge_method=S256", nil))
+	pending, _ := url.Parse(rec.Header().Get("Location"))
+	form := url.Values{"pending": {pending.Query().Get("pending")}, "username": {"alice"}, "password": {"alice-password"}}
+	req := httptest.NewRequest("POST", "/login", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != 302 || !strings.Contains(rec.Header().Get("Location"), "/consent") {
+		t.Fatalf("force-consent must ignore PreConsent, got %s", rec.Header().Get("Location"))
+	}
+	sess := a.OIDC().Runtime().PutSession(oidc.LoginSession{UserID: "u1", Username: "alice"})
+	req = httptest.NewRequest("GET", "/oauth2/authorize?response_type=code&client_id=app-1&redirect_uri="+url.QueryEscape("https://sut.example.net/cb")+"&code_challenge="+ch+"&code_challenge_method=S256", nil)
+	req.AddCookie(&http.Cookie{Name: oidc.CookieLogin, Value: sess.ID})
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != 302 || !strings.Contains(rec.Header().Get("Location"), "/consent") {
+		t.Fatalf("force-consent must ignore PreConsent on authorize shortcut, got %s", rec.Header().Get("Location"))
 	}
 }
 

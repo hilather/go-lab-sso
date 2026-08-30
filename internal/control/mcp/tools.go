@@ -155,6 +155,72 @@ func (s *Server) registerTools() {
 			ExpectedRevision: in.ExpectedRevision, IdempotencyKey: in.IdempotencyKey, Reason: in.Reason,
 		})
 	})
+	add(s, "sso_tunable_overage_set", true, true, func(ctx context.Context, actor auth.Actor, in struct {
+		EntraGraphStub   *bool  `json:"entraGraphStub,omitempty"`
+		OktaFailAt       *int   `json:"oktaFailAt,omitempty"`
+		GenericCap       *int   `json:"genericCap,omitempty"`
+		ExpectedRevision string `json:"expectedRevision"`
+		IdempotencyKey   string `json:"idempotencyKey,omitempty"`
+		Reason           string `json:"reason,omitempty"`
+	}) (any, error) {
+		return s.app.SetOverage(actor, app.SetOverageIn{
+			EntraGraphStub: in.EntraGraphStub, OktaFailAt: in.OktaFailAt, GenericCap: in.GenericCap,
+			ExpectedRevision: in.ExpectedRevision, IdempotencyKey: in.IdempotencyKey, Reason: in.Reason,
+		})
+	})
+	add(s, "sso_tunable_consent_force", true, true, func(ctx context.Context, actor auth.Actor, in struct {
+		On bool `json:"on"`
+	}) (any, error) {
+		return map[string]any{"on": in.On}, s.app.ForceConsent(actor, in.On)
+	})
+	add(s, "sso_tunable_token_mint", true, true, func(ctx context.Context, actor auth.Actor, in struct {
+		UserID   string `json:"userId"`
+		ClientID string `json:"clientId"`
+		Scope    string `json:"scope,omitempty"`
+	}) (any, error) {
+		return s.app.MintToken(actor, app.MintTokenIn{UserID: in.UserID, ClientID: in.ClientID, Scope: in.Scope})
+	})
+	add(s, "sso_audit_query", false, true, func(ctx context.Context, actor auth.Actor, _ emptyIn) (any, error) {
+		return s.app.ListAudit(actor)
+	})
+	add(s, "sso_audit_get", false, true, func(ctx context.Context, actor auth.Actor, in idIn) (any, error) {
+		return s.app.GetAudit(actor, in.ID)
+	})
+	add(s, "sso_import_plan", false, true, func(ctx context.Context, actor auth.Actor, in struct {
+		Kind     string `json:"kind"`
+		Document string `json:"document"`
+		Reason   string `json:"reason,omitempty"`
+	}) (any, error) {
+		return s.app.ImportPlan(actor, app.ImportIn{Kind: in.Kind, Document: in.Document, Reason: in.Reason})
+	})
+	add(s, "sso_import_apply", true, true, func(ctx context.Context, actor auth.Actor, in struct {
+		Kind             string `json:"kind"`
+		Document         string `json:"document"`
+		ExpectedRevision string `json:"expectedRevision"`
+		IdempotencyKey   string `json:"idempotencyKey,omitempty"`
+		Reason           string `json:"reason,omitempty"`
+	}) (any, error) {
+		return s.app.ImportApply(actor, app.ImportIn{
+			Kind: in.Kind, Document: in.Document, ExpectedRevision: in.ExpectedRevision,
+			IdempotencyKey: in.IdempotencyKey, Reason: in.Reason,
+		})
+	})
+	add(s, "sso_tunable_redirect_rewrite", true, true, func(ctx context.Context, actor auth.Actor, in struct {
+		ClientID         string   `json:"clientId"`
+		RedirectURIs     []string `json:"redirectURIs"`
+		ExpectedRevision string   `json:"expectedRevision"`
+		IdempotencyKey   string   `json:"idempotencyKey,omitempty"`
+		Reason           string   `json:"reason,omitempty"`
+	}) (any, error) {
+		return s.app.RewriteRedirect(actor, app.RewriteRedirectIn{
+			ClientID: in.ClientID, RedirectURIs: in.RedirectURIs,
+			ExpectedRevision: in.ExpectedRevision, IdempotencyKey: in.IdempotencyKey, Reason: in.Reason,
+		})
+	})
+	add(s, "sso_sessions_expire_all", true, true, func(ctx context.Context, actor auth.Actor, _ emptyIn) (any, error) {
+		n, err := s.app.ExpireAllSessions(actor)
+		return map[string]any{"expired": n}, err
+	})
 }
 
 func add[In any](s *Server, name string, mutating, idempotent bool, h func(context.Context, auth.Actor, In) (any, error)) {
@@ -198,6 +264,7 @@ func (s *Server) registerResources() {
 		"labsso://capabilities",
 		"labsso://status",
 		"labsso://schema/config",
+		"labsso://audit/recent",
 	} {
 		s.sdk.AddResource(&sdk.Resource{
 			URI: uri, Name: uri, MIMEType: "application/json",
@@ -235,6 +302,8 @@ func (s *Server) readResource(ctx context.Context, req *sdk.ReadResourceRequest)
 		out, err = s.app.GetStatus(actor)
 	case uri == "labsso://schema/config":
 		out, err = s.app.SchemaConfig(actor)
+	case uri == "labsso://audit/recent":
+		out, err = s.app.ListAudit(actor)
 	case strings.HasPrefix(uri, "labsso://clients/"):
 		out, err = s.app.GetClient(actor, strings.TrimPrefix(uri, "labsso://clients/"))
 	case strings.HasPrefix(uri, "labsso://users/"):

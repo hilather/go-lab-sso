@@ -1,6 +1,6 @@
 # Known Limitations
 
-Status: design (not implemented)
+Status: through VEN-002 implemented; SCIM design-only; integrator pin not in this repo
 Last reviewed: 2026-08-30
 
 Honest residuals for the design phase and the first implementation slices. This is not a promise that v1 is “done enough for production SSO.”
@@ -15,10 +15,8 @@ Honest residuals for the design phase and the first implementation slices. This 
 
 - Single process, single replica. Runtime sessions and refresh handles are memory. Restart drops them.
 - No database. No multi-replica consensus.
-- OIDC first; SAML and WS-Fed later.
-- Entra/Okta clothes implemented; other vendors compile-reject until VEN-002.
 - MFA TOTP is a stub after knobs exist.
-- Operator SPA is a later slice; Mira review is after first UI, not now.
+- Operator SPA first implementation is ready for Mira (`docs/22-operator-spa.md`).
 - LDAP bind is not v1.
 - SCIM outbound is later; no SCIM inbound server.
 - No client-credentials or device-code grant in the first OIDC slice.

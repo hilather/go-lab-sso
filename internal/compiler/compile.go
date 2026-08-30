@@ -40,7 +40,7 @@ func compile(doc model.Document, opt Options) (*snapshot.Snapshot, error) {
 	if err := doc.ValidateIDs(); err != nil {
 		return nil, err
 	}
-	clothes, err := vendor.Resolve(doc.Spec.Profile.Vendor, doc.Spec.Profile.TenantID)
+	clothes, err := vendor.Resolve(doc.Spec.Profile.Vendor, doc.Spec.Profile.TenantID, doc.Metadata.Name)
 	if err != nil {
 		return nil, domainerr.Validation("clothes not implemented")
 	}
@@ -73,6 +73,14 @@ func compile(doc model.Document, opt Options) (*snapshot.Snapshot, error) {
 	if err := parseSigningKey(signing); err != nil {
 		return nil, fmt.Errorf("signing.keyRef: %w", err)
 	}
+	if doc.Spec.Protocols.SAML.IsEnabled(false) || doc.Spec.Protocols.WSFed.IsEnabled(false) {
+		if err := requireRSASigningKey(signing); err != nil {
+			return nil, err
+		}
+	}
+	if doc.Spec.GroupOverage.GenericCap < 1 || doc.Spec.GroupOverage.OktaFailAt < 1 {
+		return nil, fmt.Errorf("groupOverage genericCap and oktaFailAt must be positive")
+	}
 	if err := config.ValidateSecretRefs(doc, opt.BaseDir); err != nil {
 		return nil, err
 	}
@@ -93,9 +101,14 @@ func compile(doc model.Document, opt Options) (*snapshot.Snapshot, error) {
 	if at.IsZero() {
 		at = time.Now()
 	}
+	labCert, err := labSigningCert(signing, issuer, at)
+	if err != nil {
+		return nil, err
+	}
 
 	clientsByID := make(map[string]model.Client, len(doc.Spec.Clients))
 	clientsByClientID := make(map[string]model.Client, len(doc.Spec.Clients))
+	clientsBySAML := make(map[string]model.Client)
 	clientSecrets := make(map[string][]byte, len(doc.Spec.Clients))
 	for _, c := range doc.Spec.Clients {
 		clientsByID[c.ID] = c
@@ -104,6 +117,12 @@ func compile(doc model.Document, opt Options) (*snapshot.Snapshot, error) {
 			key = c.ID
 		}
 		clientsByClientID[key] = c
+		if c.SAML.EntityID != "" {
+			if _, dup := clientsBySAML[c.SAML.EntityID]; dup {
+				return nil, fmt.Errorf("duplicate saml.entityID %q", c.SAML.EntityID)
+			}
+			clientsBySAML[c.SAML.EntityID] = c
+		}
 		if c.SecretRef != "" {
 			sec, err := readRef(opt.BaseDir, c.SecretRef, "clients.secretRef")
 			if err != nil {
@@ -134,14 +153,16 @@ func compile(doc model.Document, opt Options) (*snapshot.Snapshot, error) {
 		Issuer:            issuer,
 		TLSCert:           tlsCert,
 		TLSKey:            tlsKey,
-		SigningKey:        signing,
-		AccessToken:       token,
-		ClientSecrets:     clientSecrets,
-		ClientsByID:       clientsByID,
-		ClientsByClientID: clientsByClientID,
-		UsersByID:         usersByID,
-		GroupsByID:        groupsByID,
-		Clothes:           clothes,
+		SigningKey:          signing,
+		SigningCert:         labCert,
+		AccessToken:         token,
+		ClientSecrets:       clientSecrets,
+		ClientsByID:         clientsByID,
+		ClientsByClientID:   clientsByClientID,
+		ClientsBySAMLEntity: clientsBySAML,
+		UsersByID:           usersByID,
+		GroupsByID:          groupsByID,
+		Clothes:             clothes,
 	}, nil
 }
 

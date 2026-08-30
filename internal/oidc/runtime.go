@@ -11,6 +11,7 @@ import (
 
 type Pending struct {
 	ID          string
+	Protocol    string
 	ClientID    string
 	RedirectURI string
 	Scope       string
@@ -18,8 +19,15 @@ type Pending struct {
 	Nonce       string
 	Challenge   string
 	Method      string
+	ACSURL      string
+	RequestID   string
+	SPEntityID  string
+	RelayState  string
 	Created     time.Time
 }
+
+const ProtocolOIDC = "oidc"
+const ProtocolSAML = "saml"
 
 type AuthCode struct {
 	Code        string
@@ -55,9 +63,10 @@ type Runtime struct {
 	codes     map[string]AuthCode
 	refresh   map[string]Refresh
 	sessions  map[string]LoginSession
-	paused    bool
-	forceFail bool
-	inject    string
+	paused       bool
+	forceFail    bool
+	forceConsent bool
+	inject       string
 }
 
 func NewRuntime() *Runtime {
@@ -187,6 +196,16 @@ func (r *Runtime) ListSessions() []LoginSession {
 	return out
 }
 
+func (r *Runtime) ExpireAll() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	n := len(r.sessions)
+	r.sessions = map[string]LoginSession{}
+	r.codes = map[string]AuthCode{}
+	r.refresh = map[string]Refresh{}
+	return n
+}
+
 func (r *Runtime) ExpireSession(id string) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -231,13 +250,16 @@ func (r *Runtime) Reset() {
 	r.purgeProtocolLocked()
 	r.paused = false
 	r.forceFail = false
+	r.forceConsent = false
 	r.inject = ""
 }
 
 func (r *Runtime) SetPaused(v bool)    { r.mu.Lock(); r.paused = v; r.mu.Unlock() }
 func (r *Runtime) Paused() bool        { r.mu.Lock(); defer r.mu.Unlock(); return r.paused }
-func (r *Runtime) SetForceFail(v bool) { r.mu.Lock(); r.forceFail = v; r.mu.Unlock() }
-func (r *Runtime) ForceFail() bool     { r.mu.Lock(); defer r.mu.Unlock(); return r.forceFail }
+func (r *Runtime) SetForceFail(v bool)     { r.mu.Lock(); r.forceFail = v; r.mu.Unlock() }
+func (r *Runtime) ForceFail() bool         { r.mu.Lock(); defer r.mu.Unlock(); return r.forceFail }
+func (r *Runtime) SetForceConsent(v bool)  { r.mu.Lock(); r.forceConsent = v; r.mu.Unlock() }
+func (r *Runtime) ForceConsent() bool      { r.mu.Lock(); defer r.mu.Unlock(); return r.forceConsent }
 func (r *Runtime) SetInject(v string)  { r.mu.Lock(); r.inject = v; r.mu.Unlock() }
 func (r *Runtime) Inject() string      { r.mu.Lock(); defer r.mu.Unlock(); return r.inject }
 

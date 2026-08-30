@@ -7,9 +7,10 @@ alwaysApply: true
 
 Read `AGENTS.md` for the full rules. Non-negotiables:
 
-- Default ship (FND-001 + OIDC-001 + LOGIN-001) plus VEN-001 is
-  implemented. Do not vendor Origin/Cursor agent-skills. Makefile
-  targets that are not implemented must `false`. Overage/SAML/SPA/import/integrator are later.
+- Implemented through VEN-002. Do not vendor Origin/Cursor agent-skills.
+  Makefile targets that are not implemented must `false`. INT-001 is
+  documented here and pinned last in mcp-integration-lab. SCIM is
+  design-only (`docs/23-scim-outbound.md`).
 - Documentation ships with the change. Stale docs are a defect. Do not
   change an architectural invariant without an ADR.
 - REST and MCP are adapters over one operation registry. Never implement

@@ -129,12 +129,12 @@ Sweep-2 suggested questions, written down (not product reversals):
 
 | Question | Answer from opened files |
 |---|---|
-| Generic group safety-cap number? | **200** is the documented CFG example in `docs/04-state-and-configuration.md`. Not a new minimal-YAML field. Exact field name lands in CFG / OVR-001. |
+| Generic group safety-cap number? | **200**. Field name is `spec.groupOverage.genericCap` (OVR-001). Same knob is the Entra overage threshold. Canonicalize emits it. |
 | SAML EntityID exactly the issuer? | **Yes.** `docs/01-architecture.md` already says EntityID uses the exact issuer. `docs/02-protocols.md` design default is yes. A later ADR would be required to change it. |
 | Where does 443 occupancy preflight live? | **Integrator / `mcplab`** owns host occupancy for published ports (rule 15 already points at `internal/lab/ports.go`). The LabSSO process documents and must emit the three-fix error text; it does **not** inspect host `:443` from inside an unprivileged container. Container bind `EACCES`/`EPERM` is not occupancy. Standalone `labsso serve` fail-closes on **its** listen address only. |
 | Session-knob concurrency vs snapshot revision? | Ephemeral knobs (expire session, pause/resume token, force-fail, inject-error, one-shot mint) **do not** require snapshot `expectedRevision`. Desired-state tunables (vendor swap, overage, redirect rewrite) **do**. Bearer + reason + audit still apply. Already the design preference in `docs/06-rest-api.md`. |
 | PHC algorithm allow-list? | Not a single frozen id in this repo. Unknown PHC id **fails closed**. Plaintext and unsalted hashes reject. Family precedent in opened integrator `AGENTS.md`: TacLab Argon2id. LOGIN-001 / CFG documents the allow-list and parameters. |
-| Entra overage numeric threshold? | Not Microsoft production. Lab default **200** (same magnitude as the generic-cap example). Exact YAML field name is slice 5 / CFG. Do not add it to `minimal.yaml` in this sweep. |
+| Entra overage numeric threshold? | Lab default **200** via `genericCap` (OVR-001). Not Microsoft production. |
 | Management TLS in slice 1 vs loopback HTTP? | Slice 1: management **HTTP on loopback**. Remote management TLS is a later deployment choice (`docs/01-architecture.md`). |
 
 VEN-001 CFG (2026-08-30): Okta `authServerId` is clothes constant `default` (not YAML). Optional `spec.profile.tenantId` compiles to `00000000-0000-0000-0000-000000000001` when omitted and is not Normalized into Canonical.

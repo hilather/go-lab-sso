@@ -1,6 +1,6 @@
 # Customer Config Import
 
-Status: design (not implemented)
+Status: IMP-001 implemented (allow-list rewriter + redirect:rewrite)
 Owners: Configuration, Application, Security
 Last reviewed: 2026-08-30
 Related ADRs: 0008
@@ -54,9 +54,9 @@ Each input kind has an explicit map. Keys not on the list never become `spec` fi
 
 | Source | Target |
 |---|---|
-| SPSSODescriptor ACS URLs | `redirectURIs` or `spec.clients[].saml.acsURLs` (CFG freeze) |
+| SPSSODescriptor ACS URLs | `spec.clients[].saml.acsURLs` (exists after SAML-001); empty ACS → `redirectURIs` |
 | EntityID | `spec.clients[].saml.entityID` |
-| Keys | file-ref suggestion only; do not inline PEMs into the fragment |
+| Keys | file-ref suggestion only; do not copy PEMs into the fragment. A source blob that contains a cert is still imported (entityID + ACS). |
 | Entity descriptors with DTD / XXE | **reject** |
 
 ### OIDC client JSON
@@ -66,7 +66,7 @@ Each input kind has an explicit map. Keys not on the list never become `spec` fi
 | `client_id` | `clientId` |
 | `redirect_uris` | `redirectURIs` |
 | `token_endpoint_auth_method` | public vs `secretRef` required |
-| `jwks` inline | reject or park; secrets/keys are file refs |
+| `jwks` / PEM / `client_secret` | drop + warn; never copy into the fragment or `imported.unmapped` |
 | Everything else | `imported.unmapped` |
 
 ## Output fragment
@@ -140,7 +140,10 @@ The operator is expected to export and commit. Apply without export is allowed (
 
 Allow-list additions are additive. Removing a mapped key is breaking for importers. Input kind names are a public enum.
 
+## Implemented (IMP-001)
+
+`POST /v1/import:plan` / `import:apply` and MCP twins. `imported.unmapped` is in the **response** only (not a spec KnownFields field). `POST /v1/tunables/client/redirect:rewrite` merges `client.redirectURIs` (`sso.tunable.redirect.rewrite`, `expectedRevision`).
+
 ## Open questions
 
-- Whether `imported.unmapped` is persisted on canonical (annotation) or response-only. Design default: response + optional annotation, not spec fields.
-- ACS vs redirect URI field freeze for SAML clients.
+- Whether `imported.unmapped` is persisted on canonical (annotation) or response-only. Implemented default: response-only.

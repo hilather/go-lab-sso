@@ -1,6 +1,6 @@
 # Testing Strategy
 
-Status: FND + OIDC + login + VEN-001 tests implemented; overage/SAML later
+Status: through VEN-002 tests implemented; SCIM design-only
 Owners: Quality, Application, Protocols
 Last reviewed: 2026-08-30
 Related ADRs: 0001, 0004
@@ -28,8 +28,8 @@ Once LabSSO is implemented, protocol mistakes become “the lab does not look li
 |---|---|
 | Unit | Model, normalize, clothes tables, rewriter allow-lists |
 | Config fixtures | `testdata/config/valid/*` accept; `invalid/*` reject |
-| Protocol | Authorization code + PKCE, discovery `iss`, JWKS, refresh, login HTML |
-| Vendor | Path clothes change; `iss` does not; inactive paths 404; no vendor-cloud hostnames. Entra stub / Okta fail-at: OVR-001 |
+| Protocol | Authorization code + PKCE, discovery `iss`, JWKS, refresh, login HTML, SAML metadata + AuthnRequest → ACS POST, XXE reject |
+| Vendor | Path clothes change; `iss` does not; inactive paths 404; no vendor-cloud hostnames. Entra stub / Okta fail-at / generic cap: OVR-001 |
 | Import | Goldens + XXE reject |
 | REST contract | OpenAPI / handler goldens |
 | MCP | Protocol 2026-07-28, allowLegacyClients matrix, official SDK |

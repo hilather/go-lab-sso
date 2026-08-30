@@ -4,7 +4,7 @@ Operator front door: [README.md](../README.md). Onboarding: [START-HERE.md](../S
 
 This page is the catalog. Normative design documents win over task summaries.
 
-Status: **default ship (generic OIDC + login HTML)**. Last reviewed: 2026-08-30.
+Status: **through VEN-002**. Last reviewed: 2026-08-30.
 
 ## Root
 
@@ -24,7 +24,7 @@ Status: **default ship (generic OIDC + login HTML)**. Last reviewed: 2026-08-30.
 | Path | Topic |
 |---|---|
 | [01-architecture.md](01-architecture.md) | Two planes, snapshot, issuer, ports, TLS |
-| [02-protocols.md](02-protocols.md) | OIDC/OAuth2, SAML, WS-Fed later |
+| [02-protocols.md](02-protocols.md) | OIDC/OAuth2, SAML, WS-Fed |
 | [03-vendor-profiles.md](03-vendor-profiles.md) | Vendor clothes |
 | [04-state-and-configuration.md](04-state-and-configuration.md) | YAML, revisions, plan/apply/export/reset |
 | [05-control-plane-and-parity.md](05-control-plane-and-parity.md) | Shared capability registry |
@@ -33,9 +33,11 @@ Status: **default ship (generic OIDC + login HTML)**. Last reviewed: 2026-08-30.
 
 | Path | Topic |
 |---|---|
-| [06-rest-api.md](06-rest-api.md) | Planned REST `/v1` |
-| [07-mcp-api.md](07-mcp-api.md) | Planned MCP tools |
+| [06-rest-api.md](06-rest-api.md) | REST `/v1` |
+| [07-mcp-api.md](07-mcp-api.md) | MCP tools |
+| [22-operator-spa.md](22-operator-spa.md) | Operator SPA + Mira checklist |
 | [09-customer-config-import.md](09-customer-config-import.md) | Allow-list rewriter |
+| [23-scim-outbound.md](23-scim-outbound.md) | SCIM outbound (design-only) |
 
 ## Security, operations, program
 

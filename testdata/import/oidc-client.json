@@ -1,0 +1,5 @@
+{
+  "client_id": "oidc-app",
+  "redirect_uris": ["https://sut.example.net/cb"],
+  "token_endpoint_auth_method": "none"
+}

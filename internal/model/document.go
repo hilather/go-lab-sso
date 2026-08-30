@@ -80,13 +80,19 @@ type Signing struct {
 }
 
 type Client struct {
-	ID           string   `yaml:"id" json:"id"`
-	ClientID     string   `yaml:"clientId" json:"clientId"`
-	RedirectURIs []string `yaml:"redirectURIs" json:"redirectURIs"`
-	Public       bool     `yaml:"public" json:"public"`
-	SecretRef    string   `yaml:"secretRef,omitempty" json:"secretRef,omitempty"`
-	Scopes       []string `yaml:"scopes,omitempty" json:"scopes,omitempty"`
-	PreConsent   bool     `yaml:"preConsent,omitempty" json:"preConsent,omitempty"`
+	ID           string     `yaml:"id" json:"id"`
+	ClientID     string     `yaml:"clientId" json:"clientId"`
+	RedirectURIs []string   `yaml:"redirectURIs" json:"redirectURIs"`
+	Public       bool       `yaml:"public" json:"public"`
+	SecretRef    string     `yaml:"secretRef,omitempty" json:"secretRef,omitempty"`
+	Scopes       []string   `yaml:"scopes,omitempty" json:"scopes,omitempty"`
+	PreConsent   bool       `yaml:"preConsent,omitempty" json:"preConsent,omitempty"`
+	SAML         ClientSAML `yaml:"saml,omitempty" json:"saml,omitempty"`
+}
+
+type ClientSAML struct {
+	EntityID string   `yaml:"entityID,omitempty" json:"entityID,omitempty"`
+	ACSURLs  []string `yaml:"acsURLs,omitempty" json:"acsURLs,omitempty"`
 }
 
 type User struct {
@@ -116,11 +122,14 @@ type MFA struct {
 type GroupOverage struct {
 	EntraGraphStub bool `yaml:"entraGraphStub" json:"entraGraphStub"`
 	OktaFailAt     int  `yaml:"oktaFailAt" json:"oktaFailAt"`
+	GenericCap     int  `yaml:"genericCap,omitempty" json:"genericCap,omitempty"`
 }
 
 type UI struct {
 	Enabled *bool `yaml:"enabled" json:"enabled"`
 }
+
+func (u UI) IsEnabled(def bool) bool { return BoolVal(u.Enabled, def) }
 
 type Access struct {
 	TokenRef string `yaml:"tokenRef" json:"tokenRef"`
@@ -169,6 +178,9 @@ func (c Client) Clone() Client {
 	}
 	if c.Scopes != nil {
 		out.Scopes = append([]string(nil), c.Scopes...)
+	}
+	if c.SAML.ACSURLs != nil {
+		out.SAML.ACSURLs = append([]string(nil), c.SAML.ACSURLs...)
 	}
 	return out
 }

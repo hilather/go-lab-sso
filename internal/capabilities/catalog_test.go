@@ -19,6 +19,12 @@ func TestCatalogIDsFrozen(t *testing.T) {
 		"sso.tunable.token.pause", "sso.tunable.token.resume",
 		"sso.tunable.auth.force_fail", "sso.tunable.error.inject",
 		"sso.tunable.vendor.swap",
+		"sso.tunable.overage.set",
+		"sso.tunable.consent.force",
+		"sso.tunable.token.mint",
+		"sso.session.create", "sso.session.get", "sso.session.delete",
+		"sso.audit.list", "sso.audit.get", "sso.sessions.expire_all",
+		"sso.import.plan", "sso.import.apply", "sso.tunable.redirect.rewrite",
 	}
 	got := capabilities.Catalog()
 	if len(got) != len(want) {

@@ -8,7 +8,9 @@ import (
 	"github.com/hilather/go-lab-sso/internal/compiler"
 	"github.com/hilather/go-lab-sso/internal/loginui"
 	"github.com/hilather/go-lab-sso/internal/oidc"
+	"github.com/hilather/go-lab-sso/internal/saml"
 	"github.com/hilather/go-lab-sso/internal/snapshot"
+	"github.com/hilather/go-lab-sso/internal/wsfed"
 )
 
 type App struct {
@@ -23,6 +25,8 @@ type App struct {
 	httpsBound    bool
 	httpsHandler  http.Handler
 	oidc          *oidc.Provider
+	saml          *saml.Provider
+	opsess        opStore
 }
 
 type Options struct {
@@ -43,9 +47,16 @@ func New(opt Options) *App {
 		ring = audit.NewRing(256)
 	}
 	prov := oidc.New(st)
+	prov.SetWarn(func(msg string) {
+		ring.Emit(audit.Event{Capability: "sso.oidc.overage", Reason: msg, Result: audit.ResultOK})
+	})
+	samlProv := saml.New(st, prov.Runtime())
+	wsfedProv := wsfed.New(st, prov.Runtime())
 	mux := http.NewServeMux()
 	mux.Handle("/", prov.Handler())
-	loginui.New(st, prov, opt.BaseDir).Mount(mux)
+	samlProv.Mount(mux)
+	wsfedProv.Mount(mux)
+	loginui.New(st, prov, samlProv, wsfedProv, opt.BaseDir).Mount(mux)
 	return &App{
 		store:         st,
 		bootstrapPath: opt.BootstrapPath,
@@ -54,6 +65,7 @@ func New(opt Options) *App {
 		idemp:         newIdemp(256),
 		audit:         ring,
 		oidc:          prov,
+		saml:          samlProv,
 		httpsHandler:  mux,
 	}
 }
@@ -61,6 +73,8 @@ func New(opt Options) *App {
 func (a *App) OIDC() *oidc.Provider { return a.oidc }
 
 func (a *App) Store() *snapshot.Store { return a.store }
+
+func (a *App) Audit() *audit.Ring { return a.audit }
 
 func (a *App) SetHTTPSHandler(h http.Handler) { a.httpsHandler = h }
 

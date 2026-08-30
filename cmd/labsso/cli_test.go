@@ -47,22 +47,22 @@ func TestValidateUnknownField(t *testing.T) {
 	}
 }
 
-func TestValidatePingRejected(t *testing.T) {
+func TestValidatePingOK(t *testing.T) {
 	root := repoRoot(t)
 	var out, errb bytes.Buffer
-	code := run([]string{"validate", "--config", filepath.Join(root, "testdata/config/compile-reject/ping.yaml"), "--base-dir", root}, &out, &errb)
-	if code == 0 {
-		t.Fatal("expected compile reject")
+	code := run([]string{"validate", "--config", filepath.Join(root, "testdata/config/valid/ping.yaml"), "--base-dir", root}, &out, &errb)
+	if code != 0 {
+		t.Fatalf("expected validate ok: %d %s", code, errb.String())
 	}
-	if !strings.Contains(errb.String(), "clothes not implemented") {
-		t.Fatal(errb.String())
+	if !strings.Contains(out.String(), "ok revision=") {
+		t.Fatal(out.String())
 	}
 }
 
 func TestCanonicalizePingOK(t *testing.T) {
 	root := repoRoot(t)
 	var out, errb bytes.Buffer
-	code := run([]string{"canonicalize", "--config", filepath.Join(root, "testdata/config/compile-reject/ping.yaml"), "--base-dir", root}, &out, &errb)
+	code := run([]string{"canonicalize", "--config", filepath.Join(root, "testdata/config/valid/ping.yaml"), "--base-dir", root}, &out, &errb)
 	if code != 0 {
 		t.Fatalf("canonicalize should not compile: %d %s", code, errb.String())
 	}

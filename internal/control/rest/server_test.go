@@ -12,7 +12,9 @@ import (
 	"testing"
 
 	"github.com/hilather/go-lab-sso/internal/app"
+	"github.com/hilather/go-lab-sso/internal/auth"
 	"github.com/hilather/go-lab-sso/internal/control/rest"
+	"github.com/hilather/go-lab-sso/internal/model"
 )
 
 func repoRoot(t *testing.T) string {
@@ -223,6 +225,143 @@ func TestApplyUnknownTargetIs400(t *testing.T) {
 		t.Fatal(rec.Body.String())
 	}
 }
+
+func cookieCSRF(t *testing.T, rec *httptest.ResponseRecorder) (string, string) {
+	t.Helper()
+	var sess string
+	for _, c := range rec.Result().Cookies() {
+		if c.Name == "labsso_session" {
+			sess = c.Value
+		}
+	}
+	var body map[string]any
+	_ = json.Unmarshal(rec.Body.Bytes(), &body)
+	csrf, _ := body["csrf"].(string)
+	if sess == "" || csrf == "" {
+		t.Fatalf("session cookies %v body %s", rec.Result().Cookies(), rec.Body)
+	}
+	return sess, csrf
+}
+
+func TestCookieCSRFAndSPA(t *testing.T) {
+	a, h := boot(t)
+	rec := do(t, h, "POST", "/v1/session", "127.0.0.1:9", "", []byte(`{}`))
+	if rec.Code != 200 {
+		t.Fatalf("create session %d %s", rec.Code, rec.Body)
+	}
+	sess, csrf := cookieCSRF(t, rec)
+	req := httptest.NewRequest("GET", "/v1/status", nil)
+	req.RemoteAddr = "10.1.2.3:9"
+	req.AddCookie(&http.Cookie{Name: "labsso_session", Value: sess})
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("cookie GET %d %s", rec.Code, rec.Body)
+	}
+	req = httptest.NewRequest("POST", "/v1/tunables/token:pause", strings.NewReader(`{}`))
+	req.RemoteAddr = "10.1.2.3:9"
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(&http.Cookie{Name: "labsso_session", Value: sess})
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != 403 {
+		t.Fatalf("cookie POST without CSRF want 403 got %d %s", rec.Code, rec.Body)
+	}
+	req = httptest.NewRequest("POST", "/v1/tunables/token:pause", strings.NewReader(`{}`))
+	req.RemoteAddr = "10.1.2.3:9"
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-LabSSO-CSRF", csrf)
+	req.AddCookie(&http.Cookie{Name: "labsso_session", Value: sess})
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("cookie POST with CSRF %d %s", rec.Code, rec.Body)
+	}
+	req = httptest.NewRequest("GET", "/", nil)
+	req.RemoteAddr = "127.0.0.1:9"
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != 200 || !strings.Contains(rec.Body.String(), "LabSSO operator") {
+		t.Fatalf("SPA %d %s", rec.Code, rec.Body)
+	}
+	off := false
+	val, _ := json.Marshal(map[string]any{"enabled": off})
+	if _, err := a.Apply(adminREST(), app.ChangeIn{
+		ExpectedRevision: a.Status().RuntimeRevision, Reason: "ui off",
+		Operations: []model.Operation{{Op: model.OpUpdate, Target: model.Target{Kind: model.TargetUI}, Value: val}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	req = httptest.NewRequest("GET", "/", nil)
+	req.RemoteAddr = "127.0.0.1:9"
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != 404 {
+		t.Fatalf("ui.enabled false want 404 got %d", rec.Code)
+	}
+	rec = do(t, h, "GET", "/v1/audit", "127.0.0.1:9", "", nil)
+	if rec.Code != 200 {
+		t.Fatalf("audit %d %s", rec.Code, rec.Body)
+	}
+}
+
+func TestStaleSessionCookieFallsThrough(t *testing.T) {
+	_, h := boot(t)
+	rec := do(t, h, "POST", "/v1/session", "127.0.0.1:9", "", []byte(`{}`))
+	if rec.Code != 200 {
+		t.Fatal(rec.Body.String())
+	}
+	sess, _ := cookieCSRF(t, rec)
+	if strings.Contains(rec.Body.String(), sess) {
+		t.Fatalf("cookie secret leaked in JSON: %s", rec.Body)
+	}
+	req := httptest.NewRequest("GET", "/v1/status", nil)
+	req.RemoteAddr = "127.0.0.1:9"
+	req.AddCookie(&http.Cookie{Name: "labsso_session", Value: "dead-session"})
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("stale cookie must fall through to loopback, got %d %s", rec.Code, rec.Body)
+	}
+	cleared := false
+	for _, c := range rec.Result().Cookies() {
+		if c.Name == "labsso_session" && c.MaxAge < 0 {
+			cleared = true
+		}
+	}
+	if !cleared {
+		t.Fatal("stale cookie should be cleared on lookup miss")
+	}
+	req = httptest.NewRequest("GET", "/v1/session", nil)
+	req.RemoteAddr = "127.0.0.1:9"
+	req.AddCookie(&http.Cookie{Name: "labsso_session", Value: sess})
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != 200 {
+		t.Fatal(rec.Body.String())
+	}
+	if strings.Contains(rec.Body.String(), sess) {
+		t.Fatalf("GET session leaked cookie: %s", rec.Body)
+	}
+}
+
+func TestBearerWinsOverCookieCSRF(t *testing.T) {
+	_, h := boot(t)
+	rec := do(t, h, "POST", "/v1/session", "127.0.0.1:9", "", []byte(`{}`))
+	sess, _ := cookieCSRF(t, rec)
+	req := httptest.NewRequest("POST", "/v1/tunables/token:pause", strings.NewReader(`{}`))
+	req.RemoteAddr = "10.1.2.3:9"
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer lab-dev-token-not-for-production")
+	req.AddCookie(&http.Cookie{Name: "labsso_session", Value: sess})
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("bearer should skip CSRF, got %d %s", rec.Code, rec.Body)
+	}
+}
+
+func adminREST() auth.Actor { return auth.AdminActor() }
 
 func TestCrossSitePOSTRejected(t *testing.T) {
 	_, h := boot(t)

@@ -200,3 +200,60 @@ func TestParityVendorSwap(t *testing.T) {
 		t.Fatal("MCP swap did not change clothes")
 	}
 }
+
+func TestParityImportPlan(t *testing.T) {
+	a, rh, cs := bootBoth(t)
+	doc := `{"client_id":"parity-app","redirect_uris":["https://sut.example.net/cb"],"token_endpoint_auth_method":"none"}`
+	body := map[string]any{"kind": "oidc-client", "document": doc, "reason": "parity"}
+	rp := restJSON(t, rh, "POST", "/v1/import:plan", body)
+	mp := mcpTool(t, cs, "sso_import_plan", body)
+	if rp["client"] == nil || mp["client"] == nil {
+		t.Fatalf("plan REST=%v MCP=%v", rp, mp)
+	}
+	body["expectedRevision"] = a.Status().RuntimeRevision
+	ra := restJSON(t, rh, "POST", "/v1/import:apply", body)
+	if ra["applied"] != true {
+		t.Fatalf("apply %v", ra)
+	}
+}
+
+func TestParityAuditList(t *testing.T) {
+	_, rh, cs := bootBoth(t)
+	req := httptest.NewRequest("GET", "/v1/audit", nil)
+	req.RemoteAddr = "127.0.0.1:1"
+	rec := httptest.NewRecorder()
+	rh.ServeHTTP(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("REST audit %d %s", rec.Code, rec.Body)
+	}
+	mr := mcpTool(t, cs, "sso_audit_query", map[string]any{})
+	if mr == nil {
+		t.Fatal("MCP audit missing")
+	}
+}
+
+func TestParityOverageSet(t *testing.T) {
+	a, rh, cs := bootBoth(t)
+	rev := a.Status().RuntimeRevision
+	off := false
+	body := map[string]any{"entraGraphStub": off, "expectedRevision": rev, "reason": "parity"}
+	rr := restJSON(t, rh, "POST", "/v1/tunables/overage:set", body)
+	if rr["applied"] != true {
+		t.Fatalf("REST overage %v", rr)
+	}
+	if a.Store().Load().Canonical.Spec.GroupOverage.EntraGraphStub {
+		t.Fatal("REST overage did not clear stub")
+	}
+	rev2 := a.Status().RuntimeRevision
+	cap := 50
+	mr := mcpTool(t, cs, "sso_tunable_overage_set", map[string]any{
+		"genericCap": cap, "expectedRevision": rev2, "reason": "parity",
+	})
+	if mr["applied"] != true {
+		t.Fatalf("MCP overage %v", mr)
+	}
+	ov := a.Store().Load().Canonical.Spec.GroupOverage
+	if ov.EntraGraphStub || ov.GenericCap != 50 {
+		t.Fatalf("MCP merge want stub=false cap=50 got %+v", ov)
+	}
+}

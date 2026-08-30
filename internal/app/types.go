@@ -47,6 +47,7 @@ type Impact struct {
 	GroupsChanged  bool `json:"groupsChanged"`
 	IssuerChanged  bool `json:"issuerChanged"`
 	VendorChanged  bool `json:"vendorChanged"`
+	OverageChanged bool `json:"overageChanged"`
 }
 
 type Export struct {

@@ -65,6 +65,31 @@ func (r *Ring) Len() int {
 	return len(r.buf)
 }
 
+func (r *Ring) Recent() []Event {
+	if r == nil {
+		return nil
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]Event, len(r.buf))
+	copy(out, r.buf)
+	return out
+}
+
+func (r *Ring) Get(id string) (Event, bool) {
+	if r == nil || id == "" {
+		return Event{}, false
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for i := len(r.buf) - 1; i >= 0; i-- {
+		if r.buf[i].ID == id {
+			return r.buf[i], true
+		}
+	}
+	return Event{}, false
+}
+
 func itoa(n int) string {
 	if n == 0 {
 		return "0"

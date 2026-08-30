@@ -1,6 +1,7 @@
 package rest
 
 import (
+	"crypto/subtle"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 	"github.com/hilather/go-lab-sso/internal/auth"
 	"github.com/hilather/go-lab-sso/internal/domainerr"
 	"github.com/hilather/go-lab-sso/internal/model"
+	"github.com/hilather/go-lab-sso/internal/web"
 )
 
 const (
@@ -59,6 +61,20 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST "+p+"/tunables/auth:force-fail", s.authed(s.forceFail))
 	mux.HandleFunc("POST "+p+"/tunables/error:inject", s.authed(s.injectError))
 	mux.HandleFunc("POST "+p+"/tunables/vendor:swap", s.authed(s.swapVendor))
+	mux.HandleFunc("POST "+p+"/tunables/overage:set", s.authed(s.setOverage))
+	mux.HandleFunc("POST "+p+"/tunables/consent:force", s.authed(s.forceConsent))
+	mux.HandleFunc("POST "+p+"/tunables/token:mint", s.authed(s.mintToken))
+	mux.HandleFunc("POST "+p+"/session", s.authed(s.sessionCreate))
+	mux.HandleFunc("GET "+p+"/session", s.authed(s.sessionGet))
+	mux.HandleFunc("DELETE "+p+"/session", s.authed(s.sessionDelete))
+	mux.HandleFunc("GET "+p+"/audit", s.authed(s.auditList))
+	mux.HandleFunc("GET "+p+"/audit/{eventId}", s.authed(s.auditGet))
+	mux.HandleFunc("POST "+p+"/sessions:expire-all", s.authed(s.expireAll))
+	mux.HandleFunc("POST "+p+"/import:plan", s.authed(s.importPlan))
+	mux.HandleFunc("POST "+p+"/import:apply", s.authed(s.importApply))
+	mux.HandleFunc("POST "+p+"/tunables/client/redirect:rewrite", s.authed(s.rewriteRedirect))
+	mux.Handle("GET /{$}", web.Handler(s.app.UIEnabled))
+	mux.Handle("GET /app.js", web.Script())
 	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !auth.LoopbackHostAllowed(r.RemoteAddr, r.Host) {
 			http.Error(w, "forbidden host", http.StatusForbidden)
@@ -77,8 +93,31 @@ func (s *Server) token() []byte {
 	return nil
 }
 
-func (s *Server) authenticate(r *http.Request) (auth.Actor, error) {
+func (s *Server) authenticate(w http.ResponseWriter, r *http.Request) (auth.Actor, error) {
+	if auth.ParseBearer(r.Header.Get("Authorization")) != "" {
+		return auth.Authenticate(r.RemoteAddr, r.Header.Get("Authorization"), s.token())
+	}
+	if c, err := r.Cookie(auth.CookieSession); err == nil && c.Value != "" {
+		sess, ok := s.app.LookupOperatorSession(c.Value)
+		if ok {
+			if r.Method != http.MethodGet && r.Method != http.MethodHead {
+				got := r.Header.Get(auth.HeaderCSRF)
+				if subtle.ConstantTimeCompare([]byte(got), []byte(sess.CSRF)) != 1 {
+					return auth.Actor{}, domainerr.Forbidden("csrf")
+				}
+			}
+			return sess.Actor, nil
+		}
+		clearSessionCookie(w, r.TLS != nil)
+	}
 	return auth.Authenticate(r.RemoteAddr, r.Header.Get("Authorization"), s.token())
+}
+
+func clearSessionCookie(w http.ResponseWriter, secure bool) {
+	http.SetCookie(w, &http.Cookie{
+		Name: auth.CookieSession, Value: "", Path: "/", MaxAge: -1, HttpOnly: true,
+		SameSite: http.SameSiteLaxMode, Secure: secure,
+	})
 }
 
 func (s *Server) noAuth(fn func(http.ResponseWriter, *http.Request)) http.HandlerFunc {
@@ -87,7 +126,7 @@ func (s *Server) noAuth(fn func(http.ResponseWriter, *http.Request)) http.Handle
 
 func (s *Server) authed(fn func(http.ResponseWriter, *http.Request, auth.Actor)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		actor, err := s.authenticate(r)
+		actor, err := s.authenticate(w, r)
 		if err != nil {
 			writeError(w, err)
 			return
@@ -362,6 +401,74 @@ func (s *Server) swapVendor(w http.ResponseWriter, r *http.Request, actor auth.A
 	writeJSON(w, http.StatusOK, out)
 }
 
+func (s *Server) setOverage(w http.ResponseWriter, r *http.Request, actor auth.Actor) {
+	var body struct {
+		EntraGraphStub   *bool  `json:"entraGraphStub"`
+		OktaFailAt       *int   `json:"oktaFailAt"`
+		GenericCap       *int   `json:"genericCap"`
+		ExpectedRevision string `json:"expectedRevision"`
+		IdempotencyKey   string `json:"idempotencyKey"`
+		Reason           string `json:"reason"`
+	}
+	if err := decodeJSON(r, &body); err != nil {
+		writeError(w, err)
+		return
+	}
+	expected := body.ExpectedRevision
+	if expected == "" {
+		expected = strings.Trim(r.Header.Get(headerIfMatch), `"`)
+	}
+	if expected == "" {
+		expected = r.Header.Get(headerExpected)
+	}
+	key := body.IdempotencyKey
+	if key == "" {
+		key = r.Header.Get(headerIdempotency)
+	}
+	out, err := s.app.SetOverage(actor, app.SetOverageIn{
+		EntraGraphStub: body.EntraGraphStub, OktaFailAt: body.OktaFailAt, GenericCap: body.GenericCap,
+		ExpectedRevision: expected, IdempotencyKey: key, Reason: body.Reason,
+	})
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+func (s *Server) forceConsent(w http.ResponseWriter, r *http.Request, actor auth.Actor) {
+	var body struct {
+		On bool `json:"on"`
+	}
+	if err := decodeJSON(r, &body); err != nil {
+		writeError(w, err)
+		return
+	}
+	if err := s.app.ForceConsent(actor, body.On); err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"on": body.On})
+}
+
+func (s *Server) mintToken(w http.ResponseWriter, r *http.Request, actor auth.Actor) {
+	var body struct {
+		UserID   string `json:"userId"`
+		ClientID string `json:"clientId"`
+		Scope    string `json:"scope"`
+	}
+	if err := decodeJSON(r, &body); err != nil {
+		writeError(w, err)
+		return
+	}
+	out, err := s.app.MintToken(actor, app.MintTokenIn{UserID: body.UserID, ClientID: body.ClientID, Scope: body.Scope})
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
 func (s *Server) injectError(w http.ResponseWriter, r *http.Request, actor auth.Actor) {
 	var body struct {
 		Code string `json:"code"`
@@ -375,6 +482,167 @@ func (s *Server) injectError(w http.ResponseWriter, r *http.Request, actor auth.
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"code": body.Code})
+}
+
+func (s *Server) sessionCreate(w http.ResponseWriter, r *http.Request, actor auth.Actor) {
+	sess, err := s.app.CreateOperatorSession(actor)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	secure := r.TLS != nil
+	http.SetCookie(w, &http.Cookie{
+		Name: auth.CookieSession, Value: sess.ID, Path: "/", HttpOnly: true,
+		SameSite: http.SameSiteLaxMode, Secure: secure, Expires: sess.Expires,
+	})
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, app.SessionOut{
+		ActorID: sess.Actor.ID, ActorClass: sess.Actor.Class,
+		CSRF: sess.CSRF, Expires: sess.Expires,
+	})
+}
+
+func (s *Server) sessionGet(w http.ResponseWriter, r *http.Request, actor auth.Actor) {
+	out := app.SessionOut{ActorID: actor.ID, ActorClass: actor.Class}
+	if c, err := r.Cookie(auth.CookieSession); err == nil {
+		if sess, ok := s.app.LookupOperatorSession(c.Value); ok {
+			out.CSRF = sess.CSRF
+			out.Expires = sess.Expires
+		}
+	}
+	if _, err := s.app.GetOperatorSession(actor); err != nil {
+		writeError(w, err)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, out)
+}
+
+func (s *Server) sessionDelete(w http.ResponseWriter, r *http.Request, actor auth.Actor) {
+	id := ""
+	if c, err := r.Cookie(auth.CookieSession); err == nil {
+		id = c.Value
+	}
+	if err := s.app.DeleteOperatorSession(actor, id); err != nil {
+		writeError(w, err)
+		return
+	}
+	clearSessionCookie(w, r.TLS != nil)
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+func (s *Server) auditList(w http.ResponseWriter, r *http.Request, actor auth.Actor) {
+	out, err := s.app.ListAudit(actor)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+func (s *Server) auditGet(w http.ResponseWriter, r *http.Request, actor auth.Actor) {
+	out, err := s.app.GetAudit(actor, r.PathValue("eventId"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+func (s *Server) importPlan(w http.ResponseWriter, r *http.Request, actor auth.Actor) {
+	in, err := decodeImport(r)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	out, err := s.app.ImportPlan(actor, in)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+func (s *Server) importApply(w http.ResponseWriter, r *http.Request, actor auth.Actor) {
+	in, err := decodeImport(r)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	out, err := s.app.ImportApply(actor, in)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+func decodeImport(r *http.Request) (app.ImportIn, error) {
+	var body struct {
+		Kind             string `json:"kind"`
+		Document         string `json:"document"`
+		ExpectedRevision string `json:"expectedRevision"`
+		IdempotencyKey   string `json:"idempotencyKey"`
+		Reason           string `json:"reason"`
+	}
+	if err := decodeJSON(r, &body); err != nil {
+		return app.ImportIn{}, err
+	}
+	expected := body.ExpectedRevision
+	if expected == "" {
+		expected = strings.Trim(r.Header.Get(headerIfMatch), `"`)
+	}
+	if expected == "" {
+		expected = r.Header.Get(headerExpected)
+	}
+	key := body.IdempotencyKey
+	if key == "" {
+		key = r.Header.Get(headerIdempotency)
+	}
+	return app.ImportIn{Kind: body.Kind, Document: body.Document, ExpectedRevision: expected, IdempotencyKey: key, Reason: body.Reason}, nil
+}
+
+func (s *Server) rewriteRedirect(w http.ResponseWriter, r *http.Request, actor auth.Actor) {
+	var body struct {
+		ClientID         string   `json:"clientId"`
+		RedirectURIs     []string `json:"redirectURIs"`
+		ExpectedRevision string   `json:"expectedRevision"`
+		IdempotencyKey   string   `json:"idempotencyKey"`
+		Reason           string   `json:"reason"`
+	}
+	if err := decodeJSON(r, &body); err != nil {
+		writeError(w, err)
+		return
+	}
+	expected := body.ExpectedRevision
+	if expected == "" {
+		expected = strings.Trim(r.Header.Get(headerIfMatch), `"`)
+	}
+	if expected == "" {
+		expected = r.Header.Get(headerExpected)
+	}
+	key := body.IdempotencyKey
+	if key == "" {
+		key = r.Header.Get(headerIdempotency)
+	}
+	out, err := s.app.RewriteRedirect(actor, app.RewriteRedirectIn{
+		ClientID: body.ClientID, RedirectURIs: body.RedirectURIs,
+		ExpectedRevision: expected, IdempotencyKey: key, Reason: body.Reason,
+	})
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+func (s *Server) expireAll(w http.ResponseWriter, r *http.Request, actor auth.Actor) {
+	n, err := s.app.ExpireAllSessions(actor)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"expired": n})
 }
 
 func (s *Server) groupGet(w http.ResponseWriter, r *http.Request, actor auth.Actor) {

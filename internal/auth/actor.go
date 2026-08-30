@@ -12,7 +12,10 @@ import (
 const (
 	ClassLoopback = "loopback"
 	ClassBearer   = "bearer"
+	ClassCookie   = "cookie"
 	ProfileDev    = "dev-loopback-unauth"
+	CookieSession = "labsso_session"
+	HeaderCSRF    = "X-LabSSO-CSRF"
 )
 
 type Actor struct {

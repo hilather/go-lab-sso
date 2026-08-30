@@ -1,0 +1,7 @@
+{
+  "client_id": "0oa1example",
+  "label": "Lab App",
+  "signOnMode": "OPENID_CONNECT",
+  "redirect_uris": ["https://sut.example.net/cb"],
+  "settings": {"oauthClient": {"application_type": "web"}}
+}

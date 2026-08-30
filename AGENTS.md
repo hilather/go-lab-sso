@@ -2,7 +2,7 @@
 
 These instructions apply to every human or AI agent working in this repository. More specific `AGENTS.md` files may add stricter rules but may not weaken this file.
 
-This repository has **implemented the default ship (FND-001 + OIDC-001 + LOGIN-001) plus VEN-001 (entra/okta clothes)**. SAML, SPA, import, overage, and the integrator pin are not started. Do not vendor Origin/Cursor agent-skills. Makefile targets that are not implemented must `false`, not no-op.
+This repository has **implemented through VEN-002** (default ship + VEN-001 + OVR-001 + SAML-001 + UI-001 + IMP-001 + remaining clothes + WS-Fed). INT-001 is documented here and implemented last in `hilather/mcp-integration-lab`. SCIM-001 is design-only (`docs/23-scim-outbound.md`). Do not vendor Origin/Cursor agent-skills. Makefile targets that are not implemented must `false`, not no-op.
 
 ## Required reading
 
@@ -25,7 +25,9 @@ Before modifying design or (later) code, read:
 15. `docs/21-standards-and-references.md`
 16. `docs/known-limitations.md`
 17. `docs/skeptic-notes.md`
-18. Every ADR relevant to the area being changed
+18. `docs/22-operator-spa.md`
+19. `docs/23-scim-outbound.md`
+20. Every ADR relevant to the area being changed
 
 ## Architectural rules
 

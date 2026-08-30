@@ -15,9 +15,12 @@ type Clothes struct {
 	JWKSPath      string
 	UserInfoPath  string
 	LogoutPath    string
-	HTMLTitle     string
-	HTMLHeading   string
-	ConsentTitle  string
+	HTMLTitle          string
+	HTMLHeading        string
+	ConsentTitle       string
+	Realm              string
+	WSFedMetadataPath  string
+	WSFedPassivePath   string
 }
 
 type Snapshot struct {
@@ -29,14 +32,16 @@ type Snapshot struct {
 	Issuer            string
 	TLSCert           []byte
 	TLSKey            []byte
-	SigningKey        []byte
-	AccessToken       []byte
-	ClientSecrets     map[string][]byte
-	ClientsByID       map[string]model.Client
-	ClientsByClientID map[string]model.Client
-	UsersByID         map[string]model.User
-	GroupsByID        map[string]model.Group
-	Clothes           Clothes
+	SigningKey         []byte
+	SigningCert        []byte
+	AccessToken        []byte
+	ClientSecrets      map[string][]byte
+	ClientsByID        map[string]model.Client
+	ClientsByClientID  map[string]model.Client
+	ClientsBySAMLEntity map[string]model.Client
+	UsersByID          map[string]model.User
+	GroupsByID         map[string]model.Group
+	Clothes            Clothes
 }
 
 func (s *Snapshot) Drifted() bool {

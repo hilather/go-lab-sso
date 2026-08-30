@@ -12,7 +12,9 @@ import (
 
 	"github.com/hilather/go-lab-sso/internal/model"
 	"github.com/hilather/go-lab-sso/internal/oidc"
+	"github.com/hilather/go-lab-sso/internal/saml"
 	"github.com/hilather/go-lab-sso/internal/snapshot"
+	"github.com/hilather/go-lab-sso/internal/wsfed"
 )
 
 const totpStub = "lab-totp"
@@ -20,12 +22,14 @@ const totpStub = "lab-totp"
 type UI struct {
 	store   *snapshot.Store
 	oidc    *oidc.Provider
+	saml    *saml.Provider
+	wsfed   *wsfed.Provider
 	baseDir string
 	limit   *limiter
 }
 
-func New(store *snapshot.Store, p *oidc.Provider, baseDir string) *UI {
-	return &UI{store: store, oidc: p, baseDir: baseDir, limit: newLimiter(10, time.Minute)}
+func New(store *snapshot.Store, p *oidc.Provider, s *saml.Provider, w *wsfed.Provider, baseDir string) *UI {
+	return &UI{store: store, oidc: p, saml: s, wsfed: w, baseDir: baseDir, limit: newLimiter(10, time.Minute)}
 }
 
 func (u *UI) Mount(mux *http.ServeMux) {
@@ -96,13 +100,8 @@ func (u *UI) postLogin(w http.ResponseWriter, r *http.Request) {
 		SameSite: http.SameSiteLaxMode, Secure: secure,
 	})
 	cl, _ := snap.ClientsByClientID[pendingClient(u, pending)]
-	if cl.PreConsent {
-		loc, err := u.oidc.CompleteLogin(pending, rec.ID, rec.Username)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		http.Redirect(w, r, loc, http.StatusFound)
+	if cl.PreConsent && !u.oidc.Runtime().ForceConsent() {
+		u.finish(w, r, pending, rec.ID, rec.Username)
 		return
 	}
 	http.Redirect(w, r, "/consent?pending="+pending, http.StatusFound)
@@ -119,12 +118,7 @@ func (u *UI) postConsent(w http.ResponseWriter, r *http.Request) {
 	}
 	pending := r.FormValue("pending")
 	if r.FormValue("approve") != "1" {
-		loc, err := u.oidc.DenyConsent(pending)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		http.Redirect(w, r, loc, http.StatusFound)
+		u.deny(w, r, pending)
 		return
 	}
 	c, err := r.Cookie(oidc.CookieName(u.store.Load()))
@@ -137,7 +131,56 @@ func (u *UI) postConsent(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/login?pending="+pending, http.StatusFound)
 		return
 	}
-	loc, err := u.oidc.CompleteLogin(pending, sess.UserID, sess.Username)
+	u.finish(w, r, pending, sess.UserID, sess.Username)
+}
+
+func (u *UI) finish(w http.ResponseWriter, r *http.Request, pending, userID, username string) {
+	if pend, ok := u.oidc.Runtime().GetPending(pending); ok && pend.Protocol == wsfed.Protocol && u.wsfed != nil {
+		body, err := u.wsfed.Complete(pending, userID, username)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		writeHTML(w, body)
+		return
+	}
+	if pend, ok := u.oidc.Runtime().GetPending(pending); ok && pend.Protocol == oidc.ProtocolSAML && u.saml != nil {
+		body, err := u.saml.Complete(pending, userID, username)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		writeHTML(w, body)
+		return
+	}
+	loc, err := u.oidc.CompleteLogin(pending, userID, username)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	http.Redirect(w, r, loc, http.StatusFound)
+}
+
+func (u *UI) deny(w http.ResponseWriter, r *http.Request, pending string) {
+	if pend, ok := u.oidc.Runtime().GetPending(pending); ok && pend.Protocol == wsfed.Protocol && u.wsfed != nil {
+		body, err := u.wsfed.Deny(pending)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		writeHTML(w, body)
+		return
+	}
+	if pend, ok := u.oidc.Runtime().GetPending(pending); ok && pend.Protocol == oidc.ProtocolSAML && u.saml != nil {
+		body, err := u.saml.Deny(pending)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		writeHTML(w, body)
+		return
+	}
+	loc, err := u.oidc.DenyConsent(pending)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return

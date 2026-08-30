@@ -329,6 +329,132 @@ func TestValidateDoesNotMutateLive(t *testing.T) {
 	}
 }
 
+func TestSetOverageMergeAndScopes(t *testing.T) {
+	a, _ := bootApp(t)
+	writer := auth.Actor{ID: "w", Scopes: []string{capabilities.ScopeWrite}}
+	off := false
+	_, err := a.SetOverage(writer, app.SetOverageIn{
+		EntraGraphStub: &off, ExpectedRevision: a.Status().RuntimeRevision, Reason: "x",
+	})
+	if domainerr.CodeOf(err) != domainerr.CodeForbidden {
+		t.Fatalf("write without tunables: %v", err)
+	}
+	if !a.Store().Load().Canonical.Spec.GroupOverage.EntraGraphStub {
+		t.Fatal("denied set must not change stub")
+	}
+	tun := auth.Actor{ID: "t", Scopes: []string{capabilities.ScopeTunables}}
+	if _, err := a.SetOverage(tun, app.SetOverageIn{
+		ExpectedRevision: a.Status().RuntimeRevision, Reason: "omit keeps stub",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if !a.Store().Load().Canonical.Spec.GroupOverage.EntraGraphStub {
+		t.Fatal("omit entraGraphStub must keep true")
+	}
+	cap := 0
+	if _, err := a.SetOverage(tun, app.SetOverageIn{
+		EntraGraphStub: &off, GenericCap: &cap, ExpectedRevision: a.Status().RuntimeRevision, Reason: "zero cap",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	ov := a.Store().Load().Canonical.Spec.GroupOverage
+	if ov.EntraGraphStub {
+		t.Fatal("explicit false must set stub off")
+	}
+	if ov.GenericCap != 200 {
+		t.Fatalf("Normalize must lift 0 → 200, got %d", ov.GenericCap)
+	}
+}
+
+func TestImportApplyAndRedirectRewrite(t *testing.T) {
+	a, _ := bootApp(t)
+	raw, err := os.ReadFile(filepath.Join(repoRoot(t), "testdata/import/oidc-client.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := a.ImportApply(admin(), app.ImportIn{
+		Kind: "oidc-client", Document: string(raw),
+		ExpectedRevision: a.Status().RuntimeRevision, Reason: "import",
+	})
+	if err != nil || !out.Applied {
+		t.Fatalf("import %v %+v", err, out)
+	}
+	if out.Unmapped == nil {
+		t.Fatal("unmapped missing from response")
+	}
+	ex, err := a.Export(admin())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(ex.YAML), "token_endpoint_auth_method") {
+		t.Fatal("vendor blob key leaked into export")
+	}
+	if !strings.Contains(string(ex.YAML), "oidc-app") {
+		t.Fatal("imported client missing from export")
+	}
+	if _, err := a.RewriteRedirect(admin(), app.RewriteRedirectIn{
+		ClientID: "oidc-app", RedirectURIs: []string{"https://sut.example.net/new"},
+		ExpectedRevision: a.Status().RuntimeRevision, Reason: "rewrite",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	cl, err := a.GetClient(admin(), "imported-oidc-app")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cl.RedirectURIs) != 1 || cl.RedirectURIs[0] != "https://sut.example.net/new" {
+		t.Fatalf("rewrite %v", cl.RedirectURIs)
+	}
+}
+
+func TestAuditAndExpireAllScopes(t *testing.T) {
+	a, _ := bootApp(t)
+	reader := auth.Actor{ID: "r", Scopes: []string{capabilities.ScopeRead}}
+	if _, err := a.ListAudit(reader); domainerr.CodeOf(err) != domainerr.CodeForbidden {
+		t.Fatalf("audit without audit.read: %v", err)
+	}
+	if _, err := a.ExpireAllSessions(reader); domainerr.CodeOf(err) != domainerr.CodeForbidden {
+		t.Fatalf("expire-all without sessions: %v", err)
+	}
+	aud := auth.Actor{ID: "a", Scopes: []string{capabilities.ScopeAuditRead}}
+	if _, err := a.ListAudit(aud); err != nil {
+		t.Fatal(err)
+	}
+	sess := auth.Actor{ID: "s", Scopes: []string{capabilities.ScopeSessions}}
+	if _, err := a.ExpireAllSessions(sess); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestMintTokenAndForceConsent(t *testing.T) {
+	a, _ := bootApp(t)
+	cval, _ := json.Marshal(model.Client{ID: "app-1", ClientID: "app-1", Public: true, RedirectURIs: []string{"https://sut.example.net/cb"}})
+	uval, _ := json.Marshal(model.User{ID: "u1", Username: "alice", PasswordRef: "testdata/secrets/users/alice.password"})
+	if _, err := a.Apply(admin(), app.ChangeIn{
+		ExpectedRevision: a.Status().RuntimeRevision, Reason: "mint",
+		Operations: []model.Operation{
+			{Op: model.OpAdd, Target: model.Target{Kind: model.TargetClient, ID: "app-1"}, Value: cval},
+			{Op: model.OpAdd, Target: model.Target{Kind: model.TargetUser, ID: "u1"}, Value: uval},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	writer := auth.Actor{ID: "w", Scopes: []string{capabilities.ScopeWrite}}
+	if _, err := a.MintToken(writer, app.MintTokenIn{UserID: "u1", ClientID: "app-1"}); domainerr.CodeOf(err) != domainerr.CodeForbidden {
+		t.Fatalf("mint without tunables: %v", err)
+	}
+	out, err := a.MintToken(admin(), app.MintTokenIn{UserID: "u1", ClientID: "app-1", Scope: "openid"})
+	if err != nil || out.AccessToken == "" || out.IDToken == "" {
+		t.Fatalf("mint %v %+v", err, out)
+	}
+	if err := a.ForceConsent(admin(), true); err != nil {
+		t.Fatal(err)
+	}
+	if !a.OIDC().Runtime().ForceConsent() {
+		t.Fatal("force consent not set")
+	}
+}
+
 func TestSwapVendorScopes(t *testing.T) {
 	a, _ := bootApp(t)
 	writer := auth.Actor{ID: "w", Scopes: []string{capabilities.ScopeWrite}}
@@ -395,15 +521,35 @@ func TestSwapVendorMergesTenantID(t *testing.T) {
 	}
 }
 
-func TestApplyPingRejected(t *testing.T) {
+func TestApplyPingOK(t *testing.T) {
 	a, _ := bootApp(t)
 	val, _ := json.Marshal(model.Profile{Vendor: "ping"})
-	_, err := a.Apply(admin(), app.ChangeIn{
+	if _, err := a.Apply(admin(), app.ChangeIn{
 		ExpectedRevision: a.Status().RuntimeRevision, Reason: "ping",
 		Operations: []model.Operation{{Op: model.OpUpdate, Target: model.Target{Kind: model.TargetProfile}, Value: val}},
-	})
-	if err == nil || !strings.Contains(err.Error(), "clothes not implemented") {
-		t.Fatalf("want clothes not implemented, got %v", err)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if got := a.Store().Load().Clothes.Vendor; got != "ping" {
+		t.Fatalf("clothes vendor %s", got)
+	}
+}
+
+func TestSchemaConfigVendorImplemented(t *testing.T) {
+	a, _ := bootApp(t)
+	out, err := a.SchemaConfig(admin())
+	if err != nil {
+		t.Fatal(err)
+	}
+	prof, _ := out["profile"].(map[string]any)
+	v, _ := prof["vendor"].(string)
+	for _, name := range []string{"generic", "entra", "okta", "ping", "adfs", "google", "keycloak", "iam-identity-center"} {
+		if !strings.Contains(v, name) {
+			t.Fatalf("schema missing %s: %s", name, v)
+		}
+	}
+	if strings.Contains(v, "other ValidVendor values compile-reject") {
+		t.Fatalf("stale VEN-001 schema: %s", v)
 	}
 }
 

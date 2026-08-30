@@ -20,6 +20,7 @@ type Provider struct {
 	store *snapshot.Store
 	rt    *Runtime
 	limit *limiter
+	warn  func(string)
 }
 
 func New(store *snapshot.Store) *Provider {
@@ -28,25 +29,48 @@ func New(store *snapshot.Store) *Provider {
 
 func (p *Provider) Runtime() *Runtime { return p.rt }
 
+func (p *Provider) SetWarn(fn func(string)) { p.warn = fn }
+
 func (p *Provider) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /.well-known/openid-configuration", p.discovery)
 	mux.HandleFunc("GET /{tid}/v2.0/.well-known/openid-configuration", p.entraDiscovery)
-	for _, path := range []string{"/oauth2/authorize", "/oauth2/v2.0/authorize", "/oauth2/default/v1/authorize"} {
+	for _, path := range []string{
+		"/oauth2/authorize", "/oauth2/v2.0/authorize", "/oauth2/default/v1/authorize",
+		"/as/authorization.oauth2", "/adfs/oauth2/authorize", "/o/oauth2/v2/auth",
+		"/realms/{realm}/protocol/openid-connect/auth", "/authorize",
+	} {
 		mux.HandleFunc("GET "+path, p.requirePath(func(c snapshot.Clothes) string { return c.AuthorizePath }, p.authorize))
 	}
-	for _, path := range []string{"/oauth2/token", "/oauth2/v2.0/token", "/oauth2/default/v1/token"} {
+	for _, path := range []string{
+		"/oauth2/token", "/oauth2/v2.0/token", "/oauth2/default/v1/token",
+		"/as/token.oauth2", "/adfs/oauth2/token", "/token",
+		"/realms/{realm}/protocol/openid-connect/token",
+	} {
 		mux.HandleFunc("POST "+path, p.requirePath(func(c snapshot.Clothes) string { return c.TokenPath }, p.token))
 	}
-	for _, path := range []string{"/oauth2/jwks", "/oauth2/v2.0/jwks", "/oauth2/default/v1/jwks"} {
+	for _, path := range []string{
+		"/oauth2/jwks", "/oauth2/v2.0/jwks", "/oauth2/default/v1/jwks",
+		"/pf/JWKS", "/adfs/discovery/keys", "/oauth2/v3/certs",
+		"/realms/{realm}/protocol/openid-connect/certs", "/jwks",
+	} {
 		mux.HandleFunc("GET "+path, p.requirePath(func(c snapshot.Clothes) string { return c.JWKSPath }, p.jwks))
 	}
-	for _, path := range []string{"/oauth2/userinfo", "/oauth2/v2.0/userinfo", "/oauth2/default/v1/userinfo"} {
+	for _, path := range []string{
+		"/oauth2/userinfo", "/oauth2/v2.0/userinfo", "/oauth2/default/v1/userinfo",
+		"/idp/userinfo.openid", "/adfs/userinfo", "/oauth2/v3/userinfo",
+		"/realms/{realm}/protocol/openid-connect/userinfo", "/userinfo",
+	} {
 		mux.HandleFunc("GET "+path, p.requirePath(func(c snapshot.Clothes) string { return c.UserInfoPath }, p.userinfo))
 	}
-	for _, path := range []string{"/oauth2/logout", "/oauth2/v2.0/logout", "/oauth2/default/v1/logout"} {
+	for _, path := range []string{
+		"/oauth2/logout", "/oauth2/v2.0/logout", "/oauth2/default/v1/logout",
+		"/idp/startSLO.ping", "/adfs/oauth2/logout", "/logout",
+		"/realms/{realm}/protocol/openid-connect/logout",
+	} {
 		mux.HandleFunc("GET "+path, p.requirePath(func(c snapshot.Clothes) string { return c.LogoutPath }, p.logout))
 	}
+	mux.HandleFunc("POST /v1.0/users/{oid}/getMemberGroups", p.graphMemberGroups)
 	return mux
 }
 
@@ -77,7 +101,11 @@ func clothesOf(snap *snapshot.Snapshot) snapshot.Clothes {
 		vendorName = snap.Canonical.Spec.Profile.Vendor
 		tid = snap.Canonical.Spec.Profile.TenantID
 	}
-	c, err := vendor.Resolve(vendorName, tid)
+	realm := ""
+	if snap.Canonical != nil {
+		realm = snap.Canonical.Metadata.Name
+	}
+	c, err := vendor.Resolve(vendorName, tid, realm)
 	if err != nil {
 		return snap.Clothes
 	}
@@ -217,7 +245,7 @@ func (p *Provider) authorize(w http.ResponseWriter, r *http.Request) {
 	iss := strings.TrimRight(snap.Issuer, "/")
 	if sid, err := r.Cookie(CookieName(snap)); err == nil && sid.Value != "" {
 		if sess, ok := p.rt.GetSession(sid.Value); ok {
-			if cl.PreConsent {
+			if cl.PreConsent && !p.rt.ForceConsent() {
 				code := randomID()
 				p.rt.PutCode(AuthCode{
 					Code: code, ClientID: clientID, RedirectURI: redirect,
@@ -239,6 +267,7 @@ func (p *Provider) authorize(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			pend := p.rt.PutPending(Pending{
+				Protocol: ProtocolOIDC,
 				ClientID: clientID, RedirectURI: redirect, Scope: q.Get("scope"),
 				State: q.Get("state"), Nonce: q.Get("nonce"), Challenge: challenge, Method: method,
 			})
@@ -247,6 +276,7 @@ func (p *Provider) authorize(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	pend := p.rt.PutPending(Pending{
+		Protocol: ProtocolOIDC,
 		ClientID: clientID, RedirectURI: redirect, Scope: q.Get("scope"),
 		State: q.Get("state"), Nonce: q.Get("nonce"), Challenge: challenge, Method: method,
 	})
@@ -357,12 +387,21 @@ func (p *Provider) writeTokens(w http.ResponseWriter, snap *snapshot.Snapshot, c
 	if username != "" {
 		extra["preferred_username"] = username
 	}
+	accessExtra := map[string]any{"token_use": "access", "scope": scope}
 	if user, ok := snap.UsersByID[userID]; ok {
 		if hasScope(scope, "email") && user.Email != "" {
 			extra["email"] = user.Email
 		}
 		if hasScope(scope, "groups") {
-			extra["groups"] = groupNames(snap, user)
+			gc, gerr := groupClaims(snap, user, p.warn)
+			if gerr != nil {
+				writeTokenError(w, snap, http.StatusBadRequest, "invalid_grant", gerr.Error())
+				return
+			}
+			for k, v := range gc {
+				extra[k] = v
+				accessExtra[k] = v
+			}
 		}
 	}
 	applyClothesClaims(extra, snap, userID)
@@ -371,7 +410,7 @@ func (p *Provider) writeTokens(w http.ResponseWriter, snap *snapshot.Snapshot, c
 		writeTokenError(w, snap, http.StatusInternalServerError, "server_error", "")
 		return
 	}
-	access, err := sig.mint(snap.Issuer, userID, clientID, "", time.Hour, map[string]any{"token_use": "access", "scope": scope})
+	access, err := sig.mint(snap.Issuer, userID, clientID, "", time.Hour, accessExtra)
 	if err != nil {
 		writeTokenError(w, snap, http.StatusInternalServerError, "server_error", "")
 		return
@@ -417,7 +456,12 @@ func (p *Provider) userinfo(w http.ResponseWriter, r *http.Request) {
 			out["email"] = user.Email
 		}
 		if hasScope(scope, "groups") {
-			out["groups"] = groupNames(snap, user)
+			gc, gerr := groupClaims(snap, user, nil)
+			if gerr == nil {
+				for k, v := range gc {
+					out[k] = v
+				}
+			}
 		}
 	}
 	applyClothesClaims(out, snap, c.Subject)
@@ -431,8 +475,11 @@ func (p *Provider) CompleteLogin(pendingID, userID, username string) (string, er
 	if snap := p.store.Load(); snap != nil && snap.Canonical != nil && snap.Canonical.Spec.Auth.MFA.Mode == "force-fail" {
 		return "", fmt.Errorf("access_denied")
 	}
-	pend, ok := p.rt.TakePending(pendingID)
-	if !ok {
+	pend, ok := p.rt.GetPending(pendingID)
+	if !ok || (pend.Protocol != "" && pend.Protocol != ProtocolOIDC) {
+		return "", fmt.Errorf("pending request not found")
+	}
+	if _, ok := p.rt.TakePending(pendingID); !ok {
 		return "", fmt.Errorf("pending request not found")
 	}
 	code := randomID()
@@ -455,8 +502,11 @@ func (p *Provider) CompleteLogin(pendingID, userID, username string) (string, er
 }
 
 func (p *Provider) DenyConsent(pendingID string) (string, error) {
-	pend, ok := p.rt.TakePending(pendingID)
-	if !ok {
+	pend, ok := p.rt.GetPending(pendingID)
+	if !ok || (pend.Protocol != "" && pend.Protocol != ProtocolOIDC) {
+		return "", fmt.Errorf("pending request not found")
+	}
+	if _, ok := p.rt.TakePending(pendingID); !ok {
 		return "", fmt.Errorf("pending request not found")
 	}
 	return oauthErrorLocation(pend.RedirectURI, pend.State, "access_denied", "user denied")
@@ -499,6 +549,77 @@ func (p *Provider) logout(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte("<!doctype html><html><body><p>Logged out</p></body></html>"))
+}
+
+func (p *Provider) graphMemberGroups(w http.ResponseWriter, r *http.Request) {
+	snap := p.snapOIDC(w)
+	if snap == nil {
+		return
+	}
+	if snap.Clothes.Vendor != "entra" || snap.Canonical == nil || !snap.Canonical.Spec.GroupOverage.EntraGraphStub {
+		http.NotFound(w, r)
+		return
+	}
+	oid := r.PathValue("oid")
+	raw := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+	if raw == "" {
+		http.Error(w, "invalid_token", http.StatusUnauthorized)
+		return
+	}
+	sig, err := newSigner(snap.SigningKey)
+	if err != nil {
+		http.Error(w, "server_error", http.StatusInternalServerError)
+		return
+	}
+	c, _, err := parseAndVerifyExtra(raw, sig.jwk, snap.Issuer, true)
+	if err != nil || c.Subject != oid {
+		http.Error(w, "invalid_token", http.StatusUnauthorized)
+		return
+	}
+	user, ok := snap.UsersByID[oid]
+	if !ok {
+		http.Error(w, "invalid_token", http.StatusUnauthorized)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"value": groupNames(snap, user)})
+}
+
+func (p *Provider) Mint(clientID, userID, username, scope string) (access, idToken string, err error) {
+	snap := p.store.Load()
+	if snap == nil || snap.Canonical == nil || !snap.Canonical.Spec.Protocols.OIDC.IsEnabled(false) {
+		return "", "", fmt.Errorf("oidc disabled")
+	}
+	sig, err := newSigner(snap.SigningKey)
+	if err != nil {
+		return "", "", err
+	}
+	extra := map[string]any{}
+	if username != "" {
+		extra["preferred_username"] = username
+	}
+	accessExtra := map[string]any{"token_use": "access", "scope": scope}
+	if user, ok := snap.UsersByID[userID]; ok {
+		if hasScope(scope, "email") && user.Email != "" {
+			extra["email"] = user.Email
+		}
+		if hasScope(scope, "groups") {
+			gc, gerr := groupClaims(snap, user, p.warn)
+			if gerr != nil {
+				return "", "", gerr
+			}
+			for k, v := range gc {
+				extra[k] = v
+				accessExtra[k] = v
+			}
+		}
+	}
+	applyClothesClaims(extra, snap, userID)
+	idToken, err = sig.mint(snap.Issuer, userID, clientID, "", time.Hour, extra)
+	if err != nil {
+		return "", "", err
+	}
+	access, err = sig.mint(snap.Issuer, userID, clientID, "", time.Hour, accessExtra)
+	return access, idToken, err
 }
 
 func logoutRedirectOK(snap *snapshot.Snapshot, uri string) bool {

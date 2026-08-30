@@ -1,6 +1,6 @@
 # System Architecture
 
-Status: default ship + VEN-001 implemented (FND-001 + OIDC-001 + LOGIN-001 + VEN-001)
+Status: through VEN-002 implemented (INT-001 documented; SCIM design-only)
 Owners: Architecture, Protocols, Control Plane, Deployment
 Last reviewed: 2026-08-30
 Related ADRs: 0001, 0002, 0003, 0004, 0005, 0006, 0007, 0009
@@ -11,7 +11,7 @@ Laboratory systems-under-test already speak HTTPS to an enterprise Identity Prov
 
 ## Goals
 
-- One process that is a laboratory IdP: OIDC/OAuth2 first, SAML and WS-Fed later.
+- One process that is a laboratory IdP: OIDC/OAuth2, SP-initiated SAML, and WS-Fed passive.
 - Vendor-shaped path, claim, cookie, and error clothes on **one exact issuer**.
 - Two planes: data-plane HTTPS and management REST+MCP, adapters over one registry.
 - Immutable, atomic runtime snapshots compiled from fail-closed YAML.
@@ -215,14 +215,14 @@ internal/config            YAML decoding, KnownFields, normalization
 internal/compiler          immutable snapshot compilation
 internal/snapshot          active/previous/bootstrap snapshot store
 internal/oidc              authorization code, PKCE, discovery, JWKS, tokens
-internal/saml              later: SP-initiated SSO and metadata
-internal/wsfed             later: WS-Fed with ADFS clothes
+internal/saml              SP-initiated SSO, metadata, lab signing cert
+internal/wsfed             WS-Fed passive + ADFS path clothes
 internal/loginui           data-plane login / consent / MFA HTML
 internal/vendor            clothes tables (not hostname maps)
-internal/import            allow-list rewriter
+internal/importrw          allow-list rewriter
 internal/control/rest      REST transport adapter
 internal/control/mcp       MCP transport adapter
-internal/web               later: embedded operator SPA (no app import)
+internal/web               embedded operator SPA (no app import)
 internal/capabilities      capability registry and parity metadata
 internal/auth              management authentication, scopes, actor identity
 internal/audit             mutation and security events

@@ -39,6 +39,18 @@ var catalog = []Capability{
 	parity("sso.tunable.auth.force_fail", "Force auth fail", "POST", "/v1/tunables/auth:force-fail", "sso_tunable_auth_force_fail", "", []string{ScopeTunables}, true, true),
 	parity("sso.tunable.error.inject", "Inject error", "POST", "/v1/tunables/error:inject", "sso_tunable_error_inject", "", []string{ScopeTunables}, true, true),
 	parity("sso.tunable.vendor.swap", "Swap vendor clothes", "POST", "/v1/tunables/vendor:swap", "sso_tunable_vendor_swap", "", []string{ScopeTunables}, true, true),
+	parity("sso.tunable.overage.set", "Set group overage", "POST", "/v1/tunables/overage:set", "sso_tunable_overage_set", "", []string{ScopeTunables}, true, true),
+	parity("sso.tunable.consent.force", "Force consent", "POST", "/v1/tunables/consent:force", "sso_tunable_consent_force", "", []string{ScopeTunables}, true, true),
+	parity("sso.tunable.token.mint", "Mint token", "POST", "/v1/tunables/token:mint", "sso_tunable_token_mint", "", []string{ScopeTunables}, true, true),
+	restOnly("sso.session.create", "Create operator session", "POST", "/v1/session", nil, false),
+	restOnly("sso.session.get", "Get operator session", "GET", "/v1/session", nil, true),
+	restOnly("sso.session.delete", "Delete operator session", "DELETE", "/v1/session", nil, true),
+	parity("sso.audit.list", "List audit", "GET", "/v1/audit", "sso_audit_query", "labsso://audit/recent", []string{ScopeAuditRead}, false, true),
+	parity("sso.audit.get", "Get audit event", "GET", "/v1/audit/{eventId}", "sso_audit_get", "", []string{ScopeAuditRead}, false, true),
+	parity("sso.sessions.expire_all", "Expire all sessions", "POST", "/v1/sessions:expire-all", "sso_sessions_expire_all", "", []string{ScopeSessions}, true, true),
+	parity("sso.import.plan", "Import plan", "POST", "/v1/import:plan", "sso_import_plan", "", []string{ScopeWrite}, false, true),
+	parity("sso.import.apply", "Import apply", "POST", "/v1/import:apply", "sso_import_apply", "", []string{ScopeWrite}, true, true),
+	parity("sso.tunable.redirect.rewrite", "Rewrite redirect URIs", "POST", "/v1/tunables/client/redirect:rewrite", "sso_tunable_redirect_rewrite", "", []string{ScopeTunables}, true, true),
 }
 
 func restOnly(id, title, method, path string, scopes []string, idempotent bool) Capability {

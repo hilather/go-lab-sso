@@ -1,6 +1,6 @@
 # Security Architecture
 
-Status: FND + OIDC + login + entra/okta clothes implemented; SPA later
+Status: through VEN-002 implemented
 Owners: Security, Protocols, Control Plane
 Last reviewed: 2026-08-30
 Related ADRs: 0002, 0003, 0004, 0005, 0006, 0008, 0009
@@ -37,6 +37,7 @@ LabSSO does **not** trust vendor-cloud hostnames and does not present them.
 - Session TTL from YAML; restart drops sessions.
 - Rate and concurrency limits on authorize, token, login POST.
 - Disabled protocols do not listen on those paths.
+- SAML XML parse rejects DOCTYPE/ENTITY and is size-capped. Assertion signatures use `goxmldsig` on XML LabSSO generates (not hostile-input verification).
 - Vendor clothes never change the issuer host to a vendor cloud.
 - Graph-shaped stub (Entra overage) is local; no egress to Microsoft.
 - Login / consent HTML is first-party. No third-party JS.

@@ -1,6 +1,6 @@
 # Program Board
 
-Status: default ship + VEN-001 done (FND-001 + OIDC-001 + LOGIN-001 + VEN-001)
+Status: through VEN-002 done; INT-001 documented here; SCIM-001 design-only
 Last reviewed: 2026-08-30
 
 Implementation is **opened** at FND-001. Later slices stay not-started until their wave.
@@ -13,13 +13,13 @@ Implementation is **opened** at FND-001. Later slices stay not-started until the
 | 2 | OIDC/OAuth2 authorization code + PKCE + discovery + JWKS + id_token/access_token + refresh (generic clothes) | OIDC-001 | FND-001 | Generic OP | done |
 | 3 | Data-plane login + consent HTML; MFA knobs `never` \| `always` \| `force-fail` (TOTP stub later) | LOGIN-001 | OIDC-001 | Login/consent HTML ≠ operator SPA | done |
 | 4 | Vendor clothes: `entra`, `okta` (paths, claims, cookies, error dialect) | VEN-001 | LOGIN-001 | Clothes tables | done |
-| 5 | Group overage: Entra `_claim_names`/`_claim_sources` + Graph-shaped stub; Okta fail-at; generic cap | OVR-001 | VEN-001 | Overage behaviors | not-started |
-| 6 | SAML 2.0 SP-initiated SSO + IdP metadata | SAML-001 | OVR-001 | SAML IdP | not-started |
-| 7 | Operator SPA with REST+MCP+UI parity | UI-001 | FND-001, LOGIN-001 | SPA; **Mira reviews after first UI implementation** | not-started |
-| 8 | Customer-config import (allow-list rewriter) | IMP-001 | FND-001 | Import plan/apply | not-started |
-| 9 | More vendor clothes: ping, adfs, google, keycloak, iam-identity-center; WS-Fed with ADFS clothes | VEN-002 | VEN-001, SAML-001 | Additional clothes + WS-Fed | not-started |
-| 10 | SCIM outbound client | SCIM-001 | FND-001 | Outbound SCIM later | not-started |
-| 11 | Integrator last in mcp-integration-lab | INT-001 | Appliance exists (through LOGIN-001 at minimum; clothes as needed) | Main compose service, BOM, labinfo connection, `secrets/labsso-tls`, mcpjungle, `allowLegacyClients: true` | not-started |
+| 5 | Group overage: Entra `_claim_names`/`_claim_sources` + Graph-shaped stub; Okta fail-at; generic cap | OVR-001 | VEN-001 | Overage behaviors | done |
+| 6 | SAML 2.0 SP-initiated SSO + IdP metadata | SAML-001 | OVR-001 | SAML IdP | done |
+| 7 | Operator SPA with REST+MCP+UI parity | UI-001 | FND-001, LOGIN-001 | SPA; first implementation ready for Mira (`docs/22-operator-spa.md`) | done (Mira review requested) |
+| 8 | Customer-config import (allow-list rewriter) | IMP-001 | FND-001 | Import plan/apply | done |
+| 9 | More vendor clothes: ping, adfs, google, keycloak, iam-identity-center; WS-Fed with ADFS clothes | VEN-002 | VEN-001, SAML-001 | Additional clothes + WS-Fed | done |
+| 10 | SCIM outbound client | SCIM-001 | FND-001 | Design-only (`docs/23-scim-outbound.md`); may trail M6 | design |
+| 11 | Integrator last in mcp-integration-lab | INT-001 | Appliance exists | Wiring documented here; pin is last in mcp-integration-lab (not from this repo) | documented |
 
 UI-001 must not start in this design landing. Mira reviews after the first UI implementation.
 

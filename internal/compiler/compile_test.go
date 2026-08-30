@@ -1,6 +1,11 @@
 package compiler_test
 
 import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/x509"
+	"encoding/pem"
 	"os"
 	"path/filepath"
 	"strings"
@@ -43,6 +48,9 @@ func TestCompileStandaloneUsesYAMLIssuer(t *testing.T) {
 	}
 	if len(snap.TLSCert) == 0 || len(snap.SigningKey) == 0 || len(snap.AccessToken) == 0 {
 		t.Fatal("expected resolved secret files")
+	}
+	if len(snap.SigningCert) == 0 || !strings.Contains(string(snap.SigningCert), "BEGIN CERTIFICATE") {
+		t.Fatal("expected lab self-signed signing cert")
 	}
 }
 
@@ -103,14 +111,78 @@ func TestCompileEntraClothesDefaultTenant(t *testing.T) {
 	}
 }
 
-func TestCompilePingRejected(t *testing.T) {
+func TestCompilePingOK(t *testing.T) {
 	root := repoRoot(t)
-	doc, err := config.LoadFile(filepath.Join(root, "testdata/config/compile-reject/ping.yaml"), config.Options{BaseDir: root})
+	doc, err := config.LoadFile(filepath.Join(root, "testdata/config/valid/ping.yaml"), config.Options{BaseDir: root})
 	if err != nil {
 		t.Fatal(err)
 	}
+	snap, err := compiler.Compile(doc, compiler.Options{BaseDir: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snap.Clothes.Vendor != "ping" || snap.Clothes.AuthorizePath != "/as/authorization.oauth2" {
+		t.Fatalf("clothes %+v", snap.Clothes)
+	}
+}
+
+func TestCompileKeycloakRealm(t *testing.T) {
+	root := repoRoot(t)
+	doc, err := config.LoadFile(filepath.Join(root, "testdata/config/valid/ping.yaml"), config.Options{BaseDir: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc.Metadata.Name = "realm-a"
+	doc.Spec.Profile.Vendor = "keycloak"
+	snap, err := compiler.Compile(doc, compiler.Options{BaseDir: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snap.Clothes.Realm != "realm-a" {
+		t.Fatalf("realm %s", snap.Clothes.Realm)
+	}
+	if snap.Clothes.AuthorizePath != "/realms/realm-a/protocol/openid-connect/auth" {
+		t.Fatalf("auth %s", snap.Clothes.AuthorizePath)
+	}
+}
+
+func TestCompileSAMLRequiresRSA(t *testing.T) {
+	root := repoRoot(t)
+	doc, err := config.LoadFile(filepath.Join(root, "testdata/config/valid/minimal.yaml"), config.Options{BaseDir: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	der, err := x509.MarshalPKCS8PrivateKey(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ecPath := filepath.Join(dir, "ec.pem")
+	if err := os.WriteFile(ecPath, pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der}), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	doc.Spec.Signing.KeyRef = ecPath
+	on := true
+	doc.Spec.Protocols.SAML.Enabled = &on
 	_, err = compiler.Compile(doc, compiler.Options{BaseDir: root})
-	if err == nil || !strings.Contains(err.Error(), "clothes not implemented") {
-		t.Fatalf("want clothes not implemented, got %v", err)
+	if err == nil || !strings.Contains(err.Error(), "RSA") {
+		t.Fatalf("want RSA reject, got %v", err)
+	}
+}
+
+func TestCompileNegativeGenericCapRejected(t *testing.T) {
+	root := repoRoot(t)
+	doc, err := config.LoadFile(filepath.Join(root, "testdata/config/valid/minimal.yaml"), config.Options{BaseDir: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc.Spec.GroupOverage.GenericCap = -1
+	_, err = compiler.Compile(doc, compiler.Options{BaseDir: root})
+	if err == nil || !strings.Contains(strings.ToLower(err.Error()), "positive") {
+		t.Fatalf("want positive cap reject, got %v", err)
 	}
 }

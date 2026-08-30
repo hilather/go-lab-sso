@@ -47,7 +47,65 @@ func assertNoVendorHosts(t *testing.T, blob string) {
 func TestClothesDiscoveryISSStable(t *testing.T) {
 	a, h := bootOIDC(t)
 	wantISS := "https://lab.example.net"
-	for _, v := range []string{"generic", "entra", "okta"} {
+	wantByVendor := map[string]map[string]string{
+		"generic": {
+			"authorization_endpoint": wantISS + "/oauth2/authorize",
+			"token_endpoint":         wantISS + "/oauth2/token",
+			"jwks_uri":               wantISS + "/oauth2/jwks",
+			"userinfo_endpoint":      wantISS + "/oauth2/userinfo",
+			"end_session_endpoint":   wantISS + "/oauth2/logout",
+		},
+		"entra": {
+			"authorization_endpoint": wantISS + "/oauth2/v2.0/authorize",
+			"token_endpoint":         wantISS + "/oauth2/v2.0/token",
+			"jwks_uri":               wantISS + "/oauth2/v2.0/jwks",
+			"userinfo_endpoint":      wantISS + "/oauth2/v2.0/userinfo",
+			"end_session_endpoint":   wantISS + "/oauth2/v2.0/logout",
+		},
+		"okta": {
+			"authorization_endpoint": wantISS + "/oauth2/default/v1/authorize",
+			"token_endpoint":         wantISS + "/oauth2/default/v1/token",
+			"jwks_uri":               wantISS + "/oauth2/default/v1/jwks",
+			"userinfo_endpoint":      wantISS + "/oauth2/default/v1/userinfo",
+			"end_session_endpoint":   wantISS + "/oauth2/default/v1/logout",
+		},
+		"ping": {
+			"authorization_endpoint": wantISS + "/as/authorization.oauth2",
+			"token_endpoint":         wantISS + "/as/token.oauth2",
+			"jwks_uri":               wantISS + "/pf/JWKS",
+			"userinfo_endpoint":      wantISS + "/idp/userinfo.openid",
+			"end_session_endpoint":   wantISS + "/idp/startSLO.ping",
+		},
+		"adfs": {
+			"authorization_endpoint": wantISS + "/adfs/oauth2/authorize",
+			"token_endpoint":         wantISS + "/adfs/oauth2/token",
+			"jwks_uri":               wantISS + "/adfs/discovery/keys",
+			"userinfo_endpoint":      wantISS + "/adfs/userinfo",
+			"end_session_endpoint":   wantISS + "/adfs/oauth2/logout",
+		},
+		"google": {
+			"authorization_endpoint": wantISS + "/o/oauth2/v2/auth",
+			"token_endpoint":         wantISS + "/token",
+			"jwks_uri":               wantISS + "/oauth2/v3/certs",
+			"userinfo_endpoint":      wantISS + "/oauth2/v3/userinfo",
+			"end_session_endpoint":   wantISS + "/logout",
+		},
+		"keycloak": {
+			"authorization_endpoint": wantISS + "/realms/lab/protocol/openid-connect/auth",
+			"token_endpoint":         wantISS + "/realms/lab/protocol/openid-connect/token",
+			"jwks_uri":               wantISS + "/realms/lab/protocol/openid-connect/certs",
+			"userinfo_endpoint":      wantISS + "/realms/lab/protocol/openid-connect/userinfo",
+			"end_session_endpoint":   wantISS + "/realms/lab/protocol/openid-connect/logout",
+		},
+		"iam-identity-center": {
+			"authorization_endpoint": wantISS + "/authorize",
+			"token_endpoint":         wantISS + "/token",
+			"jwks_uri":               wantISS + "/jwks",
+			"userinfo_endpoint":      wantISS + "/userinfo",
+			"end_session_endpoint":   wantISS + "/logout",
+		},
+	}
+	for _, v := range []string{"generic", "entra", "okta", "ping", "adfs", "google", "keycloak", "iam-identity-center"} {
 		if v != "generic" {
 			swapVendor(t, a, v)
 		}
@@ -60,19 +118,7 @@ func TestClothesDiscoveryISSStable(t *testing.T) {
 		}
 		b, _ := json.Marshal(doc)
 		assertNoVendorHosts(t, string(b))
-		prefix := map[string]string{
-			"generic": "/oauth2",
-			"entra":   "/oauth2/v2.0",
-			"okta":    "/oauth2/default/v1",
-		}[v]
-		want := map[string]string{
-			"authorization_endpoint": wantISS + prefix + "/authorize",
-			"token_endpoint":         wantISS + prefix + "/token",
-			"jwks_uri":               wantISS + prefix + "/jwks",
-			"userinfo_endpoint":      wantISS + prefix + "/userinfo",
-			"end_session_endpoint":   wantISS + prefix + "/logout",
-		}
-		for k, exp := range want {
+		for k, exp := range wantByVendor[v] {
 			if doc[k] != exp {
 				t.Fatalf("%s %s=%v want %s", v, k, doc[k], exp)
 			}
@@ -84,7 +130,8 @@ func TestClothesInactivePaths404(t *testing.T) {
 	a, h := bootOIDC(t)
 	swapVendor(t, a, "entra")
 	for _, path := range []string{"/oauth2/authorize", "/oauth2/token", "/oauth2/jwks", "/oauth2/userinfo", "/oauth2/logout",
-		"/oauth2/default/v1/authorize", "/oauth2/default/v1/jwks"} {
+		"/oauth2/default/v1/authorize", "/oauth2/default/v1/jwks",
+		"/token", "/logout", "/authorize", "/as/authorization.oauth2"} {
 		rec := httptest.NewRecorder()
 		method := "GET"
 		if strings.HasSuffix(path, "/token") {
@@ -122,6 +169,40 @@ func TestClothesInactivePaths404(t *testing.T) {
 	if code != 404 {
 		t.Fatalf("default tid after custom want 404 got %d", code)
 	}
+}
+
+func TestClothesSharedTokenLogoutInactive(t *testing.T) {
+	a, h := bootOIDC(t)
+	mustNotFound := func(method, path string) {
+		t.Helper()
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(method, path, nil))
+		if rec.Code != 404 {
+			t.Fatalf("%s %s want 404 got %d %s", method, path, rec.Code, rec.Body)
+		}
+	}
+	mustFound := func(method, path string) {
+		t.Helper()
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(method, path, nil))
+		if rec.Code == 404 {
+			t.Fatalf("%s %s want active path, got 404", method, path)
+		}
+	}
+	swapVendor(t, a, "google")
+	mustFound("POST", "/token")
+	mustFound("GET", "/logout")
+	mustFound("GET", "/o/oauth2/v2/auth")
+	mustNotFound("GET", "/authorize")
+	mustNotFound("GET", "/oauth2/jwks")
+	swapVendor(t, a, "iam-identity-center")
+	mustFound("GET", "/authorize")
+	mustFound("POST", "/token")
+	mustFound("GET", "/logout")
+	mustNotFound("GET", "/o/oauth2/v2/auth")
+	swapVendor(t, a, "keycloak")
+	mustFound("GET", "/realms/lab/protocol/openid-connect/certs")
+	mustNotFound("GET", "/realms/other/protocol/openid-connect/certs")
 }
 
 func TestClothesEntraClaimsAndTokenError(t *testing.T) {
@@ -272,12 +353,17 @@ func TestClothesApplyAlsoPurges(t *testing.T) {
 	}
 }
 
-func TestClothesApplyPingRejected(t *testing.T) {
-	a, _ := bootOIDC(t)
-	_, err := a.SwapVendor(auth.AdminActor(), app.SwapVendorIn{
-		Vendor: "ping", ExpectedRevision: a.Status().RuntimeRevision, Reason: "nope",
-	})
-	if err == nil || !strings.Contains(err.Error(), "clothes not implemented") {
-		t.Fatalf("want compile reject, got %v", err)
+func TestClothesApplyPingOK(t *testing.T) {
+	a, h := bootOIDC(t)
+	swapVendor(t, a, "ping")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "/pf/JWKS", nil))
+	if rec.Code != 200 {
+		t.Fatalf("ping jwks %d %s", rec.Code, rec.Body)
+	}
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "/oauth2/jwks", nil))
+	if rec.Code != 404 {
+		t.Fatalf("generic jwks under ping want 404 got %d", rec.Code)
 	}
 }

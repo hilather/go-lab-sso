@@ -1,6 +1,6 @@
 # State and Configuration
 
-Status: default ship + VEN-001 implemented (FND-001 + OIDC-001 + LOGIN-001 + VEN-001)
+Status: through VEN-002 implemented
 Owners: Configuration, Application
 Last reviewed: 2026-08-30
 Related ADRs: 0003, 0008
@@ -70,6 +70,7 @@ spec:
   groupOverage:
     entraGraphStub: true
     oktaFailAt: 100
+    genericCap: 200
   ui:
     enabled: true
   access:
@@ -113,7 +114,7 @@ Exact issuer string. If `LAB_PUBLIC_HOST` is set, the compiled issuer must match
 
 ### `spec.profile.vendor`
 
-Enum: `generic` | `entra` | `okta` | `ping` | `adfs` | `google` | `keycloak` | `iam-identity-center`. Implemented clothes: `generic`, `entra`, `okta`. Other values load and canonicalize but compile-reject.
+Enum: `generic` | `entra` | `okta` | `ping` | `adfs` | `google` | `keycloak` | `iam-identity-center`. All enum values are implemented (VEN-002). Unknown values reject at decode. Keycloak realm is `metadata.name` (required). `vendor.Resolve` falls back to `lab` only when called with an empty name.
 
 ### `spec.profile.tenantId`
 
@@ -121,11 +122,11 @@ Optional. Omitted or empty stays empty in Canonical / export. Compiler uses `000
 
 ### `spec.protocols`
 
-Booleans `oidc.enabled`, `saml.enabled`, `wsfed.enabled`. Disabled protocols do not register data-plane routes.
+Booleans `oidc.enabled`, `saml.enabled`, `wsfed.enabled`. Disabled protocols do not register data-plane routes. `saml.enabled: false` 404s `GET /saml/metadata` and `/saml/sso`. `wsfed.enabled: false` 404s `/wsfed/*` and ADFS WS-Fed clothes paths.
 
 ### `spec.clients`
 
-List of client objects (empty in minimal). Planned fields: `id`, `clientId`, `redirectURIs`, `public` / secret file ref, `scopes`, `preConsent`, vendor-specific extras parked only via import’s `imported.unmapped` (not as unknown spec fields).
+List of client objects (empty in minimal). Fields: `id`, `clientId`, `redirectURIs`, `public` / secret file ref, `scopes`, `preConsent`, optional `saml.entityID` and `saml.acsURLs`. Empty `acsURLs` uses `redirectURIs` as ACS (docs/09 freeze). Vendor-specific extras park only via import’s `imported.unmapped` (not as unknown spec fields).
 
 ### `spec.users` / `spec.groups`
 
@@ -139,9 +140,12 @@ Source of truth in v1. User: `id`, `username`, optional `email`, `passwordRef` o
 
 ### `spec.groupOverage`
 
-- `entraGraphStub`: bool.
-- `oktaFailAt`: int, default 100.
-- Generic safety cap: default **200** (sweep 2). Exact field name lands in CFG / OVR-001; omitted from the minimal sketch.
+- `entraGraphStub`: bool. When `vendor` is `entra` and this is true, LabSSO serves `POST /v1.0/users/{oid}/getMemberGroups` on the data-plane issuer. When false and overage is triggered, the token request fails (no `_claim_names` pointing at a missing stub; no Internet).
+- `oktaFailAt`: int, default 100. Okta clothes fail the token request when `len(user.groupIds) >= oktaFailAt`.
+- `genericCap`: int, default 200. Normalize lifts `0` → 200. Values `< 1` after Normalize fail compile (same for `oktaFailAt`). This is also the Entra overage threshold (one knob). Generic embeds at most `genericCap` group names (stable sort by group id); excess omitted + audit warning. Entra: `count > genericCap` omits `groups` and emits `_claim_names` / `_claim_sources`.
+- Counts use `len(user.groupIds)`. Overage is scope-gated: only when `groups` is in the token scope.
+- `overage:set` merges pointers onto the current `GroupOverage` then `OpUpdate`s the full merged struct. It is not `Apply` and not a membership source of truth. Membership count changes stay user/group apply. Omit keeps; explicit `false` / `0` sets (then Normalize may lift `0` → default).
+- Canonicalize of YAML that omitted `genericCap` now emits `genericCap: 200` (revision change).
 
 ### `spec.ui`
 
@@ -149,7 +153,7 @@ Source of truth in v1. User: `id`, `username`, optional `email`, `passwordRef` o
 
 ### `spec.signing`
 
-- `keyRef`: OIDC/JWT signing private key file (PEM). **Not** the TLS leaf. Missing file fail-closes at compile.
+- `keyRef`: OIDC/JWT and SAML/WS-Fed signing private key file (PEM). **Not** the TLS leaf. Missing file fail-closes at compile. The compiler synthesizes a lab-only self-signed X.509 from this key onto the snapshot (SAML-001). SAML or WS-Fed enabled requires RSA (OIDC-only may use ECDSA). Do not add a second signing-cert secret unless an ADR says so.
 
 ### `spec.access`
 
@@ -236,4 +240,4 @@ Field names, duration syntax, vendor enum, and export shape are public. Adding o
 
 ## Open questions
 
-- Generic group safety-cap field name (sweep 2: numeric default **200**; field name lands in OVR-001). Membership SoT, bootstrapRevision hash, and issuer-when-env are frozen above.
+- None for OVR-001. `genericCap` is the frozen field name (default 200; also the Entra threshold). Membership SoT, bootstrapRevision hash, and issuer-when-env stay frozen above.

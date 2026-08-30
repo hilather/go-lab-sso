@@ -1,6 +1,6 @@
 # Roadmap and Non-Goals
 
-Status: default ship + VEN-001 implemented (FND-001 + OIDC-001 + LOGIN-001 + VEN-001)
+Status: through VEN-002 implemented; INT-001 documented here; SCIM-001 design-only
 Owners: Architecture, Program
 Last reviewed: 2026-08-30
 Related ADRs: 0001–0009
@@ -17,13 +17,13 @@ Implementation is opened at FND-001. Remaining slice order is:
 2. **OIDC/OAuth2** — authorization code + PKCE + discovery + JWKS + id_token/access_token + refresh (generic clothes).
 3. **Data-plane login + consent HTML** — required; distinct from operator SPA. MFA knobs `never` | `always` | `force-fail` (TOTP stub later).
 4. **Vendor clothes** — `entra`, `okta` (paths, claims `oid`/`tid`/`ver` vs Okta groups, cookies, error dialect). **Implemented.**
-5. **Group overage** — Entra `_claim_names`/`_claim_sources` + minimal Graph-shaped stub served by LabSSO (not real Microsoft Graph). Okta: fail the token request after 100 groups (configurable). Generic: embed groups with a safety cap.
-6. **SAML 2.0** — SP-initiated SSO + IdP metadata.
-7. **Operator SPA** — REST+MCP+UI parity. **Mira reviews after first UI implementation.** Do not build UI in this design landing.
-8. **Customer-config import** — allow-list rewriter.
-9. **More vendor clothes** — ping, adfs, google, keycloak, iam-identity-center. WS-Fed with ADFS clothes.
-10. **SCIM outbound client** — later.
-11. **Integrator last** — `hilather/mcp-integration-lab`, LabMITM-style service in main `docker-compose.yaml` (not an overlay). See [docs/11-deployment.md](11-deployment.md).
+5. **Group overage** — **Implemented (OVR-001).** Entra `_claim_names`/`_claim_sources` + minimal Graph-shaped stub served by LabSSO (not real Microsoft Graph). Okta: fail the token request after `oktaFailAt` groups. Generic: embed at most `genericCap` groups.
+6. **SAML 2.0** — **Implemented (SAML-001).** SP-initiated SSO + IdP metadata.
+7. **Operator SPA** — **Implemented (UI-001).** REST+MCP+UI parity. First SPA ready for Mira (`docs/22-operator-spa.md`).
+8. **Customer-config import** — **Implemented (IMP-001).** Allow-list rewriter.
+9. **More vendor clothes** — **Implemented (VEN-002).** ping, adfs, google, keycloak, iam-identity-center. WS-Fed with ADFS clothes.
+10. **SCIM outbound client** — design-only ([docs/23-scim-outbound.md](23-scim-outbound.md)); may trail M6.
+11. **Integrator last** — documented here ([docs/11-deployment.md](11-deployment.md)); implement the pin in `hilather/mcp-integration-lab`, not from this repo.
 
 Default ship after slice 3: generic OIDC + login HTML. Entra/Okta clothes are opt-in YAML (`spec.profile.vendor`).
 

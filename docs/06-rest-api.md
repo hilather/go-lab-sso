@@ -109,6 +109,12 @@ POST /v1/tunables/client/redirect:rewrite
 
 `POST /v1/tunables/vendor:swap` body: `vendor` (required), `tenantId` (optional), `expectedRevision`, `reason`, `idempotencyKey`. Capability `sso.tunable.vendor.swap`, scope `sso.tunables`. Omit `tenantId` to keep the current Canonical value; `tenantId: ""` clears it. Not a full `TargetProfile` replace and not `sso.change.apply`.
 
+`POST /v1/tunables/overage:set` body: optional pointers `entraGraphStub`, `oktaFailAt`, `genericCap`, plus `expectedRevision`, `reason`, `idempotencyKey`. Capability `sso.tunable.overage.set`, scope `sso.tunables`. Merges onto the current `GroupOverage` then `OpUpdate`s the full struct. Omit keeps; explicit `false` / `0` sets (Normalize may lift `0` → default). Not membership SoT.
+
+`POST /v1/tunables/consent:force` body: `{ "on": true }`. Runtime overlay; every `PreConsent` shortcut is ignored (authorize session reuse, login HTML, SAML, WS-Fed).
+
+`POST /v1/tunables/token:mint` body: `userId`, `clientId`, optional `scope` (default `openid`). Returns access + id tokens. Scoped (`sso.tunables`); audited. No secrets in the audit payload.
+
 Pause token: data plane otherwise stays up (authorize, JWKS, discovery, login HTML).
 
 ### Audit
@@ -118,14 +124,20 @@ GET /v1/audit
 GET /v1/audit/{eventId}
 ```
 
-### Operator session and UI (later slice)
+### Operator session and UI (UI-001)
 
 ```text
 POST   /v1/session
 GET    /v1/session
 DELETE /v1/session
-GET    /                 (SPA pre-auth; 404 if ui.enabled false)
+GET    /                 (SPA; 404 if ui.enabled false)
+GET    /app.js
+GET    /v1/audit
+GET    /v1/audit/{eventId}
+POST   /v1/sessions:expire-all
 ```
+
+Cookie `labsso_session` (HttpOnly). CSRF header `X-LabSSO-CSRF` required on non-GET cookie calls. Bearer still wins and skips CSRF. MCP ignores cookies. SPA lives in `internal/web` and must not import `internal/app`. Tokens never go in `localStorage` / `sessionStorage` / IndexedDB / the URL.
 
 Do not implement in this design landing. Mira reviews after first UI implementation.
 

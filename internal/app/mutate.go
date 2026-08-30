@@ -205,6 +205,7 @@ func planFrom(prev, next *snapshot.Snapshot, ops []model.Operation) *Plan {
 			GroupsChanged:  sliceChanged(prev.Canonical.Spec.Groups, next.Canonical.Spec.Groups),
 			IssuerChanged:  prev.Canonical.Spec.Issuer != next.Canonical.Spec.Issuer,
 			VendorChanged:  prev.Canonical.Spec.Profile.Vendor != next.Canonical.Spec.Profile.Vendor,
+			OverageChanged: prev.Canonical.Spec.GroupOverage != next.Canonical.Spec.GroupOverage,
 		}
 	}
 	return p

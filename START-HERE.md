@@ -1,6 +1,6 @@
 # Start here
 
-LabSSO is a from-scratch Go laboratory Identity Provider in the hilather lab-appliance family. The **default ship** plus **VEN-001** are implemented: generic OIDC, login/consent HTML, and Entra/Okta clothes on one exact issuer. SAML, the operator SPA, import, overage, and the integrator pin are later.
+LabSSO is a from-scratch Go laboratory Identity Provider in the hilather lab-appliance family. **Through VEN-002** is implemented: generic OIDC, login/consent HTML, remaining vendor clothes, overage, SAML, operator SPA, allow-list import, and WS-Fed. The integrator pin is last (not from this repo). SCIM is design-only.
 
 If you want to understand the product, stay on this page, then read architecture and the program board. If you want to change the design, read [AGENTS.md](AGENTS.md) before touching a file.
 
@@ -10,7 +10,7 @@ If you want to understand the product, stay on this page, then read architecture
 2. Read [docs/01-architecture.md](docs/01-architecture.md) — two planes, snapshot, issuer, ports, TLS.
 3. Read [docs/04-state-and-configuration.md](docs/04-state-and-configuration.md) and the YAML sketch in [testdata/config/valid/minimal.yaml](testdata/config/valid/minimal.yaml).
 4. Read [docs/05-control-plane-and-parity.md](docs/05-control-plane-and-parity.md) so REST and MCP stay adapters.
-5. Read [tasks/00-program-board.md](tasks/00-program-board.md) for the ordered slices. Default ship and entra/okta clothes are done; overage/SAML/SPA/import/integrator are later.
+5. Read [tasks/00-program-board.md](tasks/00-program-board.md) for the ordered slices. Through VEN-002 is done; INT-001 is documented here; SCIM is design-only.
 
 ## What to read next
 

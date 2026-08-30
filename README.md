@@ -1,16 +1,16 @@
 # LabSSO
 
-**Laboratory SSO Identity Provider** with OIDC/OAuth2 now, SAML later, and vendor-shaped Entra / Okta / Ping / ADFS clothes.
+**Laboratory SSO Identity Provider** with OIDC/OAuth2, SP-initiated SAML, WS-Fed, and vendor-shaped clothes (Entra, Okta, Ping, ADFS, Google, Keycloak, IAM Identity Center).
 
 Desired state is a versioned YAML file. Runtime mutations are ephemeral, revision-checked, and equally available over REST and MCP. Restart or reset returns the process to the mounted bootstrap.
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-Status: **M2 default ship + VEN-001 (entra/okta clothes)** · Module [`github.com/hilather/go-lab-sso`](https://github.com/hilather/go-lab-sso) · Image `ghcr.io/hilather/labsso` · Binary `labsso` · Language: **Go 1.26** · Overage/SAML/SPA/import/integrator still later
+Status: **through VEN-002** · Module [`github.com/hilather/go-lab-sso`](https://github.com/hilather/go-lab-sso) · Image `ghcr.io/hilather/labsso` · Binary `labsso` · Language: **Go 1.26** · Integrator pin last (not from this repo) · SCIM design-only
 
 New here? Start with [START-HERE.md](START-HERE.md). Architecture, task lists, and ADRs are indexed in [Documentation](#documentation).
 
-FND-001, OIDC-001, LOGIN-001, and VEN-001 are implemented: generic OIDC, login/consent HTML, and Entra/Okta clothes. Overage, SAML, the operator SPA, import, and the integrator pin are still later.
+Default ship through VEN-002 is implemented: generic OIDC, login/consent HTML, Entra/Okta plus remaining clothes, group overage, SAML, operator SPA, allow-list import, and WS-Fed. The integrator pin is last in `hilather/mcp-integration-lab`. SCIM is design-only.
 
 ---
 
@@ -41,14 +41,14 @@ flowchart LR
     YAML[desired YAML]
   end
   YAML -->|read-only mount| LabSSO
-  SUTs[SUTs and browsers<br/>HTTPS dest-443] --> Data[Data plane<br/>OIDC / SAML / login HTML]
+  SUTs[SUTs and browsers<br/>HTTPS dest-443] --> Data[Data plane<br/>OIDC / SAML / WS-Fed / login HTML]
   Data --> LabSSO
   Agents[Humans and agents] -->|REST /v1 and MCP /mcp| Mgmt[Management plane]
   Mgmt --> LabSSO
   SPA[Operator SPA] -->|cookie plus CSRF| Mgmt
 ```
 
-- **Data plane:** HTTPS IdP (OIDC/OAuth2, later SAML/WS-Fed, login + consent + MFA HTML). Must keep working if management is slow or unbound.
+- **Data plane:** HTTPS IdP (OIDC/OAuth2, SAML, WS-Fed, login + consent + MFA HTML). Must keep working if management is slow or unbound.
 - **Management plane:** REST `/v1` + MCP `/mcp` as **adapters over one operation registry**. Never MCP-by-proxying-REST. Operator SPA uses cookie + CSRF, never `localStorage` for tokens. `spec.ui.enabled: false` 404s the operator SPA only — it does not disable data-plane login pages.
 
 ---
@@ -94,6 +94,7 @@ spec:
   groupOverage:
     entraGraphStub: true
     oktaFailAt: 100
+    genericCap: 200
   ui:
     enabled: true
   access:
@@ -140,7 +141,7 @@ Full catalog: [docs/README.md](docs/README.md).
 | Document | Topic |
 |---|---|
 | [docs/01-architecture.md](docs/01-architecture.md) | Two planes, snapshot, issuer, ports, TLS |
-| [docs/02-protocols.md](docs/02-protocols.md) | OIDC/OAuth2, SAML, WS-Fed later |
+| [docs/02-protocols.md](docs/02-protocols.md) | OIDC/OAuth2, SAML, WS-Fed |
 | [docs/03-vendor-profiles.md](docs/03-vendor-profiles.md) | Clothes table |
 | [docs/04-state-and-configuration.md](docs/04-state-and-configuration.md) | YAML, revisions, plan/apply/export/reset |
 | [docs/05-control-plane-and-parity.md](docs/05-control-plane-and-parity.md) | Shared capability registry |
@@ -152,6 +153,8 @@ Full catalog: [docs/README.md](docs/README.md).
 | [docs/06-rest-api.md](docs/06-rest-api.md) | Planned REST `/v1` |
 | [docs/07-mcp-api.md](docs/07-mcp-api.md) | Planned MCP tools |
 | [docs/09-customer-config-import.md](docs/09-customer-config-import.md) | Allow-list rewriter |
+| [docs/22-operator-spa.md](docs/22-operator-spa.md) | Operator SPA + Mira checklist |
+| [docs/23-scim-outbound.md](docs/23-scim-outbound.md) | SCIM outbound (design-only) |
 
 ### Security, ops, program
 
