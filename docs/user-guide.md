@@ -1,6 +1,20 @@
 # LabSSO user guide
 
-This is the operator guide. It covers running LabSSO, writing the YAML file, and using the state APIs. Design history and contributor rules live elsewhere.
+How to run LabSSO, write the YAML file, and load or change state through the CLI, REST, and MCP. Design history and contributor rules live elsewhere.
+
+## Contents
+
+- [What LabSSO is](#what-labsso-is)
+- [Install and run](#install-and-run)
+- [How state works](#how-state-works)
+- [Write the YAML](#write-the-yaml)
+- [CLI loading](#cli-loading)
+- [REST state APIs](#rest-state-apis)
+- [MCP state tools](#mcp-state-tools)
+- [Talk to the IdP](#talk-to-the-idp)
+- [Day-to-day recipes](#day-to-day-recipes)
+- [What not to expect](#what-not-to-expect)
+- [Where to go next](#where-to-go-next)
 
 ## What LabSSO is
 
