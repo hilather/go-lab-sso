@@ -49,7 +49,7 @@ Status: **design (not implemented)**. Last reviewed: 2026-08-30.
 | [19-acceptance-criteria.md](19-acceptance-criteria.md) | Design and later-GA bar |
 | [21-standards-and-references.md](21-standards-and-references.md) | RFCs and MCP pin |
 | [known-limitations.md](known-limitations.md) | Honest residuals |
-| [skeptic-notes.md](skeptic-notes.md) | Sweep-1 blockers folded; sweep 2 pending |
+| [skeptic-notes.md](skeptic-notes.md) | Sweep-1 blockers folded; sweep 2 ACCEPT (2026-08-30) |
 
 ## Architecture decisions
 

@@ -188,4 +188,4 @@ Enabling a protocol, renaming a generic path, or changing `iss` derivation is a 
 
 - Whether `id_token` encryption is ever needed in lab (default: unsigned request objects, signed tokens only).
 - UserInfo vs token group placement per vendor beyond the clothes table.
-- SAML EntityID exactly equal to issuer (design default: yes).
+- SAML EntityID exactly equal to issuer (sweep 2: **yes**; a later ADR would be required to change it).

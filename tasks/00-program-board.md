@@ -31,7 +31,7 @@ INT-001 is **last**. Document the wiring in [docs/11-deployment.md](../docs/11-d
 
 - This repository on `main`.
 - ADRs 0001–0009 accepted for design.
-- Sweep 1 folded. Sweep 2 pending.
+- Sweep 1 folded. Sweep 2 ACCEPT (2026-08-30). See [docs/skeptic-notes.md](../docs/skeptic-notes.md).
 
 ### M1: Foundation (FND-001)
 

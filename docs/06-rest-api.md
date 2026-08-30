@@ -202,3 +202,4 @@ Path, method, operation ID, field meaning, default, error code, and status behav
 
 - Exact tunable path freeze vs encoding tunables as operations.
 - Session-list authorization (does `sso.read` see usernames?).
+- Session-knob concurrency (sweep 2): ephemeral knobs do not require snapshot `expectedRevision`; desired-state tunables do. See [skeptic-notes.md](skeptic-notes.md).

@@ -116,6 +116,6 @@ Adding a vendor value is additive. Removing or renaming one is breaking. Changin
 
 ## Open questions
 
-- Exact Entra overage threshold numeric default (Microsoft’s production threshold is not a lab requirement; pick a documented lab number in slice 5).
+- Exact Entra overage YAML field name (sweep 2: lab numeric default **200**; field name lands in CFG / slice 5). Microsoft’s production threshold is not a lab requirement.
 - Whether Okta `authServerId` is a YAML field or a clothes constant (`default` / `aus…` lab id).
 - Keycloak `realm` name source (`metadata.name` vs explicit field).

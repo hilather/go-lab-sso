@@ -10,6 +10,7 @@ This project will use [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 ### Design
 
 - Landed the LabSSO design plan: two-plane IdP (HTTPS data plane + REST/MCP management), fail-closed YAML `labsso.dev/v1alpha1`, vendor clothes (not hostname clones), native host 443, no LabNTP time bus, allow-list customer-config import, and sequential protocol slices.
+- Skeptic sweep 2 (2026-08-30, Keystone): review-plan **READY**, skeptic-plan-review sweep 1 **ACCEPT**. Sweep-2 questions written down in `docs/skeptic-notes.md`. No product invariant changed.
 - Status remains **design (not implemented)**. No Go module, no server image, no CI.
 
 ### Added

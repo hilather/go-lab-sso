@@ -48,7 +48,9 @@ Do not add a Dockerfile in this repo until FND/DEP that actually builds the bina
 
 ## Preflight (fail closed)
 
-Before compose up / serve that expects dest-443:
+Host-443 occupancy is an **integrator / `mcplab`** check (rule 15 class: every published host port; `internal/lab/ports.go` when INT-001 lands). The LabSSO process does **not** inspect host `:443` from inside an unprivileged container. Standalone `labsso serve` fail-closes on **its** listen address only.
+
+Before compose up that expects dest-443:
 
 1. Detect whether host TCP 443 is held by a **non-lab** process.
 2. If yes, **fail closed**. Do not silently switch ports.
@@ -58,7 +60,7 @@ Before compose up / serve that expects dest-443:
    - extra IP for `LAB_PUBLIC_HOST`, **or**
    - escape `LABSSO_HTTPS_PORT` (and warn that SUTs which cannot set dest port cannot follow).
 
-Lab-owned occupants (this stack’s previous LabSSO) may be replaced by the same compose project; do not treat “our own published 443” as a foreign occupant after a clean down.
+The appliance still **documents** that three-fix text and must emit it when it can detect a listen/publish failure that is not container-bind `EACCES`/`EPERM`. Lab-owned occupants (this stack’s previous LabSSO) may be replaced by the same compose project; do not treat “our own published 443” as a foreign occupant after a clean down.
 
 ## Issuer derivation
 
@@ -150,4 +152,4 @@ Container ports, CLI flags, `LABSSO_HTTPS_PORT`, `LAB_PUBLIC_HOST`, health paths
 ## Open questions
 
 - Exact host management port number in the integrator (18443 vs 18080-family). Design allows either 18443 or 8080-family.
-- Whether preflight lives in `mcplab` or `labsso` itself. Integrator last can own host occupancy; the appliance must still document the error text.
+- Host-443 occupancy preflight (sweep 2): lives in integrator / `mcplab` (rule 15 class; `internal/lab/ports.go` when INT-001 lands). `labsso` documents and emits the three-fix error text; it does not inspect host `:443` from inside the unprivileged container. `EACCES`/`EPERM` on the container bind is not occupancy.

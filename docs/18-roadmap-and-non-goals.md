@@ -67,5 +67,5 @@ Normative docs win over task summaries. Invariant changes need an ADR. Last-revi
 
 ## Open questions
 
-- Sweep 2 after this design lands ([skeptic-notes.md](skeptic-notes.md)).
+- Sweep 2 recorded 2026-08-30 ([skeptic-notes.md](skeptic-notes.md)): **ACCEPT**.
 - When implementation is scheduled (not this repository’s decision).

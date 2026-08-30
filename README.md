@@ -165,7 +165,7 @@ Full catalog: [docs/README.md](docs/README.md).
 | [docs/20-threat-model.md](docs/20-threat-model.md) | Lab-only threat model |
 | [docs/21-standards-and-references.md](docs/21-standards-and-references.md) | OIDC, OAuth2, SAML2, PKCE, MCP |
 | [docs/known-limitations.md](docs/known-limitations.md) | Honest residuals |
-| [docs/skeptic-notes.md](docs/skeptic-notes.md) | Sweep-1 blockers already folded |
+| [docs/skeptic-notes.md](docs/skeptic-notes.md) | Sweep-1 folded; sweep 2 ACCEPT |
 
 ### Architecture decisions
 

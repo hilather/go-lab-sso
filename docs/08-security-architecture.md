@@ -125,5 +125,5 @@ Weakening a default or broadening access is a security-significant breaking chan
 
 ## Open questions
 
-- Whether remote management requires TLS in the first implementation or loopback-only is enough.
-- Password PHC algorithm allow-list.
+- Remote management TLS (sweep 2): slice 1 is loopback HTTP; remote TLS is a later deployment choice.
+- PHC allow-list (sweep 2): unknown id fails closed; plaintext/unsalted reject; family precedent Argon2id; parameters in CFG at LOGIN-001.
