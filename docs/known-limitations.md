@@ -1,0 +1,41 @@
+# Known Limitations
+
+Status: design (not implemented)
+Last reviewed: 2026-08-30
+
+Honest residuals for the design phase and the first implementation slices. This is not a promise that v1 is “done enough for production SSO.”
+
+## Design phase
+
+- **No implementation.** There is no `labsso` binary, no image, and no CI.
+- **Sweep 2 pending** after these documents land. See [skeptic-notes.md](skeptic-notes.md).
+- Implementation is **not scheduled**.
+
+## First implementation (expected)
+
+- Single process, single replica. Runtime sessions and refresh handles are memory. Restart drops them.
+- No database. No multi-replica consensus.
+- OIDC first; SAML and WS-Fed later.
+- Generic clothes first; Entra/Okta opt-in; other vendors later.
+- MFA TOTP is a stub after knobs exist.
+- Operator SPA is a later slice; Mira review is after first UI, not now.
+- LDAP bind is not v1.
+- SCIM outbound is later; no SCIM inbound server.
+- No client-credentials or device-code grant in the first OIDC slice.
+- Implicit / hybrid rejected.
+- Redirect URIs are exact match; no wildcards.
+- Group overage Graph stub is minimal, not Microsoft Graph.
+- Okta overage **fails** the token rather than truncating.
+- No LabNTP time bus; skew repros belong on the SUT.
+- `LABSSO_HTTPS_PORT` escape breaks SUTs that cannot set dest port.
+- Management loopback-unauth is powerful on a shared workstation.
+- In-memory audit ring; no fail-closed external sink in v1.
+- Integrator pin is last and is not in this repository.
+
+## Explicit non-limitations (do not “fix” by weakening)
+
+- Dest-443 is intentional.
+- From-scratch Go is intentional.
+- One exact issuer is intentional.
+- File-ref secrets are intentional.
+- Data-plane login HTML is required and distinct from the SPA.
