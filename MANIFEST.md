@@ -1,25 +1,25 @@
 # Pack Manifest
 
-Status: through VEN-002; INT-001 documented; SCIM design-only
 Last reviewed: 2026-08-30
 
-This inventory is the design pack plus implementation through VEN-002. There is no generated OpenAPI or MCP manifest.
+Inventory of the design pack and the implemented appliance. There is no generated OpenAPI or MCP manifest file.
 
 ## Root guidance
 
-- `README.md`: product one-liner, status, why LabSSO, two-plane mermaid, YAML sketch, documentation map.
-- `START-HERE.md`: through VEN-002; integrator pin last; SCIM design-only.
+- `README.md`: product page, banner, quick start, YAML sketch, state APIs.
+- `START-HERE.md`: short onboarding path.
+- `docs/user-guide.md`: operator guide.
+- `docs/assets/header.svg`: README banner.
 - `go.mod`: module `github.com/hilather/go-lab-sso`, Go 1.26.
-- `Makefile`: real format/lint/test/parity/container targets; unused stay `false`.
+- `Makefile`: format/lint/test/parity/container targets; unused targets stay `false`.
 - `Dockerfile`: scratch image, UID 65532.
 - `.github/workflows/ci.yml`: jobs for implemented Make targets.
-- `docs/README.md`: full documentation catalog.
-- `AGENTS.md`: mandatory repository instructions.
-- `.cursor/rules/`: Cursor summaries of `AGENTS.md` (`repo-conventions.mdc`,
-  `go-tests.mdc`). Not vendored Origin/Cursor agent-skills.
+- `docs/README.md`: documentation catalog.
+- `AGENTS.md`: repository instructions for contributors.
+- `.cursor/rules/`: Cursor summaries of `AGENTS.md`. Not vendored agent-skills.
 - `CONTRIBUTING.md`: contribution workflow.
-- `SECURITY.md`: top-level security policy (GitHub private advisories).
-- `CHANGELOG.md`: curated unreleased history (design-only).
+- `SECURITY.md`: vulnerability reporting.
+- `CHANGELOG.md`: curated history.
 - `LICENSE`: Apache-2.0, Copyright 2026 hilather.
 
 ## Design documents
@@ -43,6 +43,7 @@ This inventory is the design pack plus implementation through VEN-002. There is 
 - `docs/21-standards-and-references.md`
 - `docs/known-limitations.md`
 - `docs/skeptic-notes.md`
+- `docs/user-guide.md`
 
 ## Architecture decisions
 
@@ -71,11 +72,9 @@ This inventory is the design pack plus implementation through VEN-002. There is 
 - `testdata/secrets/oidc/signing.pem` (JWT signing key, `0644`)
 - `testdata/secrets/labsso-token` (management bearer, `0644`)
 - `examples/compose.yaml` (runnable `443:10443`)
+- `docs/assets/header.svg`
 
 ## Explicitly absent (by design)
 
-- Dockerfile that claims to build a server (until Wave 5)
-- CI workflows (until Wave 5)
 - Vendored Origin/Cursor agent-skills
-- Header / social images
 - Fake CI / Go / Release badges

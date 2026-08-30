@@ -1,18 +1,17 @@
 # Documentation
 
-Operator front door: [README.md](../README.md). Onboarding: [START-HERE.md](../START-HERE.md). Agent rules: [AGENTS.md](../AGENTS.md).
+Start with the [README](../README.md) and the [user guide](user-guide.md). Contributor rules: [AGENTS.md](../AGENTS.md).
 
-This page is the catalog. Normative design documents win over task summaries.
-
-Status: **through VEN-002**. Last reviewed: 2026-08-30.
+This page is the catalog. When a design document and a task summary disagree, the design document wins.
 
 ## Root
 
 | Path | Role |
 |---|---|
-| [README.md](../README.md) | Product page, two planes, YAML sketch |
-| [START-HERE.md](../START-HERE.md) | Onboarding and definition of done |
-| [AGENTS.md](../AGENTS.md) | Mandatory contributor / agent instructions |
+| [README.md](../README.md) | Product page, quick start, YAML and state API sketch |
+| [START-HERE.md](../START-HERE.md) | Short onboarding path |
+| [user-guide.md](user-guide.md) | Operator guide: run, configure, load state |
+| [AGENTS.md](../AGENTS.md) | Contributor / agent instructions |
 | [CONTRIBUTING.md](../CONTRIBUTING.md) | PR workflow |
 | [SECURITY.md](../SECURITY.md) | Vulnerability reporting |
 | [CHANGELOG.md](../CHANGELOG.md) | Curated history |
@@ -35,9 +34,9 @@ Status: **through VEN-002**. Last reviewed: 2026-08-30.
 |---|---|
 | [06-rest-api.md](06-rest-api.md) | REST `/v1` |
 | [07-mcp-api.md](07-mcp-api.md) | MCP tools |
-| [22-operator-spa.md](22-operator-spa.md) | Operator SPA + Mira checklist |
+| [22-operator-spa.md](22-operator-spa.md) | Operator UI |
 | [09-customer-config-import.md](09-customer-config-import.md) | Allow-list rewriter |
-| [23-scim-outbound.md](23-scim-outbound.md) | SCIM outbound (design-only) |
+| [23-scim-outbound.md](23-scim-outbound.md) | SCIM outbound (design only) |
 
 ## Security, operations, program
 
@@ -46,12 +45,12 @@ Status: **through VEN-002**. Last reviewed: 2026-08-30.
 | [08-security-architecture.md](08-security-architecture.md) | Authn/z, trust boundaries |
 | [20-threat-model.md](20-threat-model.md) | Lab-only threat model |
 | [10-testing-strategy.md](10-testing-strategy.md) | Test layers |
-| [11-deployment.md](11-deployment.md) | Host 443, preflight, UID 65532 |
-| [18-roadmap-and-non-goals.md](18-roadmap-and-non-goals.md) | Sequential slices |
-| [19-acceptance-criteria.md](19-acceptance-criteria.md) | Design and later-GA bar |
+| [11-deployment.md](11-deployment.md) | Host 443, image, UID 65532 |
+| [18-roadmap-and-non-goals.md](18-roadmap-and-non-goals.md) | Roadmap and non-goals |
+| [19-acceptance-criteria.md](19-acceptance-criteria.md) | Acceptance bar |
 | [21-standards-and-references.md](21-standards-and-references.md) | RFCs and MCP pin |
-| [known-limitations.md](known-limitations.md) | Honest residuals |
-| [skeptic-notes.md](skeptic-notes.md) | Sweep-1 blockers folded; sweep 2 ACCEPT (2026-08-30) |
+| [known-limitations.md](known-limitations.md) | Known gaps |
+| [skeptic-notes.md](skeptic-notes.md) | Design review notes |
 
 ## Architecture decisions
 
@@ -71,16 +70,11 @@ Status: **through VEN-002**. Last reviewed: 2026-08-30.
 
 See [tasks/README.md](../tasks/README.md) and the [program board](../tasks/00-program-board.md).
 
-| Path | Role |
-|---|---|
-| [00-program-board.md](../tasks/00-program-board.md) | Ordered slices |
-| [reviewer-checklist.md](../tasks/reviewer-checklist.md) | Review bar |
-| [agent-task-template.md](../tasks/agent-task-template.md) | Task file template |
-
 ## Fixtures
 
 | Path | Role |
 |---|---|
 | [testdata/config/valid/minimal.yaml](../testdata/config/valid/minimal.yaml) | Minimal valid document |
-| [testdata/config/invalid/unknown-field.yaml](../testdata/config/invalid/unknown-field.yaml) | KnownFields reject |
-| [examples/compose.yaml](../examples/compose.yaml) | Runnable 443:10443 compose |
+| [testdata/config/invalid/unknown-field.yaml](../testdata/config/invalid/unknown-field.yaml) | Unknown-field reject |
+| [examples/compose.yaml](../examples/compose.yaml) | Compose with `443:10443` |
+| [docs/assets/header.svg](assets/header.svg) | README banner |
