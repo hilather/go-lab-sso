@@ -1,35 +1,39 @@
-# LabSSO
+<p align="center">
+  <img src="docs/assets/header.svg" alt="LabSSO — Laboratory Identity Provider" width="100%">
+</p>
 
-**Laboratory SSO Identity Provider** with OIDC/OAuth2, SP-initiated SAML, WS-Fed, and vendor-shaped clothes (Entra, Okta, Ping, ADFS, Google, Keycloak, IAM Identity Center).
+<p align="center">
+  <strong>A lab identity provider you can stand up, dress like a customer SSO, and reset.</strong>
+</p>
 
-Desired state is a versioned YAML file. Runtime mutations are ephemeral, revision-checked, and equally available over REST and MCP. Restart or reset returns the process to the mounted bootstrap.
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-4F8EF7.svg" alt="Apache-2.0"></a>
+  <a href="go.mod"><img src="https://img.shields.io/badge/Go-1.26-00ADD8.svg" alt="Go 1.26"></a>
+  <a href="docs/02-protocols.md"><img src="https://img.shields.io/badge/OIDC-OAuth2-2de2c5.svg" alt="OIDC / OAuth2"></a>
+  <a href="docs/02-protocols.md"><img src="https://img.shields.io/badge/SAML-WS--Fed-c9a36a.svg" alt="SAML / WS-Fed"></a>
+  <a href="docs/07-mcp-api.md"><img src="https://img.shields.io/badge/MCP-2026--07--28-6E56CF.svg" alt="MCP"></a>
+</p>
 
-[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+LabSSO is the SSO box for a test lab. Point a product under test at it the way you would point at Entra, Okta, Ping, ADFS, Google, Keycloak, or IAM Identity Center. Desired state lives in one YAML file. Live changes go through REST or MCP and disappear when you reset or restart.
 
-Status: **through VEN-002** · Module [`github.com/hilather/go-lab-sso`](https://github.com/hilather/go-lab-sso) · Image `ghcr.io/hilather/labsso` · Binary `labsso` · Language: **Go 1.26** · Integrator pin last (not from this repo) · SCIM design-only
+This is a lab appliance, not a production IdP and not a clone of `login.microsoftonline.com`.
 
-New here? Start with [START-HERE.md](START-HERE.md). Architecture, task lists, and ADRs are indexed in [Documentation](#documentation).
-
-Default ship through VEN-002 is implemented: generic OIDC, login/consent HTML, Entra/Okta plus remaining clothes, group overage, SAML, operator SPA, allow-list import, and WS-Fed. The integrator pin is last in `hilather/mcp-integration-lab`. SCIM is design-only.
+New here? Read the [user guide](docs/user-guide.md). Want the short version? Stay on this page.
 
 ---
 
-## Why LabSSO
-
-Labs need an Identity Provider they can **stand up**, **dress like a customer’s SSO**, and **reset**. LabSSO is that appliance:
+## What you get
 
 | You need | LabSSO does |
 |---|---|
-| A lab that looks like the customer’s IdP | One exact issuer plus vendor path/claim clothes (Entra, Okta, Ping, ADFS, …) |
-| Agents that can change users, clients, and sessions | One capability registry behind REST `/v1` and MCP `/mcp` |
-| HTTPS dest-443 the way SUTs already speak to an IdP | Host TCP 443 → container unprivileged listen (e.g. `:10443`) |
-| GitOps the lab | Read-only YAML bootstrap, drift export, reset-to-file |
-| Force a login, consent, or token failure | Documented agent tunables (force fail, expire session, pause token, …) |
-| Import a customer app registration | Allow-list rewriter → a `labsso.dev/v1alpha1` fragment the operator commits |
+| An IdP that looks like the customer's | One exact issuer, plus vendor-shaped paths and claims |
+| A way to add users, clients, and sessions from a script or an agent | One operation list behind REST `/v1` and MCP `/mcp` |
+| HTTPS on port 443, the way real apps talk to SSO | Host `443` maps to an unprivileged listener inside the container (`:10443`) |
+| Git as the source of truth | Read-only YAML bootstrap, export the drift, reset back to the file |
+| Forced login, consent, or token failures | Documented tunables |
+| A customer app registration to replay | Allow-list import that writes a YAML fragment you can commit |
 
-It is **not** a production IdP, a Keycloak / Dex / ORY wrap, or a hostname clone of `login.microsoftonline.com` / `okta.com`. It is **not** [go-jenkins-mcp](https://github.com/hilather/go-jenkins-mcp) (a separate product; never in-scope here).
-
-LabSSO belongs to the hilather lab-appliance family: [LabDNS](https://github.com/hilather/go-lab-dns), [LabMail](https://github.com/hilather/go-lab-maildev), [LabMITM](https://github.com/hilather/go-lab-mitmproxy), [TacLab](https://github.com/hilather/go-lab-tacacs-mcp), [LabLDAP](https://github.com/hilather/go-lab-ldap-mcp). The integrator pin in [mcp-integration-lab](https://github.com/hilather/mcp-integration-lab) is **last**, after this appliance exists.
+Same family as [LabDNS](https://github.com/hilather/go-lab-dns), [LabMail](https://github.com/hilather/go-lab-maildev), [LabMITM](https://github.com/hilather/go-lab-mitmproxy), [TacLab](https://github.com/hilather/go-lab-tacacs-mcp), and [LabLDAP](https://github.com/hilather/go-lab-ldap-mcp).
 
 ---
 
@@ -37,27 +41,73 @@ LabSSO belongs to the hilather lab-appliance family: [LabDNS](https://github.com
 
 ```mermaid
 flowchart LR
-  subgraph git [Deployment repository]
+  subgraph git [Git]
     YAML[desired YAML]
   end
   YAML -->|read-only mount| LabSSO
-  SUTs[SUTs and browsers<br/>HTTPS dest-443] --> Data[Data plane<br/>OIDC / SAML / WS-Fed / login HTML]
+  SUTs[Apps and browsers on HTTPS 443] --> Data[Data plane<br/>OIDC / SAML / WS-Fed / login pages]
   Data --> LabSSO
-  Agents[Humans and agents] -->|REST /v1 and MCP /mcp| Mgmt[Management plane]
+  Operators[People and agents] -->|REST /v1 and MCP /mcp| Mgmt[Management plane]
   Mgmt --> LabSSO
-  SPA[Operator SPA] -->|cookie plus CSRF| Mgmt
+  SPA[Operator UI] -->|cookie + CSRF| Mgmt
 ```
 
-- **Data plane:** HTTPS IdP (OIDC/OAuth2, SAML, WS-Fed, login + consent + MFA HTML). Must keep working if management is slow or unbound.
-- **Management plane:** REST `/v1` + MCP `/mcp` as **adapters over one operation registry**. Never MCP-by-proxying-REST. Operator SPA uses cookie + CSRF, never `localStorage` for tokens. `spec.ui.enabled: false` 404s the operator SPA only — it does not disable data-plane login pages.
+- **Data plane** — the IdP. Login pages, tokens, SAML, WS-Fed. Keeps working if management is down.
+- **Management plane** — REST and MCP over the same operations. The operator UI uses a cookie and a CSRF header. Tokens never go in `localStorage`. Turning `spec.ui.enabled` off hides the operator UI only, not the login pages.
 
 ---
 
-## Desired state (sketch)
+## Quick start
 
-LabSSO loads **one** `labsso.dev/v1alpha1` document. Unknown fields fail closed. IDs are user-supplied. Durations use Go syntax (`30s`, `5m`, `1h`) — bare numbers are rejected. Secrets are **file refs**, never inline.
+You need Go 1.26 and the repo secrets under `testdata/secrets/`.
 
-Copy [testdata/config/valid/minimal.yaml](testdata/config/valid/minimal.yaml):
+```bash
+git clone https://github.com/hilather/go-lab-sso.git
+cd go-lab-sso
+
+go run ./cmd/labsso validate --config testdata/config/valid/minimal.yaml
+go run ./cmd/labsso serve --config testdata/config/valid/minimal.yaml
+```
+
+That loads the YAML, resolves secret file refs, compiles an in-memory snapshot, and binds:
+
+- HTTPS IdP on `:10443`
+- Management on `:8080` (`/v1` and `/mcp`)
+
+Check it:
+
+```bash
+curl -sS http://127.0.0.1:8080/v1/health/ready
+curl -sS http://127.0.0.1:8080/v1/state | head
+```
+
+From loopback you can skip a bearer token. Remote callers send `Authorization: Bearer` using the file in `spec.access.tokenRef`.
+
+### Docker Compose
+
+```bash
+docker compose -f examples/compose.yaml up --build
+```
+
+Host `443` publishes to container `:10443`. Management stays on `127.0.0.1:8080`. The process runs as UID `65532` with a read-only root and no capabilities.
+
+If host 443 is already taken, stop the occupant, bind an extra IP for `LAB_PUBLIC_HOST`, or set `LABSSO_HTTPS_PORT` (apps that hard-code dest 443 will not follow that last option).
+
+---
+
+## Configure YAML
+
+LabSSO loads **one** document: `apiVersion: labsso.dev/v1alpha1`, `kind: LabSSO`.
+
+Rules that matter on day one:
+
+- Unknown fields are rejected.
+- You pick the IDs.
+- Durations use Go syntax (`30s`, `5m`, `1h`). Bare numbers fail.
+- Secrets are file paths (`tokenRef`, `passwordRef`, TLS refs). Inline passwords and PEMs fail.
+- The bootstrap file is read-only. The process never writes it.
+
+Minimal file, also at [testdata/config/valid/minimal.yaml](testdata/config/valid/minimal.yaml):
 
 ```yaml
 apiVersion: labsso.dev/v1alpha1
@@ -68,6 +118,8 @@ spec:
   listeners:
     https:
       address: ":10443"
+      certRef: testdata/secrets/tls/tls.crt
+      keyRef: testdata/secrets/tls/tls.key
     management:
       address: ":8080"
       restPath: /v1
@@ -84,6 +136,8 @@ spec:
       enabled: false
     wsfed:
       enabled: false
+  signing:
+    keyRef: testdata/secrets/oidc/signing.pem
   clients: []
   users: []
   groups: []
@@ -98,96 +152,177 @@ spec:
   ui:
     enabled: true
   access:
-    tokenRef: /run/secrets/labsso-token
+    tokenRef: testdata/secrets/labsso-token
 ```
 
-Schema rules: [docs/04-state-and-configuration.md](docs/04-state-and-configuration.md). Invalid unknown-field fixture: [testdata/config/invalid/unknown-field.yaml](testdata/config/invalid/unknown-field.yaml).
+Dress it like Entra by changing one field:
+
+```yaml
+profile:
+  vendor: entra
+  tenantId: "00000000-0000-0000-0000-000000000001"
+```
+
+Vendor values: `generic`, `entra`, `okta`, `ping`, `adfs`, `google`, `keycloak`, `iam-identity-center`.
+
+Full field list: [docs/04-state-and-configuration.md](docs/04-state-and-configuration.md). More walkthroughs: [user guide](docs/user-guide.md).
 
 ---
 
-## When implemented
+## State loading APIs
 
-Future CLI (not present in this repo):
+The file on disk is the bootstrap. Runtime state is an overlay in memory. Revisions tell you whether they still match.
+
+| Call | What it does |
+|---|---|
+| `labsso validate --config PATH` | Load, normalize, compile. Print `ok revision=sha256:…` |
+| `labsso canonicalize --config PATH` | Same, then print canonical YAML (secret values stay refs) |
+| `GET /v1/state` | Bootstrap revision, runtime revision, generation, drift flag, canonical doc |
+| `POST /v1/state:validate` | Decode a document without swapping live state |
+| `GET /v1/state:export` | Canonical YAML/JSON you can commit |
+| `POST /v1/changes:plan` | Diff + impact, no swap |
+| `POST /v1/changes:apply` | Plan, then atomic swap if the expected revision still matches |
+| `POST /v1/state:reset` | Re-read the mounted file. If the file is now bad, live state stays |
+
+MCP twins: `sso_state_get`, `sso_state_validate`, `sso_change_plan`, `sso_change_apply`, `sso_state_export`, `sso_state_reset`.
+
+Load pipeline:
 
 ```text
-labsso validate --config lab.yaml
-labsso canonicalize --config lab.yaml --format yaml
-labsso serve --config lab.yaml
+read file
+  → reject unknown fields
+  → decode labsso.dev/v1alpha1
+  → resolve secret file refs into memory
+  → normalize defaults
+  → validate cross-references
+  → compile an immutable snapshot
+  → compute bootstrap + runtime revisions
+  → bind listeners
 ```
 
-Hardened image: scratch, unprivileged UID **65532**, read-only root, `cap_drop: ALL`. Host publish: **TCP 443** → container `:10443`. Management stays on a high port (e.g. host 18443 or 8080-family). See [docs/11-deployment.md](docs/11-deployment.md) and [examples/compose.yaml](examples/compose.yaml).
+A bad bootstrap file does not listen.
 
-MCP protocol pin: **2026-07-28**, official `go-sdk` **v1.7.0**. `spec.management.mcp.allowLegacyClients: true` is required for MCPJungle.
+### Read current state
+
+```bash
+curl -sS http://127.0.0.1:8080/v1/state
+```
+
+You get `bootstrapRevision`, `runtimeRevision`, `generation`, `drifted`, and `canonical`.
+
+### Validate a document without applying it
+
+```bash
+curl -sS -X POST http://127.0.0.1:8080/v1/state:validate \
+  -H 'content-type: application/json' \
+  --data-binary @- <<'JSON'
+{"document": {"apiVersion": "labsso.dev/v1alpha1", "kind": "LabSSO"}}
+JSON
+```
+
+### Plan and apply a change
+
+Desired-state writes need an expected revision (`expectedRevision`, `If-Match`, or `X-LabSSO-Expected-Revision`). Optional `Idempotency-Key` is remembered in a small in-memory list.
+
+```bash
+REV=$(curl -sS http://127.0.0.1:8080/v1/state | python3 -c 'import json,sys; print(json.load(sys.stdin)["runtimeRevision"])')
+
+curl -sS -X POST http://127.0.0.1:8080/v1/changes:plan \
+  -H 'content-type: application/json' \
+  --data-binary @- <<JSON
+{
+  "expectedRevision": "$REV",
+  "reason": "add a public client",
+  "operations": [
+    {
+      "op": "add",
+      "target": {"kind": "client", "id": "app-1"},
+      "value": {
+        "id": "app-1",
+        "clientId": "app-1",
+        "redirectURIs": ["https://sut.example.net/callback"],
+        "public": true
+      }
+    }
+  ]
+}
+JSON
+
+curl -sS -X POST http://127.0.0.1:8080/v1/changes:apply \
+  -H 'content-type: application/json' \
+  -H "If-Match: $REV" \
+  --data-binary @- <<JSON
+{
+  "expectedRevision": "$REV",
+  "reason": "add a public client",
+  "operations": [
+    {
+      "op": "add",
+      "target": {"kind": "client", "id": "app-1"},
+      "value": {
+        "id": "app-1",
+        "clientId": "app-1",
+        "redirectURIs": ["https://sut.example.net/callback"],
+        "public": true
+      }
+    }
+  ]
+}
+JSON
+```
+
+### Export drift and reset
+
+```bash
+curl -sS 'http://127.0.0.1:8080/v1/state:export?format=yaml'
+curl -sS -X POST http://127.0.0.1:8080/v1/state:reset
+```
+
+Reset never writes the bootstrap file. Restart has the same effect as reset: memory overlay is gone, the mounted YAML is loaded again.
+
+Details: [docs/04-state-and-configuration.md](docs/04-state-and-configuration.md), [docs/06-rest-api.md](docs/06-rest-api.md), [docs/07-mcp-api.md](docs/07-mcp-api.md).
+
+---
+
+## CLI
+
+```text
+labsso validate     --config PATH [--base-dir DIR]
+labsso canonicalize --config PATH [--format yaml|json] [--base-dir DIR]
+labsso serve        --config PATH [--base-dir DIR]
+                    [--https-listen ADDR] [--management-listen ADDR|off]
+                    [--shutdown-timeout 5s] [--pid-file PATH]
+labsso healthcheck  [--url http://127.0.0.1:8080/v1/health/ready]
+labsso version
+```
+
+`--https-listen=off` is rejected. The IdP listener is required.
+
+---
+
+## What is implemented
+
+OIDC/OAuth2 with PKCE, login and consent pages, vendor clothes for the full vendor list, group overage, SP-initiated SAML, WS-Fed, operator UI, allow-list import, REST, and MCP.
+
+Not in this repo: wiring into the shared lab compose stack (that lives in `hilather/mcp-integration-lab`). SCIM outbound is documented only.
 
 ---
 
 ## Documentation
 
-Full catalog: [docs/README.md](docs/README.md).
-
-### Start here
-
-| Document | Role |
+| Document | What it is |
 |---|---|
-| [START-HERE.md](START-HERE.md) | This repo is the design; read architecture then the program board |
-| [AGENTS.md](AGENTS.md) | Mandatory rules for humans and AI agents |
-| [CONTRIBUTING.md](CONTRIBUTING.md) | Workflow and review bar |
-| [SECURITY.md](SECURITY.md) | Vulnerability reporting |
-| [CHANGELOG.md](CHANGELOG.md) | Curated history |
-| [MANIFEST.md](MANIFEST.md) | Pack inventory |
-
-### Architecture
-
-| Document | Topic |
-|---|---|
+| [docs/user-guide.md](docs/user-guide.md) | How to run it, write YAML, and use the state APIs |
+| [START-HERE.md](START-HERE.md) | Short onboarding path |
+| [docs/README.md](docs/README.md) | Full catalog |
 | [docs/01-architecture.md](docs/01-architecture.md) | Two planes, snapshot, issuer, ports, TLS |
-| [docs/02-protocols.md](docs/02-protocols.md) | OIDC/OAuth2, SAML, WS-Fed |
-| [docs/03-vendor-profiles.md](docs/03-vendor-profiles.md) | Clothes table |
-| [docs/04-state-and-configuration.md](docs/04-state-and-configuration.md) | YAML, revisions, plan/apply/export/reset |
-| [docs/05-control-plane-and-parity.md](docs/05-control-plane-and-parity.md) | Shared capability registry |
+| [docs/04-state-and-configuration.md](docs/04-state-and-configuration.md) | YAML schema, revisions, plan/apply/export/reset |
+| [docs/06-rest-api.md](docs/06-rest-api.md) | REST `/v1` |
+| [docs/07-mcp-api.md](docs/07-mcp-api.md) | MCP tools |
+| [docs/11-deployment.md](docs/11-deployment.md) | Host 443, image, compose |
+| [CHANGELOG.md](CHANGELOG.md) | What changed |
 
-### Interfaces
-
-| Document | Topic |
-|---|---|
-| [docs/06-rest-api.md](docs/06-rest-api.md) | Planned REST `/v1` |
-| [docs/07-mcp-api.md](docs/07-mcp-api.md) | Planned MCP tools |
-| [docs/09-customer-config-import.md](docs/09-customer-config-import.md) | Allow-list rewriter |
-| [docs/22-operator-spa.md](docs/22-operator-spa.md) | Operator SPA + Mira checklist |
-| [docs/23-scim-outbound.md](docs/23-scim-outbound.md) | SCIM outbound (design-only) |
-
-### Security, ops, program
-
-| Document | Topic |
-|---|---|
-| [docs/08-security-architecture.md](docs/08-security-architecture.md) | Auth, trust boundaries, secrets |
-| [docs/10-testing-strategy.md](docs/10-testing-strategy.md) | Test layers when code exists |
-| [docs/11-deployment.md](docs/11-deployment.md) | Host 443, preflight, UID 65532 |
-| [docs/18-roadmap-and-non-goals.md](docs/18-roadmap-and-non-goals.md) | Sequential slices and non-goals |
-| [docs/19-acceptance-criteria.md](docs/19-acceptance-criteria.md) | Design-then-GA bar |
-| [docs/20-threat-model.md](docs/20-threat-model.md) | Lab-only threat model |
-| [docs/21-standards-and-references.md](docs/21-standards-and-references.md) | OIDC, OAuth2, SAML2, PKCE, MCP |
-| [docs/known-limitations.md](docs/known-limitations.md) | Honest residuals |
-| [docs/skeptic-notes.md](docs/skeptic-notes.md) | Sweep-1 folded; sweep 2 ACCEPT |
-
-### Architecture decisions
-
-- [0001 Use Go](docs/adr/0001-use-go.md)
-- [0002 From scratch, not Keycloak](docs/adr/0002-from-scratch-not-keycloak.md)
-- [0003 Ephemeral state and GitOps](docs/adr/0003-ephemeral-state-and-gitops.md)
-- [0004 Shared capability registry](docs/adr/0004-shared-capability-registry.md)
-- [0005 Vendor clothes, not hostnames](docs/adr/0005-vendor-clothes-not-hostnames.md)
-- [0006 Native host 443](docs/adr/0006-native-host-443.md)
-- [0007 No LabNTP time bus](docs/adr/0007-no-labntp-time-bus.md)
-- [0008 Import allow-list rewriter](docs/adr/0008-import-allowlist-rewriter.md)
-- [0009 Data-plane login UI](docs/adr/0009-data-plane-login-ui.md)
-
-### Task lists and program board
-
-- [tasks/README.md](tasks/README.md)
-- [tasks/00-program-board.md](tasks/00-program-board.md)
-- [tasks/agent-task-template.md](tasks/agent-task-template.md)
-- [tasks/reviewer-checklist.md](tasks/reviewer-checklist.md)
+Architecture notes and ADRs stay under [docs/](docs/). Contributor rules live in [AGENTS.md](AGENTS.md) and [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
