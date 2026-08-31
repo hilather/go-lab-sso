@@ -1,6 +1,6 @@
 # Known Limitations
 
-Status: through VEN-002 implemented; SCIM design-only; integrator pin not in this repo
+Status: through VEN-003 implemented; SCIM design-only; integrator pin not in this repo
 Last reviewed: 2026-08-30
 
 Honest residuals for the design phase and the first implementation slices. This is not a promise that v1 is “done enough for production SSO.”
@@ -29,6 +29,7 @@ Honest residuals for the design phase and the first implementation slices. This 
 - Management loopback-unauth is powerful on a shared workstation.
 - In-memory audit ring; no fail-closed external sink in v1.
 - Integrator pin is last and is not in this repository.
+- Duo / SiteMinder live `iss` suffixes (`/oidc/{appId}`, `/affwebservices/CASSO/oidc/{client}`) and Shibboleth EntityID `/idp/shibboleth` are not copied; LabSSO keeps the exact issuer. Live Duo SAML EntityID is often the metadata URL; LabSSO still uses the exact issuer.
 
 ## Explicit non-limitations (do not “fix” by weakening)
 

@@ -34,11 +34,14 @@ func (p *Provider) SetWarn(fn func(string)) { p.warn = fn }
 func (p *Provider) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /.well-known/openid-configuration", p.discovery)
-	mux.HandleFunc("GET /{tid}/v2.0/.well-known/openid-configuration", p.entraDiscovery)
+	mux.HandleFunc("GET /{a}/{b}/.well-known/openid-configuration", p.twoSegmentDiscovery)
+	mux.HandleFunc("GET /affwebservices/CASSO/oidc/{name}/.well-known/openid-configuration", p.siteminderDiscovery)
 	for _, path := range []string{
 		"/oauth2/authorize", "/oauth2/v2.0/authorize", "/oauth2/default/v1/authorize",
 		"/as/authorization.oauth2", "/adfs/oauth2/authorize", "/o/oauth2/v2/auth",
 		"/realms/{realm}/protocol/openid-connect/auth", "/authorize",
+		"/oidc/{name}/authorize", "/affwebservices/CASSO/oidc/{name}/authorize",
+		"/idp/profile/oidc/authorize",
 	} {
 		mux.HandleFunc("GET "+path, p.requirePath(func(c snapshot.Clothes) string { return c.AuthorizePath }, p.authorize))
 	}
@@ -46,6 +49,8 @@ func (p *Provider) Handler() http.Handler {
 		"/oauth2/token", "/oauth2/v2.0/token", "/oauth2/default/v1/token",
 		"/as/token.oauth2", "/adfs/oauth2/token", "/token",
 		"/realms/{realm}/protocol/openid-connect/token",
+		"/oidc/{name}/token", "/affwebservices/CASSO/oidc/{name}/token",
+		"/idp/profile/oidc/token",
 	} {
 		mux.HandleFunc("POST "+path, p.requirePath(func(c snapshot.Clothes) string { return c.TokenPath }, p.token))
 	}
@@ -53,6 +58,8 @@ func (p *Provider) Handler() http.Handler {
 		"/oauth2/jwks", "/oauth2/v2.0/jwks", "/oauth2/default/v1/jwks",
 		"/pf/JWKS", "/adfs/discovery/keys", "/oauth2/v3/certs",
 		"/realms/{realm}/protocol/openid-connect/certs", "/jwks",
+		"/oidc/{name}/jwks", "/affwebservices/CASSO/oidc/{name}/jwks",
+		"/idp/profile/oidc/keyset",
 	} {
 		mux.HandleFunc("GET "+path, p.requirePath(func(c snapshot.Clothes) string { return c.JWKSPath }, p.jwks))
 	}
@@ -60,6 +67,8 @@ func (p *Provider) Handler() http.Handler {
 		"/oauth2/userinfo", "/oauth2/v2.0/userinfo", "/oauth2/default/v1/userinfo",
 		"/idp/userinfo.openid", "/adfs/userinfo", "/oauth2/v3/userinfo",
 		"/realms/{realm}/protocol/openid-connect/userinfo", "/userinfo",
+		"/oidc/{name}/userinfo", "/affwebservices/CASSO/oidc/{name}/userinfo",
+		"/idp/profile/oidc/userinfo",
 	} {
 		mux.HandleFunc("GET "+path, p.requirePath(func(c snapshot.Clothes) string { return c.UserInfoPath }, p.userinfo))
 	}
@@ -67,6 +76,8 @@ func (p *Provider) Handler() http.Handler {
 		"/oauth2/logout", "/oauth2/v2.0/logout", "/oauth2/default/v1/logout",
 		"/idp/startSLO.ping", "/adfs/oauth2/logout", "/logout",
 		"/realms/{realm}/protocol/openid-connect/logout",
+		"/oidc/{name}/logout", "/affwebservices/CASSO/oidc/{name}/logout",
+		"/idp/profile/oidc/logout",
 	} {
 		mux.HandleFunc("GET "+path, p.requirePath(func(c snapshot.Clothes) string { return c.LogoutPath }, p.logout))
 	}
@@ -140,12 +151,29 @@ func (p *Provider) discovery(w http.ResponseWriter, r *http.Request) {
 	p.writeDiscovery(w, snap)
 }
 
-func (p *Provider) entraDiscovery(w http.ResponseWriter, r *http.Request) {
+func (p *Provider) twoSegmentDiscovery(w http.ResponseWriter, r *http.Request) {
 	snap := p.snapOIDC(w)
 	if snap == nil {
 		return
 	}
-	if snap.Clothes.Vendor != "entra" || r.PathValue("tid") != snap.Clothes.TenantID {
+	c := clothesOf(snap)
+	a, b := r.PathValue("a"), r.PathValue("b")
+	ok := (c.Vendor == "entra" && a == c.TenantID && b == "v2.0") ||
+		(c.Vendor == "duo" && a == "oidc" && b == c.Realm)
+	if !ok {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	p.writeDiscovery(w, snap)
+}
+
+func (p *Provider) siteminderDiscovery(w http.ResponseWriter, r *http.Request) {
+	snap := p.snapOIDC(w)
+	if snap == nil {
+		return
+	}
+	c := clothesOf(snap)
+	if c.Vendor != "siteminder" || r.PathValue("name") != c.Realm {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}

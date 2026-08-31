@@ -1,6 +1,6 @@
 # Standards and References
 
-Status: design (not implemented)
+Status: through VEN-003 implemented; SCIM design-only
 Owners: Protocols, MCP
 Last reviewed: 2026-08-30
 
@@ -72,7 +72,7 @@ Prefer Go standard library. Hide protocol SDKs behind adapters.
 
 ## Vendor clothes (informative, not hostname targets)
 
-Documentation from Microsoft Entra, Okta, Ping, ADFS, Google, Keycloak, and AWS IAM Identity Center informs **path and claim clothes** only. LabSSO does not implement those vendors’ control planes and does not serve their hostnames.
+Documentation from Microsoft Entra, Okta, Ping, ADFS, Google, Keycloak, AWS IAM Identity Center, Duo SSO, Broadcom SiteMinder, and Shibboleth IdP informs **path and claim clothes** only. LabSSO does not implement those vendors’ control planes and does not serve their hostnames.
 
 ## Review triggers
 

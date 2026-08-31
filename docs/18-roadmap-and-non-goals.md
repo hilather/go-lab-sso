@@ -1,9 +1,9 @@
 # Roadmap and Non-Goals
 
-Status: through VEN-002 implemented; INT-001 documented here; SCIM-001 design-only
+Status: through VEN-003 implemented; INT-001 documented here; SCIM-001 design-only
 Owners: Architecture, Program
 Last reviewed: 2026-08-30
-Related ADRs: 0001–0009
+Related ADRs: 0001–0010
 
 ## Problem statement
 
@@ -22,8 +22,9 @@ Implementation is opened at FND-001. Remaining slice order is:
 7. **Operator SPA** — **Implemented (UI-001).** REST+MCP+UI parity. First SPA ready for Mira (`docs/22-operator-spa.md`).
 8. **Customer-config import** — **Implemented (IMP-001).** Allow-list rewriter.
 9. **More vendor clothes** — **Implemented (VEN-002).** ping, adfs, google, keycloak, iam-identity-center. WS-Fed with ADFS clothes.
-10. **SCIM outbound client** — design-only ([docs/23-scim-outbound.md](23-scim-outbound.md)); may trail M6.
-11. **Integrator last** — documented here ([docs/11-deployment.md](11-deployment.md)); implement the pin in `hilather/mcp-integration-lab`, not from this repo.
+10. **Duo, SiteMinder, Shibboleth clothes** — **Implemented (VEN-003).** OIDC paths plus SAML URL clothes. [ADR 0010](adr/0010-duo-siteminder-shibboleth-clothes.md).
+11. **SCIM outbound client** — design-only ([docs/23-scim-outbound.md](23-scim-outbound.md)); may trail M6.
+12. **Integrator last** — documented here ([docs/11-deployment.md](11-deployment.md)); implement the pin in `hilather/mcp-integration-lab`, not from this repo.
 
 Default ship after slice 3: generic OIDC + login HTML. Entra/Okta clothes are opt-in YAML (`spec.profile.vendor`).
 

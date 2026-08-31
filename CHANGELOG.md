@@ -12,7 +12,8 @@ This project will use [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Product page polish: illustrated header banner, CI badge, and a user-guide table of contents.
 - Operator docs: README rewrite with header banner, YAML and state-API quick starts, and `docs/user-guide.md`. Onboarding no longer talks like the CLI is future work.
 - VEN-001: Entra and Okta clothes on the exact issuer (`internal/vendor`, snapshot `Clothes`, path dispatch). Optional `spec.profile.tenantId` (compile default, not Normalized). Cookie names `labsso_entra` / `labsso_okta`. Entra `oid`/`tid`/`ver` on id_token and userinfo. Entra token errors add `error_codes` + `trace_id`. `POST /v1/tunables/vendor:swap` / `sso_tunable_vendor_swap` merges profile and purges protocol memory (not pause/force-fail/inject).
-- VEN-002: Remaining enum clothes (`ping`, `adfs`, `google`, `keycloak`, `iam-identity-center`) on the exact issuer. Keycloak realm = `metadata.name` (empty → `lab`). WS-Fed passive (`internal/wsfed`): `wsfed.enabled: false` 404s; metadata EntityID = issuer; `wa=wsignin1.0` auto-POST `wresult`/`wctx` to `wreply`; ADFS path clothes. Forbidden hosts include `accounts.google.com`, `pingidentity.com`, `sso.amazonaws.com`. Duo / SiteMinder / Shibboleth stay out of the enum.
+- VEN-002: Remaining enum clothes (`ping`, `adfs`, `google`, `keycloak`, `iam-identity-center`) on the exact issuer. Keycloak realm = `metadata.name` (empty → `lab`). WS-Fed passive (`internal/wsfed`): `wsfed.enabled: false` 404s; metadata EntityID = issuer; `wa=wsignin1.0` auto-POST `wresult`/`wctx` to `wreply`; ADFS path clothes. Forbidden hosts include `accounts.google.com`, `pingidentity.com`, `sso.amazonaws.com`.
+- VEN-003: `duo`, `siteminder`, `shibboleth` clothes on the exact issuer ([ADR 0010](docs/adr/0010-duo-siteminder-shibboleth-clothes.md)). OIDC paths plus SAML URL clothes (`metadata.name` path segment). Entra/Duo share a two-segment well-known dispatcher. Forbidden hosts include `duosecurity.com`, `duo.com`, `shibboleth.net`. Live issuer suffixes and Duo metadata-as-EntityID are not copied.
 - IMP-001: Allow-list import (`entra-manifest` | `okta-app` | `saml-metadata` | `oidc-client`). `sso.import.plan` / `sso.import.apply`. `imported.unmapped` in the response. `redirect:rewrite`.
 - INT-001: Integrator pin documented in `docs/11-deployment.md`. Do not implement compose from this repo.
 - SCIM-001: Design-only outbound client (`docs/23-scim-outbound.md`). No inbound server. No SCIM YAML or catalog rows.
@@ -48,7 +49,7 @@ This project will use [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - YAML sketch `certRef`/`keyRef`/`signing.keyRef` fields.
 - README, START-HERE, AGENTS, SECURITY, CONTRIBUTING, MANIFEST, Apache-2.0 LICENSE.
 - Normative docs `docs/01`–`docs/11`, `docs/18`–`docs/21`, known limitations, skeptic notes.
-- ADRs 0001–0009.
+- ADRs 0001–0010.
 - Program board and reviewer/agent templates.
 - YAML fixtures and a non-runnable Compose sketch.
 

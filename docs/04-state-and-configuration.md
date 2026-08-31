@@ -1,6 +1,6 @@
 # State and Configuration
 
-Status: through VEN-002 implemented
+Status: through VEN-003 implemented
 Owners: Configuration, Application
 Last reviewed: 2026-08-30
 Related ADRs: 0003, 0008
@@ -114,7 +114,7 @@ Exact issuer string. If `LAB_PUBLIC_HOST` is set, the compiled issuer must match
 
 ### `spec.profile.vendor`
 
-Enum: `generic` | `entra` | `okta` | `ping` | `adfs` | `google` | `keycloak` | `iam-identity-center`. All enum values are implemented (VEN-002). Unknown values reject at decode. Keycloak realm is `metadata.name` (required). `vendor.Resolve` falls back to `lab` only when called with an empty name.
+Enum: `generic` | `entra` | `okta` | `ping` | `adfs` | `google` | `keycloak` | `iam-identity-center` | `duo` | `siteminder` | `shibboleth`. All enum values are implemented (VEN-003). Unknown values reject at decode. `metadata.name` is the path segment for Keycloak realm, Duo app id, and SiteMinder client name (required on the document). `vendor.Resolve` falls back to `lab` only when called with an empty name.
 
 ### `spec.profile.tenantId`
 
@@ -122,7 +122,7 @@ Optional. Omitted or empty stays empty in Canonical / export. Compiler uses `000
 
 ### `spec.protocols`
 
-Booleans `oidc.enabled`, `saml.enabled`, `wsfed.enabled`. Disabled protocols do not register data-plane routes. `saml.enabled: false` 404s `GET /saml/metadata` and `/saml/sso`. `wsfed.enabled: false` 404s `/wsfed/*` and ADFS WS-Fed clothes paths.
+Booleans `oidc.enabled`, `saml.enabled`, `wsfed.enabled`. Routes register; disabled protocols **404** at the handler. `saml.enabled: false` 404s every SAML route (generic `/saml/*` and clothed `/idp/…`, `/saml2/…`, `/affwebservices/…`). `wsfed.enabled: false` 404s `/wsfed/*` and ADFS WS-Fed clothes paths.
 
 ### `spec.clients`
 

@@ -17,11 +17,15 @@ var ForbiddenHosts = []string{
 	"accounts.google.com",
 	"pingidentity.com",
 	"sso.amazonaws.com",
+	"duosecurity.com",
+	"duo.com",
+	"shibboleth.net",
 }
 
 func Implemented(vendor string) bool {
 	switch vendor {
-	case "generic", "entra", "okta", "ping", "adfs", "google", "keycloak", "iam-identity-center":
+	case "generic", "entra", "okta", "ping", "adfs", "google", "keycloak", "iam-identity-center",
+		"duo", "siteminder", "shibboleth":
 		return true
 	default:
 		return false
@@ -102,6 +106,39 @@ func Resolve(vendor, tenantID, realm string) (snapshot.Clothes, error) {
 		base.UserInfoPath = "/userinfo"
 		base.LogoutPath = "/logout"
 		base.HTMLTitle, base.HTMLHeading, base.ConsentTitle = "LabSSO IAM IC login", "Sign in", "LabSSO IAM IC consent"
+	case "duo":
+		prefix := "/oidc/" + realm
+		base.CookieName = "labsso_duo"
+		base.AuthorizePath = prefix + "/authorize"
+		base.TokenPath = prefix + "/token"
+		base.JWKSPath = prefix + "/jwks"
+		base.UserInfoPath = prefix + "/userinfo"
+		base.LogoutPath = prefix + "/logout"
+		base.SAMLMetadataPath = "/saml2/sp/" + realm + "/metadata"
+		base.SAMLSSOPath = "/saml2/sp/" + realm + "/sso"
+		base.HTMLTitle, base.HTMLHeading, base.ConsentTitle = "LabSSO Duo login", "Sign in", "LabSSO Duo consent"
+	case "siteminder":
+		prefix := "/affwebservices/CASSO/oidc/" + realm
+		base.CookieName = "labsso_siteminder"
+		base.AuthorizePath = prefix + "/authorize"
+		base.TokenPath = prefix + "/token"
+		base.JWKSPath = prefix + "/jwks"
+		base.UserInfoPath = prefix + "/userinfo"
+		base.LogoutPath = prefix + "/logout"
+		base.SAMLMetadataPath = "/affwebservices/public/saml2meta"
+		base.SAMLSSOPath = "/affwebservices/public/saml2sso"
+		base.HTMLTitle, base.HTMLHeading, base.ConsentTitle = "LabSSO SiteMinder login", "Sign in", "LabSSO SiteMinder consent"
+	case "shibboleth":
+		base.CookieName = "labsso_shibboleth"
+		base.AuthorizePath = "/idp/profile/oidc/authorize"
+		base.TokenPath = "/idp/profile/oidc/token"
+		base.JWKSPath = "/idp/profile/oidc/keyset"
+		base.UserInfoPath = "/idp/profile/oidc/userinfo"
+		base.LogoutPath = "/idp/profile/oidc/logout"
+		base.SAMLMetadataPath = "/idp/shibboleth"
+		base.SAMLSSOPath = "/idp/profile/SAML2/Redirect/SSO"
+		base.SAMLSSOPOSTPath = "/idp/profile/SAML2/POST/SSO"
+		base.HTMLTitle, base.HTMLHeading, base.ConsentTitle = "LabSSO Shibboleth login", "Sign in", "LabSSO Shibboleth consent"
 	default:
 		base.Vendor = "generic"
 		base.CookieName = "labsso_login"
@@ -117,6 +154,15 @@ func Resolve(vendor, tenantID, realm string) (snapshot.Clothes, error) {
 	if base.WSFedMetadataPath == "" {
 		base.WSFedMetadataPath = "/wsfed/metadata"
 		base.WSFedPassivePath = "/wsfed/passive"
+	}
+	if base.SAMLMetadataPath == "" {
+		base.SAMLMetadataPath = "/saml/metadata"
+	}
+	if base.SAMLSSOPath == "" {
+		base.SAMLSSOPath = "/saml/sso"
+	}
+	if base.SAMLSSOPOSTPath == "" {
+		base.SAMLSSOPOSTPath = base.SAMLSSOPath
 	}
 	return base, nil
 }

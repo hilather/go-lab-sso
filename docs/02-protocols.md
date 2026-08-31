@@ -1,9 +1,9 @@
 # Protocols
 
-Status: through VEN-002 (OIDC + login + clothes + overage + SAML + WS-Fed)
+Status: through VEN-003 (OIDC + login + clothes + overage + SAML + WS-Fed)
 Owners: Protocols, Application
 Last reviewed: 2026-08-30
-Related ADRs: 0002, 0005, 0009
+Related ADRs: 0002, 0005, 0009, 0010
 
 ## Problem statement
 
@@ -18,6 +18,7 @@ Protocols land as **sequential slices**. Do not start SAML before OIDC works. Do
 - Required data-plane login + consent + MFA HTML (MFA knobs: `never` | `always` | `force-fail`; TOTP stub later).
 - SAML 2.0 SP-initiated SSO + IdP metadata after group overage.
 - WS-Fed passive profile with ADFS clothes (VEN-002).
+- Duo / SiteMinder / Shibboleth clothes including SAML URL clothes (VEN-003).
 - Vendor clothes change paths, claims, cookies, and errors — not the protocol state machine.
 
 ## Non-goals
@@ -41,8 +42,9 @@ Protocols land as **sequential slices**. Do not start SAML before OIDC works. Do
 7. Operator SPA with REST+MCP+UI parity (Mira reviews after first UI implementation — do not build UI now).
 8. Customer-config import (allow-list rewriter).
 9. More vendor clothes: ping, adfs, google, keycloak, iam-identity-center. WS-Fed with ADFS clothes.
-10. SCIM outbound client (later).
-11. Integrator last in mcp-integration-lab.
+10. Duo, SiteMinder, Shibboleth clothes including SAML URL clothes (VEN-003).
+11. SCIM outbound client (later).
+12. Integrator last in mcp-integration-lab.
 
 Default ship: `spec.protocols.oidc.enabled: true`. SAML and WS-Fed default **false**.
 
@@ -145,10 +147,10 @@ Required. Distinct from the operator SPA. See [ADR 0009](adr/0009-data-plane-log
 
 ## SAML 2.0 (SAML-001)
 
-SP-initiated SSO on the exact issuer. `saml.enabled: false` (default) 404s `/saml/*`.
+SP-initiated SSO on the exact issuer. `saml.enabled: false` (default) 404s **all** SAML routes (generic and clothed).
 
-- IdP metadata: `GET /saml/metadata`. EntityID = exact issuer. Generic path now; VEN-002 may clothe it.
-- `AuthnRequest` via HTTP-Redirect (deflate+base64) or HTTP-POST (base64) at `GET|POST /saml/sso`.
+- IdP metadata: `GET /saml/metadata` (generic and most clothes). EntityID = exact issuer. Duo / SiteMinder / Shibboleth clothe metadata and SSO URLs ([docs/03-vendor-profiles.md](03-vendor-profiles.md)).
+- `AuthnRequest` via HTTP-Redirect (deflate+base64) or HTTP-POST (base64) at the active SSO path (`GET|POST /saml/sso` generic; Shibboleth uses distinct Redirect vs POST paths).
 - Login is **not** drop-in on OIDC `CompleteLogin`. Pending records carry `Protocol` (`oidc` | `saml` | `wsfed`). Same `/login` `/consent` HTML; completion branches: OIDC → code redirect; SAML → signed assertion auto-POST to ACS; WS-Fed → `wa`/`wresult`/`wctx` auto-POST to `wreply`.
 - Response via HTTP-POST with a signed assertion (`goxmldsig` enveloped signature on XML **we generate**; hostile-input dsig is not hand-rolled).
 - Generic attributes: `uid`, `mail`, `groups`.

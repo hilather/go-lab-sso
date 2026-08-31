@@ -1,13 +1,14 @@
 # Pack Manifest
 
-Last reviewed: 2026-08-30
+Status: through VEN-003; INT-001 documented; SCIM design-only
+Last reviewed: 2026-08-31
 
 Inventory of the design pack and the implemented appliance. There is no generated OpenAPI or MCP manifest file.
 
 ## Root guidance
 
 - `README.md`: product page, banner, quick start, YAML sketch, state APIs.
-- `START-HERE.md`: short onboarding path.
+- `START-HERE.md`: short onboarding path. Through VEN-003; integrator pin last; SCIM design-only.
 - `docs/user-guide.md`: operator guide.
 - `docs/assets/header.svg`: README banner.
 - `go.mod`: module `github.com/hilather/go-lab-sso`, Go 1.26.
@@ -56,6 +57,7 @@ Inventory of the design pack and the implemented appliance. There is no generate
 - `docs/adr/0007-no-labntp-time-bus.md`
 - `docs/adr/0008-import-allowlist-rewriter.md`
 - `docs/adr/0009-data-plane-login-ui.md`
+- `docs/adr/0010-duo-siteminder-shibboleth-clothes.md`
 
 ## Agent task plans
 
@@ -67,6 +69,7 @@ Inventory of the design pack and the implemented appliance. There is no generate
 ## Fixtures and sketches
 
 - `testdata/config/valid/minimal.yaml`
+- `testdata/config/valid/duo.yaml`, `testdata/config/valid/siteminder.yaml`, `testdata/config/valid/shibboleth.yaml`
 - `testdata/config/invalid/unknown-field.yaml`
 - `testdata/secrets/tls/tls.crt`, `testdata/secrets/tls/tls.key` (self-signed leaf, `0644`)
 - `testdata/secrets/oidc/signing.pem` (JWT signing key, `0644`)

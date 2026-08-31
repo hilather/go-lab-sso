@@ -126,6 +126,29 @@ func TestCompilePingOK(t *testing.T) {
 	}
 }
 
+func TestCompileDuoOK(t *testing.T) {
+	root := repoRoot(t)
+	doc, err := config.LoadFile(filepath.Join(root, "testdata/config/valid/duo.yaml"), config.Options{BaseDir: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	snap, err := compiler.Compile(doc, compiler.Options{BaseDir: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snap.Clothes.Vendor != "duo" || snap.Clothes.AuthorizePath != "/oidc/lab/authorize" || snap.Clothes.SAMLSSOPath != "/saml2/sp/lab/sso" {
+		t.Fatalf("clothes %+v", snap.Clothes)
+	}
+	doc.Metadata.Name = "app-a"
+	snap, err = compiler.Compile(doc, compiler.Options{BaseDir: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snap.Clothes.AuthorizePath != "/oidc/app-a/authorize" || snap.Clothes.SAMLMetadataPath != "/saml2/sp/app-a/metadata" {
+		t.Fatalf("duo name slot %+v", snap.Clothes)
+	}
+}
+
 func TestCompileKeycloakRealm(t *testing.T) {
 	root := repoRoot(t)
 	doc, err := config.LoadFile(filepath.Join(root, "testdata/config/valid/ping.yaml"), config.Options{BaseDir: root})

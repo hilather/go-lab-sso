@@ -23,9 +23,63 @@ func New(store *snapshot.Store, rt *oidc.Runtime) *Provider {
 }
 
 func (p *Provider) Mount(mux *http.ServeMux) {
-	mux.HandleFunc("GET /saml/metadata", p.metadata)
-	mux.HandleFunc("GET /saml/sso", p.sso)
-	mux.HandleFunc("POST /saml/sso", p.sso)
+	for _, path := range []string{
+		"/saml/metadata",
+		"/saml2/sp/{name}/metadata",
+		"/affwebservices/public/saml2meta",
+		"/idp/shibboleth",
+	} {
+		mux.HandleFunc("GET "+path, p.requireMeta(p.metadata))
+	}
+	for _, path := range []string{
+		"/saml/sso",
+		"/saml2/sp/{name}/sso",
+		"/affwebservices/public/saml2sso",
+		"/idp/profile/SAML2/Redirect/SSO",
+	} {
+		mux.HandleFunc("GET "+path, p.requireSSO(http.MethodGet, p.sso))
+	}
+	for _, path := range []string{
+		"/saml/sso",
+		"/saml2/sp/{name}/sso",
+		"/affwebservices/public/saml2sso",
+		"/idp/profile/SAML2/POST/SSO",
+	} {
+		mux.HandleFunc("POST "+path, p.requireSSO(http.MethodPost, p.sso))
+	}
+}
+
+func (p *Provider) requireMeta(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		snap := p.snapSAML(w)
+		if snap == nil {
+			return
+		}
+		want := snap.Clothes.SAMLMetadataPath
+		if want == "" || r.URL.Path != want {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		next(w, r)
+	}
+}
+
+func (p *Provider) requireSSO(method string, next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		snap := p.snapSAML(w)
+		if snap == nil {
+			return
+		}
+		want := snap.Clothes.SAMLSSOPath
+		if method == http.MethodPost {
+			want = snap.Clothes.SAMLSSOPOSTPath
+		}
+		if want == "" || r.URL.Path != want {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		next(w, r)
+	}
 }
 
 func (p *Provider) snapSAML(w http.ResponseWriter) *snapshot.Snapshot {
@@ -48,12 +102,14 @@ func (p *Provider) metadata(w http.ResponseWriter, r *http.Request) {
 	}
 	iss := strings.TrimRight(snap.Issuer, "/")
 	cert := certB64(snap)
+	redir := iss + snap.Clothes.SAMLSSOPath
+	post := iss + snap.Clothes.SAMLSSOPOSTPath
 	body := `<?xml version="1.0" encoding="UTF-8"?>` +
 		`<md:EntityDescriptor xmlns:md="urn:oasis:names:tc:SAML:2.0:metadata" entityID="` + html.EscapeString(iss) + `">` +
 		`<md:IDPSSODescriptor protocolSupportEnumeration="urn:oasis:names:tc:SAML:2.0:protocol">` +
 		`<md:KeyDescriptor use="signing"><ds:KeyInfo xmlns:ds="http://www.w3.org/2000/09/xmldsig#"><ds:X509Data><ds:X509Certificate>` + cert + `</ds:X509Certificate></ds:X509Data></ds:KeyInfo></md:KeyDescriptor>` +
-		`<md:SingleSignOnService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect" Location="` + html.EscapeString(iss) + `/saml/sso"/>` +
-		`<md:SingleSignOnService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST" Location="` + html.EscapeString(iss) + `/saml/sso"/>` +
+		`<md:SingleSignOnService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect" Location="` + html.EscapeString(redir) + `"/>` +
+		`<md:SingleSignOnService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST" Location="` + html.EscapeString(post) + `"/>` +
 		`</md:IDPSSODescriptor></md:EntityDescriptor>`
 	w.Header().Set("Content-Type", "application/samlmetadata+xml")
 	_, _ = w.Write([]byte(body))

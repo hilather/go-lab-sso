@@ -30,7 +30,7 @@ After a human tags a first implementation candidate, that tag becomes the suppor
 - REST and MCP share authentication, authorization, audit, and rate limiting.
 - Secrets are file refs, never inline in bootstrap YAML committed to Git.
 - Containers run as non-root UID 65532 with a read-only filesystem and no Linux capabilities.
-- One exact issuer; vendor profiles are clothes, not hostname clones of Microsoft / Okta / Ping / ADFS.
+- One exact issuer; vendor profiles are clothes, not hostname clones of Microsoft / Okta / Ping / ADFS / Duo / SiteMinder / Shibboleth.
 - Data-plane login HTML is distinct from the operator SPA. `spec.ui.enabled: false` does not disable login pages.
 - Operator SPA never stores tokens in `localStorage`.
 - Customer-config import is an allow-list rewriter with hardened XML (no external entities), not a silent live merge.

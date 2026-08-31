@@ -14,6 +14,7 @@ import (
 	"github.com/hilather/go-lab-sso/internal/auth"
 	"github.com/hilather/go-lab-sso/internal/model"
 	"github.com/hilather/go-lab-sso/internal/oidc"
+	"github.com/hilather/go-lab-sso/internal/snapshot"
 	"github.com/hilather/go-lab-sso/internal/vendor"
 )
 
@@ -104,8 +105,29 @@ func TestClothesDiscoveryISSStable(t *testing.T) {
 			"userinfo_endpoint":      wantISS + "/userinfo",
 			"end_session_endpoint":   wantISS + "/logout",
 		},
+		"duo": {
+			"authorization_endpoint": wantISS + "/oidc/lab/authorize",
+			"token_endpoint":         wantISS + "/oidc/lab/token",
+			"jwks_uri":               wantISS + "/oidc/lab/jwks",
+			"userinfo_endpoint":      wantISS + "/oidc/lab/userinfo",
+			"end_session_endpoint":   wantISS + "/oidc/lab/logout",
+		},
+		"siteminder": {
+			"authorization_endpoint": wantISS + "/affwebservices/CASSO/oidc/lab/authorize",
+			"token_endpoint":         wantISS + "/affwebservices/CASSO/oidc/lab/token",
+			"jwks_uri":               wantISS + "/affwebservices/CASSO/oidc/lab/jwks",
+			"userinfo_endpoint":      wantISS + "/affwebservices/CASSO/oidc/lab/userinfo",
+			"end_session_endpoint":   wantISS + "/affwebservices/CASSO/oidc/lab/logout",
+		},
+		"shibboleth": {
+			"authorization_endpoint": wantISS + "/idp/profile/oidc/authorize",
+			"token_endpoint":         wantISS + "/idp/profile/oidc/token",
+			"jwks_uri":               wantISS + "/idp/profile/oidc/keyset",
+			"userinfo_endpoint":      wantISS + "/idp/profile/oidc/userinfo",
+			"end_session_endpoint":   wantISS + "/idp/profile/oidc/logout",
+		},
 	}
-	for _, v := range []string{"generic", "entra", "okta", "ping", "adfs", "google", "keycloak", "iam-identity-center"} {
+	for _, v := range []string{"generic", "entra", "okta", "ping", "adfs", "google", "keycloak", "iam-identity-center", "duo", "siteminder", "shibboleth"} {
 		if v != "generic" {
 			swapVendor(t, a, v)
 		}
@@ -351,6 +373,52 @@ func TestClothesApplyAlsoPurges(t *testing.T) {
 	if rec.Code != 400 || !strings.Contains(rec.Body.String(), "invalid_grant") {
 		t.Fatalf("apply purge want invalid_grant, got %d %s", rec.Code, rec.Body)
 	}
+}
+
+func TestHandlerConstructs(t *testing.T) {
+	_ = oidc.New(snapshot.NewStore()).Handler()
+}
+
+func TestVEN003DiscoveryAliases(t *testing.T) {
+	a, h := bootOIDC(t)
+	wantISS := "https://lab.example.net"
+	code, _ := discoveryDoc(t, h, "/oidc/lab/.well-known/openid-configuration")
+	if code != 404 {
+		t.Fatalf("duo alias under generic want 404 got %d", code)
+	}
+	code, _ = discoveryDoc(t, h, "/affwebservices/CASSO/oidc/lab/.well-known/openid-configuration")
+	if code != 404 {
+		t.Fatalf("siteminder alias under generic want 404 got %d", code)
+	}
+	swapVendor(t, a, "entra")
+	code, _ = discoveryDoc(t, h, "/oidc/lab/.well-known/openid-configuration")
+	if code != 404 {
+		t.Fatalf("duo alias under entra want 404 got %d", code)
+	}
+	swapVendor(t, a, "duo")
+	code, doc := discoveryDoc(t, h, "/oidc/lab/.well-known/openid-configuration")
+	if code != 200 || doc["issuer"] != wantISS {
+		t.Fatalf("duo alias %d %v", code, doc)
+	}
+	assertNoVendorHosts(t, mustJSON(doc))
+	code, _ = discoveryDoc(t, h, "/oidc/other/.well-known/openid-configuration")
+	if code != 404 {
+		t.Fatalf("wrong duo name want 404 got %d", code)
+	}
+	swapVendor(t, a, "siteminder")
+	code, doc = discoveryDoc(t, h, "/affwebservices/CASSO/oidc/lab/.well-known/openid-configuration")
+	if code != 200 || doc["issuer"] != wantISS {
+		t.Fatalf("siteminder alias %d %v", code, doc)
+	}
+	code, _ = discoveryDoc(t, h, "/affwebservices/CASSO/oidc/other/.well-known/openid-configuration")
+	if code != 404 {
+		t.Fatalf("wrong siteminder name want 404 got %d", code)
+	}
+}
+
+func mustJSON(v any) string {
+	b, _ := json.Marshal(v)
+	return string(b)
 }
 
 func TestClothesApplyPingOK(t *testing.T) {

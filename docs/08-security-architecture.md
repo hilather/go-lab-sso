@@ -1,9 +1,9 @@
 # Security Architecture
 
-Status: through VEN-002 implemented
+Status: through VEN-003 implemented
 Owners: Security, Protocols, Control Plane
-Last reviewed: 2026-08-30
-Related ADRs: 0002, 0003, 0004, 0005, 0006, 0008, 0009
+Last reviewed: 2026-08-31
+Related ADRs: 0002, 0003, 0004, 0005, 0006, 0008, 0009, 0010
 
 ## Goals
 
@@ -36,7 +36,7 @@ LabSSO does **not** trust vendor-cloud hostnames and does not present them.
 - Passwords only via file refs / PHC; constant-time compare.
 - Session TTL from YAML; restart drops sessions.
 - Rate and concurrency limits on authorize, token, login POST.
-- Disabled protocols do not listen on those paths.
+- Disabled protocols still register data-plane routes; handlers **404**. `saml.enabled: false` 404s generic `/saml/*` and clothed `/idp/…`, `/saml2/…`, `/affwebservices/…`.
 - SAML XML parse rejects DOCTYPE/ENTITY and is size-capped. Assertion signatures use `goxmldsig` on XML LabSSO generates (not hostile-input verification).
 - Vendor clothes never change the issuer host to a vendor cloud.
 - Graph-shaped stub (Entra overage) is local; no egress to Microsoft.
@@ -67,7 +67,7 @@ LabSSO does **not** trust vendor-cloud hostnames and does not present them.
 
 Operator console authenticates with an in-process session table and cookie `labsso_session` (`HttpOnly`, `SameSite=Lax`, `Path=/`, host-only, `Secure` iff TLS). CSRF in memory / JSON, never `localStorage`. MCP ignores cookies.
 
-`spec.ui.enabled: false` 404s SPA only. Data-plane login cookies (`HttpOnly`, `SameSite=Lax`, `Path=/` on the issuer host, host-only, `Secure` iff TLS): generic `labsso_login`, entra `labsso_entra`, okta `labsso_okta`. Do not reuse `labsso_session`. Clothes swap orphans the previous cookie name.
+`spec.ui.enabled: false` 404s SPA only. Data-plane login cookies (`HttpOnly`, `SameSite=Lax`, `Path=/` on the issuer host, host-only, `Secure` iff TLS): `labsso_login` (generic), `labsso_entra`, `labsso_okta`, `labsso_ping`, `labsso_adfs`, `labsso_google`, `labsso_keycloak`, `labsso_iamic`, `labsso_duo`, `labsso_siteminder`, `labsso_shibboleth`. Do not reuse `labsso_session`. Clothes swap orphans the previous cookie name.
 
 ## Secret management
 

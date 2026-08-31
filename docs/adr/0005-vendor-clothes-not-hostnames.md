@@ -14,7 +14,7 @@ Vendor differences that matter in a lab are path templates, claim names (`oid`/`
 
 One **exact** issuer string derived from `LAB_PUBLIC_HOST` plus the published HTTPS port (omit the port iff 443). `spec.profile.vendor` selects **clothes** on that issuer: authorize/token/jwks/userinfo/logout path templates, claim names, error JSON, cookies, group-overage policy.
 
-Entra, Okta, Ping, ADFS, Google, Keycloak, and IAM Identity Center are clothes. They are **not** hostname clones of `login.microsoftonline.com` / `okta.com` / vendor CDNs.
+Entra, Okta, Ping, ADFS, Google, Keycloak, IAM Identity Center, Duo, SiteMinder, and Shibboleth are clothes. They are **not** hostname clones of `login.microsoftonline.com` / `okta.com` / vendor CDNs. Duo / SiteMinder / Shibboleth path tables: [ADR 0010](0010-duo-siteminder-shibboleth-clothes.md).
 
 Default ship: `generic`. Entra/Okta opt-in via YAML.
 
@@ -34,4 +34,4 @@ Default ship: `generic`. Entra/Okta opt-in via YAML.
 
 ## Review triggers
 
-Review this decision when its assumptions no longer hold, a major protocol or library change occurs, or a new requirement conflicts with an invariant.
+Review this decision when its assumptions no longer hold, a major protocol or library change occurs, or a new requirement conflicts with an invariant. Adding Duo / SiteMinder / Shibboleth clothes is [ADR 0010](0010-duo-siteminder-shibboleth-clothes.md).

@@ -112,6 +112,39 @@ func TestLoadPingAccepted(t *testing.T) {
 	}
 }
 
+func TestLoadDuoAccepted(t *testing.T) {
+	root := repoRoot(t)
+	doc, err := config.LoadFile(filepath.Join(root, "testdata/config/valid/duo.yaml"), config.Options{BaseDir: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if doc.Spec.Profile.Vendor != "duo" {
+		t.Fatalf("vendor %s", doc.Spec.Profile.Vendor)
+	}
+}
+
+func TestLoadSiteminderAccepted(t *testing.T) {
+	root := repoRoot(t)
+	doc, err := config.LoadFile(filepath.Join(root, "testdata/config/valid/siteminder.yaml"), config.Options{BaseDir: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if doc.Spec.Profile.Vendor != "siteminder" {
+		t.Fatalf("vendor %s", doc.Spec.Profile.Vendor)
+	}
+}
+
+func TestLoadShibbolethAccepted(t *testing.T) {
+	root := repoRoot(t)
+	doc, err := config.LoadFile(filepath.Join(root, "testdata/config/valid/shibboleth.yaml"), config.Options{BaseDir: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if doc.Spec.Profile.Vendor != "shibboleth" {
+		t.Fatalf("vendor %s", doc.Spec.Profile.Vendor)
+	}
+}
+
 func TestTenantIDOmitSetRoundTrip(t *testing.T) {
 	root := repoRoot(t)
 	omit, err := config.LoadFile(filepath.Join(root, "testdata/config/valid/entra.yaml"), config.Options{BaseDir: root})

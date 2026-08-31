@@ -4,11 +4,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/hilather/go-lab-sso/internal/model"
 	"github.com/hilather/go-lab-sso/internal/vendor"
 )
 
 func TestResolveImplemented(t *testing.T) {
-	for _, v := range []string{"generic", "entra", "okta", "ping", "adfs", "google", "keycloak", "iam-identity-center"} {
+	for _, v := range []string{"generic", "entra", "okta", "ping", "adfs", "google", "keycloak", "iam-identity-center", "duo", "siteminder", "shibboleth"} {
 		c, err := vendor.Resolve(v, "", "")
 		if err != nil {
 			t.Fatalf("%s: %v", v, err)
@@ -22,7 +23,17 @@ func TestResolveImplemented(t *testing.T) {
 		if c.AuthorizePath == "" || c.CookieName == "" {
 			t.Fatalf("%s missing paths/cookie", v)
 		}
-		blob := c.AuthorizePath + c.TokenPath + c.JWKSPath + c.UserInfoPath + c.LogoutPath + c.HTMLTitle + c.WSFedMetadataPath + c.WSFedPassivePath
+		if c.SAMLMetadataPath == "" || c.SAMLSSOPath == "" || c.SAMLSSOPOSTPath == "" {
+			t.Fatalf("%s missing SAML paths %+v", v, c)
+		}
+		switch v {
+		case "duo", "siteminder", "shibboleth":
+		default:
+			if c.SAMLMetadataPath != "/saml/metadata" || c.SAMLSSOPath != "/saml/sso" || c.SAMLSSOPOSTPath != "/saml/sso" {
+				t.Fatalf("%s SAML defaults %+v", v, c)
+			}
+		}
+		blob := c.AuthorizePath + c.TokenPath + c.JWKSPath + c.UserInfoPath + c.LogoutPath + c.HTMLTitle + c.WSFedMetadataPath + c.WSFedPassivePath + c.SAMLMetadataPath + c.SAMLSSOPath + c.SAMLSSOPOSTPath
 		for _, h := range vendor.ForbiddenHosts {
 			if strings.Contains(blob, h) {
 				t.Fatalf("%s clothes contain hostname %s", v, h)
@@ -31,9 +42,47 @@ func TestResolveImplemented(t *testing.T) {
 	}
 }
 
+func TestValidVendorImplementedLockstep(t *testing.T) {
+	for _, v := range []string{"generic", "entra", "okta", "ping", "adfs", "google", "keycloak", "iam-identity-center", "duo", "siteminder", "shibboleth"} {
+		if !model.ValidVendor(v) {
+			t.Fatalf("ValidVendor missing %s", v)
+		}
+		if !vendor.Implemented(v) {
+			t.Fatalf("Implemented missing %s", v)
+		}
+	}
+	if model.ValidVendor("forgerock") || vendor.Implemented("forgerock") {
+		t.Fatal("unknown vendor must stay out of both lists")
+	}
+}
+
 func TestResolveUnknownRejected(t *testing.T) {
-	if _, err := vendor.Resolve("duo", "", ""); err == nil {
+	if _, err := vendor.Resolve("forgerock", "", ""); err == nil {
 		t.Fatal("expected clothes not implemented")
+	}
+}
+
+func TestResolveVEN003Paths(t *testing.T) {
+	duo, err := vendor.Resolve("duo", "", "lab")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if duo.AuthorizePath != "/oidc/lab/authorize" || duo.SAMLMetadataPath != "/saml2/sp/lab/metadata" || duo.SAMLSSOPath != "/saml2/sp/lab/sso" || duo.SAMLSSOPOSTPath != "/saml2/sp/lab/sso" {
+		t.Fatalf("duo %+v", duo)
+	}
+	sm, err := vendor.Resolve("siteminder", "", "lab")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sm.AuthorizePath != "/affwebservices/CASSO/oidc/lab/authorize" || sm.SAMLMetadataPath != "/affwebservices/public/saml2meta" || sm.SAMLSSOPath != "/affwebservices/public/saml2sso" || sm.SAMLSSOPOSTPath != "/affwebservices/public/saml2sso" {
+		t.Fatalf("siteminder %+v", sm)
+	}
+	sh, err := vendor.Resolve("shibboleth", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sh.JWKSPath != "/idp/profile/oidc/keyset" || sh.SAMLSSOPath != "/idp/profile/SAML2/Redirect/SSO" || sh.SAMLSSOPOSTPath != "/idp/profile/SAML2/POST/SSO" {
+		t.Fatalf("shibboleth %+v", sh)
 	}
 }
 

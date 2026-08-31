@@ -153,6 +153,7 @@ func (p ProtocolToggle) IsEnabled(def bool) bool {
 var vendors = map[string]struct{}{
 	"generic": {}, "entra": {}, "okta": {}, "ping": {}, "adfs": {},
 	"google": {}, "keycloak": {}, "iam-identity-center": {},
+	"duo": {}, "siteminder": {}, "shibboleth": {},
 }
 
 func ValidVendor(v string) bool {

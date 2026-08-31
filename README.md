@@ -2,7 +2,7 @@
 
 # LabSSO
 
-**A laboratory identity provider.** Point a product under test at it the way you would point at Entra, Okta, Ping, ADFS, Google, Keycloak, or IAM Identity Center. Desired state is one YAML file. Live edits go through REST or MCP and vanish when you reset or restart.
+**A laboratory identity provider.** Point a product under test at it the way you would point at Entra, Okta, Ping, ADFS, Google, Keycloak, IAM Identity Center, Duo, SiteMinder, or Shibboleth. Desired state is one YAML file. Live edits go through REST or MCP and vanish when you reset or restart.
 
 This is a lab box. It is not production SSO, and it does not pretend to be `login.microsoftonline.com`.
 
@@ -14,6 +14,8 @@ This is a lab box. It is not production SSO, and it does not pretend to be `logi
   <a href="docs/02-protocols.md"><img src="https://img.shields.io/badge/SAML-WS--Fed-c9a36a.svg" alt="SAML / WS-Fed"></a>
   <a href="docs/07-mcp-api.md"><img src="https://img.shields.io/badge/MCP-2026--07--28-6E56CF.svg" alt="MCP"></a>
 </p>
+
+Status: **through VEN-003**. Integrator pin last. SCIM design-only.
 
 New here? Read the [user guide](docs/user-guide.md). Short path: [START-HERE.md](START-HERE.md).
 
@@ -319,7 +321,7 @@ Not in this repo: wiring into the shared lab compose stack (that lives in `hilat
 | [docs/11-deployment.md](docs/11-deployment.md) | Host 443, image, compose |
 | [CHANGELOG.md](CHANGELOG.md) | What changed |
 
-Architecture notes and ADRs stay under [docs/](docs/). Contributor rules live in [AGENTS.md](AGENTS.md) and [CONTRIBUTING.md](CONTRIBUTING.md).
+Architecture notes and ADRs stay under [docs/](docs/), including [ADR 0010](docs/adr/0010-duo-siteminder-shibboleth-clothes.md) (Duo, SiteMinder, Shibboleth clothes). Contributor rules live in [AGENTS.md](AGENTS.md) and [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 

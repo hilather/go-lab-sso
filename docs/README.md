@@ -4,6 +4,8 @@ Start with the [README](../README.md) and the [user guide](user-guide.md). Contr
 
 This page is the catalog. When a design document and a task summary disagree, the design document wins.
 
+Status: **through VEN-003**. Last reviewed: 2026-08-31.
+
 ## Root
 
 | Path | Role |
@@ -65,6 +67,7 @@ This page is the catalog. When a design document and a task summary disagree, th
 | [0007](adr/0007-no-labntp-time-bus.md) | No LabNTP time bus |
 | [0008](adr/0008-import-allowlist-rewriter.md) | Import allow-list rewriter |
 | [0009](adr/0009-data-plane-login-ui.md) | Data-plane login UI |
+| [0010](adr/0010-duo-siteminder-shibboleth-clothes.md) | Duo, SiteMinder, Shibboleth clothes |
 
 ## Task lists
 

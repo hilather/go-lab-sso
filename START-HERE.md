@@ -1,6 +1,6 @@
 # Start here
 
-LabSSO is a laboratory identity provider written in Go. You load a YAML file, serve OIDC / SAML / WS-Fed on HTTPS, and drive live changes through REST or MCP. Reset returns the process to the file.
+LabSSO is a laboratory identity provider written in Go. You load a YAML file, serve OIDC / SAML / WS-Fed on HTTPS, and drive live changes through REST or MCP. Reset returns the process to the file. **Through VEN-003** is implemented, including Duo, SiteMinder, and Shibboleth clothes. The integrator pin is last (not from this repo). SCIM is design-only.
 
 If you want to run it, use this page and the [user guide](docs/user-guide.md). If you want to change the code or the design contracts, read [AGENTS.md](AGENTS.md) first.
 
@@ -10,7 +10,7 @@ If you want to run it, use this page and the [user guide](docs/user-guide.md). I
 2. Run the [quick start](README.md#quick-start): validate the sample YAML, then `labsso serve`.
 3. Hit `GET /v1/state` and `GET /v1/state:export` as shown in the README.
 4. Read [docs/user-guide.md](docs/user-guide.md) for YAML fields, plan/apply, and MCP twins.
-5. When you need the exact schema or protocol behavior, open the docs listed below.
+5. When you need the exact schema or protocol behavior, open the docs listed below. Through VEN-003 is done; INT-001 is documented here; SCIM is design-only.
 
 ## What to read next
 
@@ -19,7 +19,7 @@ If you want to run it, use this page and the [user guide](docs/user-guide.md). I
 | Trying LabSSO for a lab | [README.md](README.md), [docs/user-guide.md](docs/user-guide.md) |
 | Writing or reviewing YAML | [docs/04-state-and-configuration.md](docs/04-state-and-configuration.md), [testdata/config/](testdata/config/) |
 | Wiring OIDC, SAML, or WS-Fed | [docs/02-protocols.md](docs/02-protocols.md) |
-| Dressing Entra / Okta / Ping / ADFS | [docs/03-vendor-profiles.md](docs/03-vendor-profiles.md) |
+| Dressing Entra / Okta / Ping / ADFS / Duo / SiteMinder / Shibboleth | [docs/03-vendor-profiles.md](docs/03-vendor-profiles.md), [docs/adr/0010-duo-siteminder-shibboleth-clothes.md](docs/adr/0010-duo-siteminder-shibboleth-clothes.md) |
 | Publishing host 443 | [docs/11-deployment.md](docs/11-deployment.md) |
 | Wiring an agent | [docs/07-mcp-api.md](docs/07-mcp-api.md), [docs/05-control-plane-and-parity.md](docs/05-control-plane-and-parity.md) |
 | Importing a customer app blob | [docs/09-customer-config-import.md](docs/09-customer-config-import.md) |

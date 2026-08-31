@@ -255,6 +255,18 @@ func TestOktaAuthorizeLoginToken(t *testing.T) {
 	clothedLoginToken(t, "okta", "/oauth2/default/v1/authorize", "/oauth2/default/v1/token", "labsso_okta")
 }
 
+func TestDuoAuthorizeLoginToken(t *testing.T) {
+	clothedLoginToken(t, "duo", "/oidc/lab/authorize", "/oidc/lab/token", "labsso_duo")
+}
+
+func TestSiteMinderAuthorizeLoginToken(t *testing.T) {
+	clothedLoginToken(t, "siteminder", "/affwebservices/CASSO/oidc/lab/authorize", "/affwebservices/CASSO/oidc/lab/token", "labsso_siteminder")
+}
+
+func TestShibbolethAuthorizeLoginToken(t *testing.T) {
+	clothedLoginToken(t, "shibboleth", "/idp/profile/oidc/authorize", "/idp/profile/oidc/token", "labsso_shibboleth")
+}
+
 func TestEntraConsentUsesClothesCookie(t *testing.T) {
 	a := bootLogin(t, false)
 	if _, err := a.SwapVendor(auth.AdminActor(), app.SwapVendorIn{

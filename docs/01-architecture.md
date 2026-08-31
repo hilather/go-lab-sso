@@ -1,9 +1,9 @@
 # System Architecture
 
-Status: through VEN-002 implemented (INT-001 documented; SCIM design-only)
+Status: through VEN-003 implemented (INT-001 documented; SCIM design-only)
 Owners: Architecture, Protocols, Control Plane, Deployment
 Last reviewed: 2026-08-30
-Related ADRs: 0001, 0002, 0003, 0004, 0005, 0006, 0007, 0009
+Related ADRs: 0001, 0002, 0003, 0004, 0005, 0006, 0007, 0009, 0010
 
 ## Problem statement
 
@@ -141,7 +141,7 @@ One **exact** issuer string is derived from `LAB_PUBLIC_HOST` plus the published
 - Published 443 → `https://<LAB_PUBLIC_HOST>` (port omitted).
 - Escape `LABSSO_HTTPS_PORT=8443` → `https://<LAB_PUBLIC_HOST>:8443`.
 
-Discovery (`iss`), tokens, SAML EntityID (when enabled), and JWKS all use that string. Entra / Okta / Ping / ADFS change **path templates**, claim names, error JSON, cookies, and group-overage policy. They do **not** change the hostname to a vendor cloud.
+Discovery (`iss`), tokens, SAML EntityID (when enabled), and JWKS all use that string. Entra / Okta / Ping / ADFS / Duo / SiteMinder / Shibboleth change **path templates**, claim names, error JSON, cookies, and group-overage policy. They do **not** change the hostname to a vendor cloud.
 
 See [ADR 0005](adr/0005-vendor-clothes-not-hostnames.md).
 

@@ -543,7 +543,7 @@ func TestSchemaConfigVendorImplemented(t *testing.T) {
 	}
 	prof, _ := out["profile"].(map[string]any)
 	v, _ := prof["vendor"].(string)
-	for _, name := range []string{"generic", "entra", "okta", "ping", "adfs", "google", "keycloak", "iam-identity-center"} {
+	for _, name := range []string{"generic", "entra", "okta", "ping", "adfs", "google", "keycloak", "iam-identity-center", "duo", "siteminder", "shibboleth"} {
 		if !strings.Contains(v, name) {
 			t.Fatalf("schema missing %s: %s", name, v)
 		}

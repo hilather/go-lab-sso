@@ -120,6 +120,26 @@ func TestSAMLDisabled404(t *testing.T) {
 	if rec.Code != 404 {
 		t.Fatalf("disabled sso want 404 got %d", rec.Code)
 	}
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "/idp/shibboleth", nil))
+	if rec.Code != 404 {
+		t.Fatalf("disabled shibboleth metadata want 404 got %d", rec.Code)
+	}
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "/saml2/sp/lab/metadata", nil))
+	if rec.Code != 404 {
+		t.Fatalf("disabled duo metadata want 404 got %d", rec.Code)
+	}
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "/affwebservices/public/saml2meta", nil))
+	if rec.Code != 404 {
+		t.Fatalf("disabled siteminder metadata want 404 got %d", rec.Code)
+	}
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "/affwebservices/public/saml2sso", nil))
+	if rec.Code != 404 {
+		t.Fatalf("disabled siteminder sso want 404 got %d", rec.Code)
+	}
 }
 
 func TestSAMLMetadataEntityID(t *testing.T) {
@@ -242,6 +262,148 @@ func extractHidden(page, name string) string {
 		return ""
 	}
 	return rest[:j]
+}
+
+func swapSAMLVendor(t *testing.T, a *app.App, vendorName string) {
+	t.Helper()
+	if _, err := a.SwapVendor(auth.AdminActor(), app.SwapVendorIn{
+		Vendor: vendorName, ExpectedRevision: a.Status().RuntimeRevision, Reason: "clothes",
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSAMLClothesShibbolethDuo(t *testing.T) {
+	a, h := bootSAML(t, []string{"https://sp.example.net/acs"})
+	swapSAMLVendor(t, a, "shibboleth")
+	if got := oidc.CookieName(a.Store().Load()); got != "labsso_shibboleth" {
+		t.Fatalf("shibboleth cookie %s", got)
+	}
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "/saml/metadata", nil))
+	if rec.Code != 404 {
+		t.Fatalf("generic metadata under shibboleth want 404 got %d", rec.Code)
+	}
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "/saml/sso", nil))
+	if rec.Code != 404 {
+		t.Fatalf("generic sso under shibboleth want 404 got %d", rec.Code)
+	}
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "/idp/shibboleth", nil))
+	if rec.Code != 200 {
+		t.Fatalf("shibboleth metadata %d %s", rec.Code, rec.Body)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, `entityID="https://lab.example.net"`) {
+		t.Fatalf("entityID: %s", body)
+	}
+	if !strings.Contains(body, "https://lab.example.net/idp/profile/SAML2/Redirect/SSO") {
+		t.Fatalf("redirect Location: %s", body)
+	}
+	if !strings.Contains(body, "https://lab.example.net/idp/profile/SAML2/POST/SSO") {
+		t.Fatalf("post Location: %s", body)
+	}
+	for _, host := range []string{"shibboleth.net", "duosecurity.com", "login.microsoftonline.com"} {
+		if strings.Contains(body, host) {
+			t.Fatalf("vendor host %s in metadata", host)
+		}
+	}
+	reqXML := authnXML("id-shib", "https://sp.example.net", "https://sp.example.net/acs")
+	u := "/idp/profile/SAML2/Redirect/SSO?SAMLRequest=" + url.QueryEscape(encodeRedirect(t, reqXML))
+	sess := a.OIDC().Runtime().PutSession(oidc.LoginSession{UserID: "u1", Username: "alice"})
+	req := httptest.NewRequest("GET", u, nil)
+	req.AddCookie(&http.Cookie{Name: oidc.CookieName(a.Store().Load()), Value: sess.ID})
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != 200 || !strings.Contains(rec.Body.String(), "SAMLResponse") {
+		t.Fatalf("shibboleth redirect SSO %d %s", rec.Code, rec.Body)
+	}
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("POST", "/idp/profile/SAML2/Redirect/SSO", nil))
+	if rec.Code != 404 {
+		t.Fatalf("POST to Redirect want 404 got %d", rec.Code)
+	}
+	form := url.Values{"SAMLRequest": {base64.StdEncoding.EncodeToString([]byte(reqXML))}}
+	post := httptest.NewRequest("POST", "/idp/profile/SAML2/POST/SSO", strings.NewReader(form.Encode()))
+	post.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	post.AddCookie(&http.Cookie{Name: oidc.CookieName(a.Store().Load()), Value: sess.ID})
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, post)
+	if rec.Code != 200 || !strings.Contains(rec.Body.String(), "SAMLResponse") {
+		t.Fatalf("shibboleth POST SSO %d %s", rec.Code, rec.Body)
+	}
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "/idp/profile/SAML2/POST/SSO", nil))
+	if rec.Code != 404 {
+		t.Fatalf("GET to POST path want 404 got %d", rec.Code)
+	}
+
+	swapSAMLVendor(t, a, "duo")
+	if got := oidc.CookieName(a.Store().Load()); got != "labsso_duo" {
+		t.Fatalf("duo cookie %s", got)
+	}
+	sess = a.OIDC().Runtime().PutSession(oidc.LoginSession{UserID: "u1", Username: "alice"})
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "/saml/metadata", nil))
+	if rec.Code != 404 {
+		t.Fatalf("generic metadata under duo want 404 got %d", rec.Code)
+	}
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "/saml2/sp/lab/metadata", nil))
+	if rec.Code != 200 || !strings.Contains(rec.Body.String(), "/saml2/sp/lab/sso") {
+		t.Fatalf("duo metadata %d %s", rec.Code, rec.Body)
+	}
+	u = "/saml2/sp/lab/sso?SAMLRequest=" + url.QueryEscape(encodeRedirect(t, reqXML))
+	req = httptest.NewRequest("GET", u, nil)
+	req.AddCookie(&http.Cookie{Name: oidc.CookieName(a.Store().Load()), Value: sess.ID})
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != 200 || !strings.Contains(rec.Body.String(), "SAMLResponse") {
+		t.Fatalf("duo SSO %d %s", rec.Code, rec.Body)
+	}
+
+	swapSAMLVendor(t, a, "siteminder")
+	if got := oidc.CookieName(a.Store().Load()); got != "labsso_siteminder" {
+		t.Fatalf("siteminder cookie %s", got)
+	}
+	sess = a.OIDC().Runtime().PutSession(oidc.LoginSession{UserID: "u1", Username: "alice"})
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "/saml/metadata", nil))
+	if rec.Code != 404 {
+		t.Fatalf("generic metadata under siteminder want 404 got %d", rec.Code)
+	}
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "/saml/sso", nil))
+	if rec.Code != 404 {
+		t.Fatalf("generic sso under siteminder want 404 got %d", rec.Code)
+	}
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "/affwebservices/public/saml2meta", nil))
+	if rec.Code != 200 {
+		t.Fatalf("siteminder metadata %d %s", rec.Code, rec.Body)
+	}
+	body = rec.Body.String()
+	if !strings.Contains(body, `entityID="https://lab.example.net"`) || !strings.Contains(body, "/affwebservices/public/saml2sso") {
+		t.Fatalf("siteminder Locations: %s", body)
+	}
+	u = "/affwebservices/public/saml2sso?SAMLRequest=" + url.QueryEscape(encodeRedirect(t, reqXML))
+	req = httptest.NewRequest("GET", u, nil)
+	req.AddCookie(&http.Cookie{Name: oidc.CookieName(a.Store().Load()), Value: sess.ID})
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != 200 || !strings.Contains(rec.Body.String(), "SAMLResponse") {
+		t.Fatalf("siteminder GET SSO %d %s", rec.Code, rec.Body)
+	}
+	form = url.Values{"SAMLRequest": {base64.StdEncoding.EncodeToString([]byte(reqXML))}}
+	post = httptest.NewRequest("POST", "/affwebservices/public/saml2sso", strings.NewReader(form.Encode()))
+	post.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	post.AddCookie(&http.Cookie{Name: oidc.CookieName(a.Store().Load()), Value: sess.ID})
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, post)
+	if rec.Code != 200 || !strings.Contains(rec.Body.String(), "SAMLResponse") {
+		t.Fatalf("siteminder POST SSO %d %s", rec.Code, rec.Body)
+	}
 }
 
 func TestSAMLRequestXMLShape(t *testing.T) {

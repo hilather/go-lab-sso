@@ -1,6 +1,6 @@
 # Program Board
 
-Status: through VEN-002 done; INT-001 documented here; SCIM-001 design-only
+Status: through VEN-003 done; INT-001 documented here; SCIM-001 design-only
 Last reviewed: 2026-08-30
 
 Implementation is **opened** at FND-001. Later slices stay not-started until their wave.
@@ -18,8 +18,9 @@ Implementation is **opened** at FND-001. Later slices stay not-started until the
 | 7 | Operator SPA with REST+MCP+UI parity | UI-001 | FND-001, LOGIN-001 | SPA; first implementation ready for Mira (`docs/22-operator-spa.md`) | done (Mira review requested) |
 | 8 | Customer-config import (allow-list rewriter) | IMP-001 | FND-001 | Import plan/apply | done |
 | 9 | More vendor clothes: ping, adfs, google, keycloak, iam-identity-center; WS-Fed with ADFS clothes | VEN-002 | VEN-001, SAML-001 | Additional clothes + WS-Fed | done |
-| 10 | SCIM outbound client | SCIM-001 | FND-001 | Design-only (`docs/23-scim-outbound.md`); may trail M6 | design |
-| 11 | Integrator last in mcp-integration-lab | INT-001 | Appliance exists | Wiring documented here; pin is last in mcp-integration-lab (not from this repo) | documented |
+| 10 | Duo, SiteMinder, Shibboleth clothes including SAML URL clothes | VEN-003 | VEN-002, SAML-001 | Remaining named SSO clothes | done |
+| 11 | SCIM outbound client | SCIM-001 | FND-001 | Design-only (`docs/23-scim-outbound.md`); may trail M6 | design |
+| 12 | Integrator last in mcp-integration-lab | INT-001 | Appliance exists | Wiring documented here; pin is last in mcp-integration-lab (not from this repo) | documented |
 
 UI-001 must not start in this design landing. Mira reviews after the first UI implementation.
 
@@ -30,7 +31,7 @@ INT-001 is **last**. Document the wiring in [docs/11-deployment.md](../docs/11-d
 ### M0: Design
 
 - This repository on `main`.
-- ADRs 0001–0009 accepted for design.
+- ADRs 0001–0010 accepted for design (0010 adds Duo / SiteMinder / Shibboleth clothes).
 - Sweep 1 folded. Sweep 2 ACCEPT (2026-08-30). See [docs/skeptic-notes.md](../docs/skeptic-notes.md).
 
 ### M1: Foundation (FND-001)
@@ -49,9 +50,9 @@ INT-001 is **last**. Document the wiring in [docs/11-deployment.md](../docs/11-d
 
 - SP-initiated SAML. SPA after Mira review.
 
-### M5: Import and more clothes (IMP-001 + VEN-002)
+### M5: Import and more clothes (IMP-001 + VEN-002 + VEN-003)
 
-- Allow-list rewriter. Ping/ADFS/Google/Keycloak/IAM IC. WS-Fed.
+- Allow-list rewriter. Ping/ADFS/Google/Keycloak/IAM IC. WS-Fed. Duo/SiteMinder/Shibboleth.
 
 ### M6: Integrator last (INT-001)
 

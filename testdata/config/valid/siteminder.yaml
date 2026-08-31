@@ -1,0 +1,43 @@
+apiVersion: labsso.dev/v1alpha1
+kind: LabSSO
+metadata:
+  name: lab
+spec:
+  listeners:
+    https:
+      address: ":10443"
+      certRef: testdata/secrets/tls/tls.crt
+      keyRef: testdata/secrets/tls/tls.key
+    management:
+      address: ":8080"
+      restPath: /v1
+      mcpPath: /mcp
+      mcp:
+        allowLegacyClients: true
+  issuer: "https://lab.example.net"
+  profile:
+    vendor: siteminder
+  protocols:
+    oidc:
+      enabled: true
+    saml:
+      enabled: false
+    wsfed:
+      enabled: false
+  signing:
+    keyRef: testdata/secrets/oidc/signing.pem
+  clients: []
+  users: []
+  groups: []
+  auth:
+    sessionTTL: 1h
+    mfa:
+      mode: never
+  groupOverage:
+    entraGraphStub: true
+    oktaFailAt: 100
+    genericCap: 200
+  ui:
+    enabled: true
+  access:
+    tokenRef: testdata/secrets/labsso-token
