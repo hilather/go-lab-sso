@@ -70,7 +70,7 @@ func TestServeTLSAndReady(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != 404 {
 		t.Fatalf("data plane status %d (OIDC not implemented yet)", resp.StatusCode)
 	}

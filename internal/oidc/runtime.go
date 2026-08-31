@@ -58,11 +58,11 @@ type LoginSession struct {
 }
 
 type Runtime struct {
-	mu        sync.Mutex
-	pending   map[string]Pending
-	codes     map[string]AuthCode
-	refresh   map[string]Refresh
-	sessions  map[string]LoginSession
+	mu           sync.Mutex
+	pending      map[string]Pending
+	codes        map[string]AuthCode
+	refresh      map[string]Refresh
+	sessions     map[string]LoginSession
 	paused       bool
 	forceFail    bool
 	forceConsent bool
@@ -254,14 +254,14 @@ func (r *Runtime) Reset() {
 	r.inject = ""
 }
 
-func (r *Runtime) SetPaused(v bool)    { r.mu.Lock(); r.paused = v; r.mu.Unlock() }
-func (r *Runtime) Paused() bool        { r.mu.Lock(); defer r.mu.Unlock(); return r.paused }
-func (r *Runtime) SetForceFail(v bool)     { r.mu.Lock(); r.forceFail = v; r.mu.Unlock() }
-func (r *Runtime) ForceFail() bool         { r.mu.Lock(); defer r.mu.Unlock(); return r.forceFail }
-func (r *Runtime) SetForceConsent(v bool)  { r.mu.Lock(); r.forceConsent = v; r.mu.Unlock() }
-func (r *Runtime) ForceConsent() bool      { r.mu.Lock(); defer r.mu.Unlock(); return r.forceConsent }
-func (r *Runtime) SetInject(v string)  { r.mu.Lock(); r.inject = v; r.mu.Unlock() }
-func (r *Runtime) Inject() string      { r.mu.Lock(); defer r.mu.Unlock(); return r.inject }
+func (r *Runtime) SetPaused(v bool)       { r.mu.Lock(); r.paused = v; r.mu.Unlock() }
+func (r *Runtime) Paused() bool           { r.mu.Lock(); defer r.mu.Unlock(); return r.paused }
+func (r *Runtime) SetForceFail(v bool)    { r.mu.Lock(); r.forceFail = v; r.mu.Unlock() }
+func (r *Runtime) ForceFail() bool        { r.mu.Lock(); defer r.mu.Unlock(); return r.forceFail }
+func (r *Runtime) SetForceConsent(v bool) { r.mu.Lock(); r.forceConsent = v; r.mu.Unlock() }
+func (r *Runtime) ForceConsent() bool     { r.mu.Lock(); defer r.mu.Unlock(); return r.forceConsent }
+func (r *Runtime) SetInject(v string)     { r.mu.Lock(); r.inject = v; r.mu.Unlock() }
+func (r *Runtime) Inject() string         { r.mu.Lock(); defer r.mu.Unlock(); return r.inject }
 
 func (r *Runtime) TakeInject() string {
 	r.mu.Lock()

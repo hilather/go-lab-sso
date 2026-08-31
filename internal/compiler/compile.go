@@ -145,14 +145,14 @@ func compile(doc model.Document, opt Options) (*snapshot.Snapshot, error) {
 	}
 
 	return &snapshot.Snapshot{
-		Canonical:         cloneDoc(doc),
-		Revision:          rev,
-		BootstrapRevision: boot,
-		Generation:        gen,
-		CompiledAt:        at,
-		Issuer:            issuer,
-		TLSCert:           tlsCert,
-		TLSKey:            tlsKey,
+		Canonical:           cloneDoc(doc),
+		Revision:            rev,
+		BootstrapRevision:   boot,
+		Generation:          gen,
+		CompiledAt:          at,
+		Issuer:              issuer,
+		TLSCert:             tlsCert,
+		TLSKey:              tlsKey,
 		SigningKey:          signing,
 		SigningCert:         labCert,
 		AccessToken:         token,

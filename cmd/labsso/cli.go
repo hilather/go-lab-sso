@@ -106,7 +106,7 @@ func healthcheckCmd(args []string, stdout, stderr io.Writer) int {
 		_, _ = fmt.Fprintf(stderr, "labsso healthcheck: %v\n", err)
 		return 1
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		_, _ = fmt.Fprintf(stderr, "labsso healthcheck: status %d\n", resp.StatusCode)
 		return 1

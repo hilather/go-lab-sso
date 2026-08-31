@@ -40,7 +40,7 @@ func decodeSAMLRequest(raw string, deflated bool) (*authnRequest, error) {
 	body := bin
 	if deflated {
 		r := flate.NewReader(bytes.NewReader(bin))
-		defer r.Close()
+		defer func() { _ = r.Close() }()
 		body, err = io.ReadAll(io.LimitReader(r, maxSAMLBytes+1))
 		if err != nil {
 			return nil, fmt.Errorf("SAMLRequest deflate")

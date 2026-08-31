@@ -99,7 +99,7 @@ func (u *UI) postLogin(w http.ResponseWriter, r *http.Request) {
 		Name: oidc.CookieName(snap), Value: sess.ID, Path: "/", HttpOnly: true,
 		SameSite: http.SameSiteLaxMode, Secure: secure,
 	})
-	cl, _ := snap.ClientsByClientID[pendingClient(u, pending)]
+	cl := snap.ClientsByClientID[pendingClient(u, pending)]
 	if cl.PreConsent && !u.oidc.Runtime().ForceConsent() {
 		u.finish(w, r, pending, rec.ID, rec.Username)
 		return

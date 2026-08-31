@@ -400,9 +400,6 @@ func TestPHCArgon2id(t *testing.T) {
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	rec := httptest.NewRecorder()
 	a.HTTPSHandler().ServeHTTP(rec, req)
-	if rec.Code != 302 && !strings.Contains(rec.Body.String(), "invalid") {
-		// pending x is missing so CompleteLogin may 400 after cookie — password accepted if not invalid credentials
-	}
 	if strings.Contains(rec.Body.String(), "invalid credentials") {
 		t.Fatal("PHC should accept")
 	}

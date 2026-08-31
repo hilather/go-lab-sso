@@ -19,13 +19,13 @@ import (
 )
 
 const (
-	nsProto     = "urn:oasis:names:tc:SAML:2.0:protocol"
-	nsAssert    = "urn:oasis:names:tc:SAML:2.0:assertion"
-	statusOK    = "urn:oasis:names:tc:SAML:2.0:status:Success"
-	statusDeny  = "urn:oasis:names:tc:SAML:2.0:status:Responder"
-	nameIDFmt   = "urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified"
+	nsProto      = "urn:oasis:names:tc:SAML:2.0:protocol"
+	nsAssert     = "urn:oasis:names:tc:SAML:2.0:assertion"
+	statusOK     = "urn:oasis:names:tc:SAML:2.0:status:Success"
+	statusDeny   = "urn:oasis:names:tc:SAML:2.0:status:Responder"
+	nameIDFmt    = "urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified"
 	bearerMethod = "urn:oasis:names:tc:SAML:2.0:cm:bearer"
-	passwordAC  = "urn:oasis:names:tc:SAML:2.0:ac:classes:PasswordProtectedTransport"
+	passwordAC   = "urn:oasis:names:tc:SAML:2.0:ac:classes:PasswordProtectedTransport"
 )
 
 type memKeyStore struct {
