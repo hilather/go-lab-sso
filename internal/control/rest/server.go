@@ -52,6 +52,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET "+p+"/clients/{id}", s.authed(s.clientGet))
 	mux.HandleFunc("GET "+p+"/users", s.authed(s.users))
 	mux.HandleFunc("GET "+p+"/users/{id}", s.authed(s.userGet))
+	mux.HandleFunc("POST "+p+"/auth/mfa", s.authed(s.setMFA))
+	mux.HandleFunc("POST "+p+"/users/{id}/totp:enroll", s.authed(s.totpEnroll))
+	mux.HandleFunc("POST "+p+"/users/{id}/totp:clear", s.authed(s.totpClear))
 	mux.HandleFunc("GET "+p+"/groups", s.authed(s.groups))
 	mux.HandleFunc("GET "+p+"/groups/{id}", s.authed(s.groupGet))
 	mux.HandleFunc("GET "+p+"/sessions", s.authed(s.sessions))
@@ -296,6 +299,72 @@ func (s *Server) userGet(w http.ResponseWriter, r *http.Request, actor auth.Acto
 		return
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+func (s *Server) setMFA(w http.ResponseWriter, r *http.Request, actor auth.Actor) {
+	var body struct {
+		Mode             string `json:"mode"`
+		ExpectedRevision string `json:"expectedRevision"`
+		IdempotencyKey   string `json:"idempotencyKey"`
+		Reason           string `json:"reason"`
+	}
+	if err := decodeJSON(r, &body); err != nil {
+		writeError(w, err)
+		return
+	}
+	expected := body.ExpectedRevision
+	if expected == "" {
+		expected = strings.Trim(r.Header.Get(headerIfMatch), `"`)
+	}
+	if expected == "" {
+		expected = r.Header.Get(headerExpected)
+	}
+	key := body.IdempotencyKey
+	if key == "" {
+		key = r.Header.Get(headerIdempotency)
+	}
+	out, err := s.app.SetMFA(actor, app.SetMFAIn{
+		Mode:             body.Mode,
+		ExpectedRevision: expected,
+		IdempotencyKey:   key,
+		Reason:           body.Reason,
+	})
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+func (s *Server) totpEnroll(w http.ResponseWriter, r *http.Request, actor auth.Actor) {
+	var body struct {
+		Reason string `json:"reason"`
+	}
+	if err := decodeJSON(r, &body); err != nil {
+		writeError(w, err)
+		return
+	}
+	out, err := s.app.EnrollTOTP(actor, r.PathValue("id"), body.Reason)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+func (s *Server) totpClear(w http.ResponseWriter, r *http.Request, actor auth.Actor) {
+	var body struct {
+		Reason string `json:"reason"`
+	}
+	if err := decodeJSON(r, &body); err != nil {
+		writeError(w, err)
+		return
+	}
+	if err := s.app.ClearTOTP(actor, r.PathValue("id"), body.Reason); err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
 func (s *Server) groups(w http.ResponseWriter, _ *http.Request, actor auth.Actor) {

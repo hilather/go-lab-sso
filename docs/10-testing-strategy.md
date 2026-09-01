@@ -2,7 +2,7 @@
 
 Status: through VEN-003 tests implemented; SCIM design-only
 Owners: Quality, Application, Protocols
-Last reviewed: 2026-08-30
+Last reviewed: 2026-09-01
 Related ADRs: 0001, 0004
 
 ## Problem statement
@@ -28,7 +28,7 @@ Once LabSSO is implemented, protocol mistakes become “the lab does not look li
 |---|---|
 | Unit | Model, normalize, clothes tables, rewriter allow-lists |
 | Config fixtures | `testdata/config/valid/*` accept; `invalid/*` reject |
-| Protocol | Authorization code + PKCE, discovery `iss`, JWKS, refresh, login HTML, SAML metadata + AuthnRequest → ACS POST, XXE reject |
+| Protocol | Authorization code + PKCE, discovery `iss`, JWKS, refresh, login HTML, RFC 6238 TOTP (`amr`/`acr`, SAML/WS-Fed `TimeSyncToken`), SAML metadata + AuthnRequest → ACS POST, XXE reject |
 | Vendor | Path clothes change; `iss` does not; inactive paths 404; no vendor-cloud hostnames. Entra stub / Okta fail-at / generic cap: OVR-001. VEN-003: Duo/SiteMinder/Shibboleth OIDC + SAML Locations |
 | Import | Goldens + XXE reject |
 | REST contract | OpenAPI / handler goldens |
@@ -41,8 +41,9 @@ Once LabSSO is implemented, protocol mistakes become “the lab does not look li
 
 ## Fixture policy
 
-- Valid minimal document is [testdata/config/valid/minimal.yaml](../testdata/config/valid/minimal.yaml).
-- Unknown-field reject is [testdata/config/invalid/unknown-field.yaml](../testdata/config/invalid/unknown-field.yaml).
+- Valid minimal document is [testdata/config/valid/minimal.yaml](../testdata/config/valid/minimal.yaml). Do not put users on that file.
+- File-backed TOTP is [testdata/config/valid/totp-alice.yaml](../testdata/config/valid/totp-alice.yaml) plus [testdata/secrets/users/alice.totp](../testdata/secrets/users/alice.totp).
+- Unknown-field reject is [testdata/config/invalid/unknown-field.yaml](../testdata/config/invalid/unknown-field.yaml). Invalid TOTP fixtures (`totp-missing-file`, `totp-bad-base32`, `totp-newline-ref`, `unknown-totp-field`) are named in `mustReject`.
 - Do not put real customer secrets in testdata.
 - XXE fixtures must be inert (no network, no host-file read on pass).
 

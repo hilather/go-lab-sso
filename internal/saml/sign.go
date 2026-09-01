@@ -26,6 +26,7 @@ const (
 	nameIDFmt    = "urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified"
 	bearerMethod = "urn:oasis:names:tc:SAML:2.0:cm:bearer"
 	passwordAC   = "urn:oasis:names:tc:SAML:2.0:ac:classes:PasswordProtectedTransport"
+	timeSyncAC   = "urn:oasis:names:tc:SAML:2.0:ac:classes:TimeSyncToken"
 )
 
 type memKeyStore struct {
@@ -73,7 +74,7 @@ func certB64(snap *snapshot.Snapshot) string {
 	return base64.StdEncoding.EncodeToString(cb.Bytes)
 }
 
-func buildResponse(snap *snapshot.Snapshot, user model.User, acs, inResponseTo, audience string, now time.Time, success bool) (string, error) {
+func buildResponse(snap *snapshot.Snapshot, user model.User, acs, inResponseTo, audience string, now time.Time, success, mfa bool) (string, error) {
 	ks, err := keyStore(snap)
 	if err != nil {
 		return "", err
@@ -133,7 +134,11 @@ func buildResponse(snap *snapshot.Snapshot, user model.User, acs, inResponseTo, 
 
 		authn := assert.CreateElement("saml:AuthnStatement")
 		authn.CreateAttr("AuthnInstant", instant)
-		authn.CreateElement("saml:AuthnContext").CreateElement("saml:AuthnContextClassRef").SetText(passwordAC)
+		ac := passwordAC
+		if mfa {
+			ac = timeSyncAC
+		}
+		authn.CreateElement("saml:AuthnContext").CreateElement("saml:AuthnContextClassRef").SetText(ac)
 
 		attrs := assert.CreateElement("saml:AttributeStatement")
 		addAttr(attrs, "uid", user.Username)

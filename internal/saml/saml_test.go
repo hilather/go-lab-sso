@@ -18,6 +18,7 @@ import (
 	"github.com/hilather/go-lab-sso/internal/auth"
 	"github.com/hilather/go-lab-sso/internal/model"
 	"github.com/hilather/go-lab-sso/internal/oidc"
+	"github.com/hilather/go-lab-sso/internal/totp"
 )
 
 func repoRoot(t *testing.T) string {
@@ -248,6 +249,61 @@ func TestSAMLLoggedInPreConsentPostsACS(t *testing.T) {
 	if rec.Code != 200 || !strings.Contains(rec.Body.String(), "SAMLResponse") {
 		t.Fatalf("session complete %d %s", rec.Code, rec.Body)
 	}
+	xmlBody := decodeSAMLResponse(t, rec.Body.String())
+	if !strings.Contains(xmlBody, "PasswordProtectedTransport") {
+		t.Fatalf("password-only assertion: %s", xmlBody)
+	}
+	mfaSess := a.OIDC().Runtime().PutSession(oidc.LoginSession{UserID: "u1", Username: "alice", MFACompleted: true})
+	req = httptest.NewRequest("GET", u, nil)
+	req.AddCookie(&http.Cookie{Name: oidc.CookieLogin, Value: mfaSess.ID})
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	xmlBody = decodeSAMLResponse(t, rec.Body.String())
+	if !strings.Contains(xmlBody, totp.TimeSync) {
+		t.Fatalf("MFA cookie-reuse want TimeSyncToken: %s", xmlBody)
+	}
+}
+
+func TestSAMLConsentPathTimeSync(t *testing.T) {
+	a, h := bootSAML(t, []string{"https://sp.example.net/acs"})
+	if err := a.ForceConsent(auth.AdminActor(), true); err != nil {
+		t.Fatal(err)
+	}
+	sess := a.OIDC().Runtime().PutSession(oidc.LoginSession{UserID: "u1", Username: "alice", MFACompleted: true})
+	reqXML := authnXML("id-consent", "https://sp.example.net", "https://sp.example.net/acs")
+	u := "/saml/sso?SAMLRequest=" + url.QueryEscape(encodeRedirect(t, reqXML))
+	req := httptest.NewRequest("GET", u, nil)
+	req.AddCookie(&http.Cookie{Name: oidc.CookieLogin, Value: sess.ID})
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != 302 || !strings.Contains(rec.Header().Get("Location"), "/consent") {
+		t.Fatalf("force-consent %d %s", rec.Code, rec.Header().Get("Location"))
+	}
+	loc, _ := url.Parse(rec.Header().Get("Location"))
+	pending := loc.Query().Get("pending")
+	form := url.Values{"pending": {pending}, "approve": {"1"}}
+	req = httptest.NewRequest("POST", "/consent", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(&http.Cookie{Name: oidc.CookieLogin, Value: sess.ID})
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	xmlBody := decodeSAMLResponse(t, rec.Body.String())
+	if !strings.Contains(xmlBody, totp.TimeSync) {
+		t.Fatalf("consent MFA %s", xmlBody)
+	}
+}
+
+func decodeSAMLResponse(t *testing.T, page string) string {
+	t.Helper()
+	b64 := extractHidden(page, "SAMLResponse")
+	if b64 == "" {
+		t.Fatalf("no SAMLResponse in %s", page)
+	}
+	raw, err := base64.StdEncoding.DecodeString(b64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(raw)
 }
 
 func extractHidden(page, name string) string {

@@ -9,6 +9,7 @@ This project will use [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ### Added
 
+- File-ref TOTP ([ADR 0011](docs/adr/0011-file-ref-totp.md)): RFC 6238 SHA-1 6-digit verification, optional `users[].totpSecretRef`, in-memory enroll/rotate/clear overlay, typed `POST /v1/auth/mfa` / `sso_auth_mfa_set`, `totp:enroll` / `totp:clear` REST+MCP twins, operator Users view. After MFA, OIDC `amr`/`acr` and SAML/WS-Fed `TimeSyncToken`. `lab-totp` is rejected. Fixture `testdata/config/valid/totp-alice.yaml`.
 - Product page polish: illustrated header banner, CI badge, and a user-guide table of contents.
 - Operator docs: README rewrite with header banner, YAML and state-API quick starts, and `docs/user-guide.md`. Onboarding no longer talks like the CLI is future work.
 - VEN-001: Entra and Okta clothes on the exact issuer (`internal/vendor`, snapshot `Clothes`, path dispatch). Optional `spec.profile.tenantId` (compile default, not Normalized). Cookie names `labsso_entra` / `labsso_okta`. Entra `oid`/`tid`/`ver` on id_token and userinfo. Entra token errors add `error_codes` + `trace_id`. `POST /v1/tunables/vendor:swap` / `sso_tunable_vendor_swap` merges profile and purges protocol memory (not pause/force-fail/inject).

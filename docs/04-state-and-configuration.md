@@ -2,7 +2,7 @@
 
 Status: through VEN-003 implemented
 Owners: Configuration, Application
-Last reviewed: 2026-08-30
+Last reviewed: 2026-09-01
 Related ADRs: 0003, 0008
 
 ## Problem statement
@@ -130,12 +130,12 @@ List of client objects (empty in minimal). Fields: `id`, `clientId`, `redirectUR
 
 ### `spec.users` / `spec.groups`
 
-Source of truth in v1. User: `id`, `username`, optional `email`, `passwordRef` or `passwordHashRef` (PHC file), `groupIds`, `enabled`. Usernames are unique. Group: `id`, `name`. Membership is **only** `user.groupIds`. `group.memberUserIds` is **not a field**; a document that contains it is an unknown-field reject. Dangling `groupIds` reject at validate.
+Source of truth in v1. User: `id`, `username`, optional `email`, `passwordRef` or `passwordHashRef` (PHC file), optional `totpSecretRef` (base32 file; compile-parsed), `groupIds`, `enabled`. Usernames are unique. Group: `id`, `name`. Membership is **only** `user.groupIds`. `group.memberUserIds` is **not a field**; a document that contains it is an unknown-field reject. Dangling `groupIds` reject at validate. List/get add a `totp: { configured, source }` view (`file` | `overlay`); apply values stay `model.User` (a GET `totp` field on apply 400s).
 
 ### `spec.auth`
 
 - `sessionTTL`: Go duration.
-- `mfa.mode`: `never` | `always` | `force-fail`.
+- `mfa.mode`: `never` | `always` | `force-fail`. Typed `POST /v1/auth/mfa` merges `mode` onto current `Auth` (keeps `sessionTTL`). Empty mode is rejected. Overlay enroll/clear live on `oidc.Runtime` and die on restart/`state:reset`. Clothes swap does not drop overlay. Changing `totpSecretRef` or removing the user does.
 - PHC (LOGIN-001): `passwordHashRef` files must be Argon2id (`$argon2id$v=19$m=65536,t=3,p=4$…`). Unknown PHC id fail-closed. Plaintext/unsalted hash material is rejected. `passwordRef` files are compared with constant-time equality (lab plaintext).
 
 ### `spec.groupOverage`

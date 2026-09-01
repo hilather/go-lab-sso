@@ -2,8 +2,8 @@
 
 Status: through VEN-003 implemented
 Owners: Security, Protocols, Control Plane
-Last reviewed: 2026-08-31
-Related ADRs: 0002, 0003, 0004, 0005, 0006, 0008, 0009, 0010
+Last reviewed: 2026-09-01
+Related ADRs: 0002, 0003, 0004, 0005, 0006, 0008, 0009, 0010, 0011
 
 ## Goals
 
@@ -75,6 +75,7 @@ Bootstrap contains **references**, not values:
 
 - Management token: `spec.access.tokenRef`.
 - User passwords: per-user file ref or PHC file.
+- TOTP seeds: optional `totpSecretRef` file (base32) or in-memory enroll overlay. Overlay is never written to disk. Enroll secret is returned once on REST/MCP and must not appear in export, audit, logs, or MCP resources.
 - Client secrets: per-client file ref.
 - TLS: `secrets/labsso-tls/` (integrator), not inline PEM.
 

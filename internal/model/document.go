@@ -101,6 +101,7 @@ type User struct {
 	Email           string   `yaml:"email,omitempty" json:"email,omitempty"`
 	PasswordRef     string   `yaml:"passwordRef,omitempty" json:"passwordRef,omitempty"`
 	PasswordHashRef string   `yaml:"passwordHashRef,omitempty" json:"passwordHashRef,omitempty"`
+	TOTPSecretRef   string   `yaml:"totpSecretRef,omitempty" json:"totpSecretRef,omitempty"`
 	GroupIDs        []string `yaml:"groupIds,omitempty" json:"groupIds,omitempty"`
 	Enabled         *bool    `yaml:"enabled,omitempty" json:"enabled,omitempty"`
 }

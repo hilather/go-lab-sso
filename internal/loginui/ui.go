@@ -14,10 +14,9 @@ import (
 	"github.com/hilather/go-lab-sso/internal/oidc"
 	"github.com/hilather/go-lab-sso/internal/saml"
 	"github.com/hilather/go-lab-sso/internal/snapshot"
+	"github.com/hilather/go-lab-sso/internal/totp"
 	"github.com/hilather/go-lab-sso/internal/wsfed"
 )
-
-const totpStub = "lab-totp"
 
 type UI struct {
 	store   *snapshot.Store
@@ -83,16 +82,25 @@ func (u *UI) postLogin(w http.ResponseWriter, r *http.Request) {
 		writeHTML(w, loginPage(snap, pending, "MFA failed", true))
 		return
 	}
-	if mode == "always" && mfa != totpStub {
-		writeHTML(w, loginPage(snap, pending, "", true))
-		return
+	mfaOK := false
+	if mode == "always" {
+		if mfa == "" {
+			writeHTML(w, loginPage(snap, pending, "", true))
+			return
+		}
+		secret, ok := u.totpSecret(rec)
+		if !ok || !u.oidc.Runtime().VerifyAndRecordTOTP(rec.ID, secret, mfa, time.Now()) {
+			writeHTML(w, loginPage(snap, pending, "MFA failed", true))
+			return
+		}
+		mfaOK = true
 	}
 	ttl := time.Hour
 	if snap.Canonical.Spec.Auth.SessionTTL > 0 {
 		ttl = snap.Canonical.Spec.Auth.SessionTTL.Duration()
 	}
 	sess := u.oidc.Runtime().PutSession(oidc.LoginSession{
-		UserID: rec.ID, Username: rec.Username, Expires: time.Now().Add(ttl),
+		UserID: rec.ID, Username: rec.Username, Expires: time.Now().Add(ttl), MFACompleted: mfaOK,
 	})
 	secure := r.TLS != nil
 	http.SetCookie(w, &http.Cookie{
@@ -101,7 +109,7 @@ func (u *UI) postLogin(w http.ResponseWriter, r *http.Request) {
 	})
 	cl := snap.ClientsByClientID[pendingClient(u, pending)]
 	if cl.PreConsent && !u.oidc.Runtime().ForceConsent() {
-		u.finish(w, r, pending, rec.ID, rec.Username)
+		u.finish(w, r, pending, rec.ID, rec.Username, mfaOK)
 		return
 	}
 	http.Redirect(w, r, "/consent?pending="+pending, http.StatusFound)
@@ -131,12 +139,20 @@ func (u *UI) postConsent(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/login?pending="+pending, http.StatusFound)
 		return
 	}
-	u.finish(w, r, pending, sess.UserID, sess.Username)
+	mode := ""
+	if snap := u.store.Load(); snap != nil && snap.Canonical != nil {
+		mode = snap.Canonical.Spec.Auth.MFA.Mode
+	}
+	if !oidc.SessionUsable(sess, mode) {
+		http.Redirect(w, r, "/login?pending="+pending, http.StatusFound)
+		return
+	}
+	u.finish(w, r, pending, sess.UserID, sess.Username, sess.MFACompleted)
 }
 
-func (u *UI) finish(w http.ResponseWriter, r *http.Request, pending, userID, username string) {
+func (u *UI) finish(w http.ResponseWriter, r *http.Request, pending, userID, username string, mfa bool) {
 	if pend, ok := u.oidc.Runtime().GetPending(pending); ok && pend.Protocol == wsfed.Protocol && u.wsfed != nil {
-		body, err := u.wsfed.Complete(pending, userID, username)
+		body, err := u.wsfed.Complete(pending, userID, username, mfa)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -145,7 +161,7 @@ func (u *UI) finish(w http.ResponseWriter, r *http.Request, pending, userID, use
 		return
 	}
 	if pend, ok := u.oidc.Runtime().GetPending(pending); ok && pend.Protocol == oidc.ProtocolSAML && u.saml != nil {
-		body, err := u.saml.Complete(pending, userID, username)
+		body, err := u.saml.Complete(pending, userID, username, mfa)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -153,7 +169,7 @@ func (u *UI) finish(w http.ResponseWriter, r *http.Request, pending, userID, use
 		writeHTML(w, body)
 		return
 	}
-	loc, err := u.oidc.CompleteLogin(pending, userID, username)
+	loc, err := u.oidc.CompleteLogin(pending, userID, username, mfa)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -207,6 +223,29 @@ func (u *UI) checkPassword(user model.User, provided []byte) error {
 	return verifyPassword(b, provided)
 }
 
+func (u *UI) totpSecret(user model.User) ([]byte, bool) {
+	if sec, ok := u.oidc.Runtime().GetTOTPOverlay(user.ID); ok {
+		return sec, true
+	}
+	ref := user.TOTPSecretRef
+	if ref == "" {
+		return nil, false
+	}
+	p := ref
+	if !filepath.IsAbs(p) && u.baseDir != "" {
+		p = filepath.Join(u.baseDir, p)
+	}
+	b, err := os.ReadFile(p)
+	if err != nil {
+		return nil, false
+	}
+	sec, err := totp.ParseSecret(b)
+	if err != nil {
+		return nil, false
+	}
+	return sec, true
+}
+
 func pendingClient(u *UI, pendingID string) string {
 	p, ok := u.oidc.Runtime().GetPending(pendingID)
 	if !ok {
@@ -237,7 +276,7 @@ func loginPage(snap *snapshot.Snapshot, pending, errMsg string, mfa bool) string
 	}
 	extra := ""
 	if mfa {
-		extra = `<label>TOTP (lab stub: lab-totp)</label><input name="mfa" autocomplete="one-time-code"/>`
+		extra = `<label>TOTP</label><input name="mfa" autocomplete="one-time-code"/>`
 	}
 	msg := ""
 	if errMsg != "" {

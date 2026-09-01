@@ -193,4 +193,45 @@ func TestNormalizeDefaults(t *testing.T) {
 	if doc.Spec.GroupOverage.OktaFailAt != 100 || doc.Spec.GroupOverage.GenericCap != 200 {
 		t.Fatalf("overage defaults %+v", doc.Spec.GroupOverage)
 	}
+	if doc.Spec.Auth.MFA.Mode != "never" {
+		t.Fatalf("mfa default %s", doc.Spec.Auth.MFA.Mode)
+	}
+}
+
+func TestLoadTotpAlice(t *testing.T) {
+	root := repoRoot(t)
+	doc, err := config.LoadFile(filepath.Join(root, "testdata/config/valid/totp-alice.yaml"), config.Options{BaseDir: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(doc.Spec.Users) != 1 || doc.Spec.Users[0].TOTPSecretRef != "testdata/secrets/users/alice.totp" {
+		t.Fatalf("users %+v", doc.Spec.Users)
+	}
+	if doc.Spec.Auth.MFA.Mode != "always" {
+		t.Fatalf("mode %s", doc.Spec.Auth.MFA.Mode)
+	}
+	canon, err := config.CanonicalYAML(doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(canon), "totpSecretRef: testdata/secrets/users/alice.totp") {
+		t.Fatalf("canonicalize lost path: %s", canon)
+	}
+	if strings.Contains(string(canon), "GEZDGNBVGY3TQOJQ") {
+		t.Fatal("canonicalize leaked seed")
+	}
+	again, err := config.Load(canon, config.Options{BaseDir: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again.Spec.Users[0].TOTPSecretRef != doc.Spec.Users[0].TOTPSecretRef {
+		t.Fatal("round-trip totpSecretRef")
+	}
+}
+
+func TestTotpInvalidFixtures(t *testing.T) {
+	mustReject(t, "testdata/config/invalid/totp-missing-file.yaml")
+	mustReject(t, "testdata/config/invalid/totp-bad-base32.yaml")
+	mustReject(t, "testdata/config/invalid/totp-newline-ref.yaml")
+	mustReject(t, "testdata/config/invalid/unknown-totp-field.yaml")
 }

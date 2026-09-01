@@ -2,6 +2,7 @@ package loginui_test
 
 import (
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -11,12 +12,14 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/hilather/go-lab-sso/internal/app"
 	"github.com/hilather/go-lab-sso/internal/auth"
 	"github.com/hilather/go-lab-sso/internal/loginui"
 	"github.com/hilather/go-lab-sso/internal/model"
 	"github.com/hilather/go-lab-sso/internal/oidc"
+	"github.com/hilather/go-lab-sso/internal/totp"
 )
 
 func repoRoot(t *testing.T) string {
@@ -122,6 +125,17 @@ func TestAuthorizeLoginConsentToken(t *testing.T) {
 	h.ServeHTTP(rec, req)
 	if rec.Code != 200 || !strings.Contains(rec.Body.String(), "id_token") {
 		t.Fatal(rec.Body.String())
+	}
+	var tok map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &tok); err != nil {
+		t.Fatal(err)
+	}
+	claims := jwtClaims(t, tok["id_token"].(string))
+	if _, ok := claims["amr"]; ok {
+		t.Fatalf("password-only must omit amr: %v", claims)
+	}
+	if _, ok := claims["acr"]; ok {
+		t.Fatalf("password-only must omit acr: %v", claims)
 	}
 }
 
@@ -439,4 +453,203 @@ func TestPauseLeavesLoginUp(t *testing.T) {
 
 func pkceS256(verifier string) string {
 	return loginui.S256ForTest(verifier)
+}
+
+func enableAlways(t *testing.T, a *app.App) {
+	t.Helper()
+	if _, err := a.SetMFA(auth.AdminActor(), app.SetMFAIn{
+		Mode: "always", ExpectedRevision: a.Status().RuntimeRevision, Reason: "mfa",
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestMFATwoSubmitAndLabTOTPRejected(t *testing.T) {
+	a := bootLogin(t, true)
+	enableAlways(t, a)
+	h := a.HTTPSHandler()
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "/login?pending=p1", nil))
+	if strings.Contains(rec.Body.String(), `name="mfa"`) || strings.Contains(rec.Body.String(), "lab-totp") {
+		t.Fatal(rec.Body.String())
+	}
+	form := url.Values{"pending": {"p1"}, "username": {"alice"}, "password": {"alice-password"}}
+	req := httptest.NewRequest("POST", "/login", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != 200 || !strings.Contains(rec.Body.String(), `name="mfa"`) {
+		t.Fatalf("want TOTP field %d %s", rec.Code, rec.Body)
+	}
+	if strings.Contains(rec.Header().Get("Set-Cookie"), oidc.CookieLogin) {
+		t.Fatal("cookie before MFA")
+	}
+	if strings.Contains(rec.Body.String(), "lab-totp") {
+		t.Fatal("label must not mention lab-totp")
+	}
+	form.Set("mfa", "lab-totp")
+	req = httptest.NewRequest("POST", "/login", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if !strings.Contains(rec.Body.String(), "MFA failed") {
+		t.Fatal(rec.Body.String())
+	}
+	if strings.Contains(rec.Header().Get("Set-Cookie"), oidc.CookieLogin) {
+		t.Fatal("cookie on fail")
+	}
+}
+
+func TestMFAFileRefLogin(t *testing.T) {
+	a := bootLogin(t, true)
+	uval, _ := json.Marshal(model.User{
+		ID: "u1", Username: "alice", PasswordRef: "testdata/secrets/users/alice.password",
+		TOTPSecretRef: "testdata/secrets/users/alice.totp",
+	})
+	if _, err := a.Apply(auth.AdminActor(), app.ChangeIn{
+		ExpectedRevision: a.Status().RuntimeRevision, Reason: "ref",
+		Operations: []model.Operation{{Op: model.OpUpdate, Target: model.Target{Kind: model.TargetUser, ID: "u1"}, Value: uval}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	enableAlways(t, a)
+	code := totp.Code([]byte("12345678901234567890"), time.Now())
+	form := url.Values{"pending": {"x"}, "username": {"alice"}, "password": {"alice-password"}, "mfa": {code}}
+	req := httptest.NewRequest("POST", "/login", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	a.HTTPSHandler().ServeHTTP(rec, req)
+	if !strings.Contains(rec.Header().Get("Set-Cookie"), oidc.CookieLogin) {
+		t.Fatalf("want cookie %d %s", rec.Code, rec.Body)
+	}
+}
+
+func TestMFAOverlayRotateSameWindow(t *testing.T) {
+	a := bootLogin(t, true)
+	enableAlways(t, a)
+	first, err := a.EnrollTOTP(auth.AdminActor(), "u1", "e1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sec, err := totp.ParseSecret([]byte(first.Secret))
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	code1 := totp.Code(sec, now)
+	form := url.Values{"pending": {"x"}, "username": {"alice"}, "password": {"alice-password"}, "mfa": {code1}}
+	req := httptest.NewRequest("POST", "/login", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	a.HTTPSHandler().ServeHTTP(rec, req)
+	if !strings.Contains(rec.Header().Get("Set-Cookie"), oidc.CookieLogin) {
+		t.Fatalf("first login %d %s", rec.Code, rec.Body)
+	}
+	second, err := a.EnrollTOTP(auth.AdminActor(), "u1", "e2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sec2, err := totp.ParseSecret([]byte(second.Secret))
+	if err != nil {
+		t.Fatal(err)
+	}
+	code2 := totp.Code(sec2, now)
+	form.Set("mfa", code2)
+	req = httptest.NewRequest("POST", "/login", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec = httptest.NewRecorder()
+	a.HTTPSHandler().ServeHTTP(rec, req)
+	if !strings.Contains(rec.Header().Get("Set-Cookie"), oidc.CookieLogin) {
+		t.Fatalf("rotate same window %d %s", rec.Code, rec.Body)
+	}
+}
+
+func TestMFAConsentPathClaims(t *testing.T) {
+	a := bootLogin(t, false)
+	enableAlways(t, a)
+	en, err := a.EnrollTOTP(auth.AdminActor(), "u1", "e")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sec, _ := totp.ParseSecret([]byte(en.Secret))
+	h := a.HTTPSHandler()
+	verifier := "pkce-verifier-value-1234567890"
+	ch := pkceS256(verifier)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "/oauth2/authorize?response_type=code&client_id=app-1&redirect_uri="+url.QueryEscape("https://sut.example.net/cb")+"&code_challenge="+ch+"&code_challenge_method=S256&scope=openid", nil))
+	pending, _ := url.Parse(rec.Header().Get("Location"))
+	pid := pending.Query().Get("pending")
+	form := url.Values{"pending": {pid}, "username": {"alice"}, "password": {"alice-password"}}
+	req := httptest.NewRequest("POST", "/login", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	form.Set("mfa", totp.Code(sec, time.Now()))
+	req = httptest.NewRequest("POST", "/login", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != 302 || !strings.Contains(rec.Header().Get("Location"), "/consent") {
+		t.Fatalf("want consent %s", rec.Header().Get("Location"))
+	}
+	cookie := rec.Result().Cookies()
+	req = httptest.NewRequest("POST", "/consent", strings.NewReader(url.Values{"pending": {pid}, "approve": {"1"}}.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	for _, c := range cookie {
+		req.AddCookie(c)
+	}
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	loc, _ := url.Parse(rec.Header().Get("Location"))
+	code := loc.Query().Get("code")
+	if code == "" {
+		t.Fatalf("consent %d %s", rec.Code, rec.Header().Get("Location"))
+	}
+	tokForm := url.Values{"grant_type": {"authorization_code"}, "code": {code}, "redirect_uri": {"https://sut.example.net/cb"}, "code_verifier": {verifier}, "client_id": {"app-1"}}
+	req = httptest.NewRequest("POST", "/oauth2/token", strings.NewReader(tokForm.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	var tok map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &tok); err != nil {
+		t.Fatal(err)
+	}
+	claims := jwtClaims(t, tok["id_token"].(string))
+	if claims["acr"] != totp.ACR {
+		t.Fatalf("acr %v", claims["acr"])
+	}
+	amr, _ := claims["amr"].([]any)
+	if len(amr) != 2 {
+		t.Fatalf("amr %v", claims["amr"])
+	}
+	ref := tok["refresh_token"].(string)
+	refForm := url.Values{"grant_type": {"refresh_token"}, "refresh_token": {ref}, "client_id": {"app-1"}}
+	req = httptest.NewRequest("POST", "/oauth2/token", strings.NewReader(refForm.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if err := json.Unmarshal(rec.Body.Bytes(), &tok); err != nil {
+		t.Fatal(rec.Body.String())
+	}
+	again := jwtClaims(t, tok["id_token"].(string))
+	if again["acr"] != totp.ACR {
+		t.Fatalf("refresh acr %v", again["acr"])
+	}
+}
+
+func jwtClaims(t *testing.T, tok string) map[string]any {
+	t.Helper()
+	parts := strings.Split(tok, ".")
+	if len(parts) < 2 {
+		t.Fatal(tok)
+	}
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		t.Fatal(err)
+	}
+	var claims map[string]any
+	if err := json.Unmarshal(payload, &claims); err != nil {
+		t.Fatal(err)
+	}
+	return claims
 }

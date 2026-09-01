@@ -54,6 +54,9 @@ func (a *App) applyLocked(actor auth.Actor, capID string, in ChangeIn) (*ApplyRe
 	if vendorChanged(prev, cand) && a.oidc != nil {
 		a.oidc.Runtime().PurgeProtocol()
 	}
+	if a.oidc != nil {
+		a.syncTOTPOverlay(prev, cand)
+	}
 	res := &ApplyResult{Plan: *p, Applied: true, Generation: cand.Generation}
 	prevRev := ""
 	if prev != nil {

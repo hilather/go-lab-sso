@@ -114,10 +114,14 @@ func (p *Provider) passive(w http.ResponseWriter, r *http.Request) {
 		SPEntityID: realm, RelayState: r.URL.Query().Get("wctx"), RedirectURI: reply,
 	})
 	iss := strings.TrimRight(snap.Issuer, "/")
+	mode := ""
+	if snap.Canonical != nil {
+		mode = snap.Canonical.Spec.Auth.MFA.Mode
+	}
 	if sid, err := r.Cookie(oidc.CookieName(snap)); err == nil && sid.Value != "" {
-		if sess, ok := p.rt.GetSession(sid.Value); ok {
+		if sess, ok := p.rt.GetSession(sid.Value); ok && oidc.SessionUsable(sess, mode) {
 			if cl.PreConsent && !p.rt.ForceConsent() {
-				htmlForm, err := p.Complete(pend.ID, sess.UserID, sess.Username)
+				htmlForm, err := p.Complete(pend.ID, sess.UserID, sess.Username, sess.MFACompleted)
 				if err != nil {
 					http.Error(w, err.Error(), http.StatusBadRequest)
 					return
@@ -133,15 +137,15 @@ func (p *Provider) passive(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, iss+"/login?pending="+url.QueryEscape(pend.ID), http.StatusFound)
 }
 
-func (p *Provider) Complete(pendingID, userID, username string) (string, error) {
-	return p.finish(pendingID, userID, username, true)
+func (p *Provider) Complete(pendingID, userID, username string, mfa bool) (string, error) {
+	return p.finish(pendingID, userID, username, true, mfa)
 }
 
 func (p *Provider) Deny(pendingID string) (string, error) {
-	return p.finish(pendingID, "", "", false)
+	return p.finish(pendingID, "", "", false, false)
 }
 
-func (p *Provider) finish(pendingID, userID, username string, success bool) (string, error) {
+func (p *Provider) finish(pendingID, userID, username string, success, mfa bool) (string, error) {
 	pend, ok := p.rt.GetPending(pendingID)
 	if !ok || pend.Protocol != Protocol {
 		return "", fmt.Errorf("pending request not found")
@@ -154,7 +158,7 @@ func (p *Provider) finish(pendingID, userID, username string, success bool) (str
 	if !ok {
 		user = model.User{ID: userID, Username: username}
 	}
-	b64, err := saml.SignedResponseB64(snap, user, pend.ACSURL, pend.RequestID, pend.SPEntityID, success)
+	b64, err := saml.SignedResponseB64(snap, user, pend.ACSURL, pend.RequestID, pend.SPEntityID, success, mfa)
 	if err != nil {
 		return "", err
 	}

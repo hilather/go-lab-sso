@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/hilather/go-lab-sso/internal/model"
+	"github.com/hilather/go-lab-sso/internal/totp"
 	"gopkg.in/yaml.v3"
 )
 
@@ -127,11 +128,17 @@ func ValidateSecretRefs(doc model.Document, base string) error {
 		if strings.Contains(u.PasswordRef, "\n") || strings.Contains(u.PasswordHashRef, "\n") {
 			return fmt.Errorf("inline password material rejected")
 		}
+		if strings.Contains(u.TOTPSecretRef, "\n") {
+			return fmt.Errorf("inline totp material rejected")
+		}
 		if u.PasswordRef != "" {
 			refs = append(refs, u.PasswordRef)
 		}
 		if u.PasswordHashRef != "" {
 			refs = append(refs, u.PasswordHashRef)
+		}
+		if u.TOTPSecretRef != "" {
+			refs = append(refs, u.TOTPSecretRef)
 		}
 	}
 	for _, c := range doc.Spec.Clients {
@@ -149,6 +156,22 @@ func ValidateSecretRefs(doc model.Document, base string) error {
 		}
 		if _, err := os.Stat(p); err != nil {
 			return fmt.Errorf("secret ref %q: %w", ref, err)
+		}
+	}
+	for _, u := range doc.Spec.Users {
+		if u.TOTPSecretRef == "" {
+			continue
+		}
+		p := u.TOTPSecretRef
+		if !filepath.IsAbs(p) && base != "" {
+			p = filepath.Join(base, p)
+		}
+		b, err := os.ReadFile(p)
+		if err != nil {
+			return fmt.Errorf("totpSecretRef %q: %w", u.TOTPSecretRef, err)
+		}
+		if _, err := totp.ParseSecret(b); err != nil {
+			return fmt.Errorf("totpSecretRef %q: %w", u.TOTPSecretRef, err)
 		}
 	}
 	return nil

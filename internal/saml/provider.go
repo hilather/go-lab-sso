@@ -153,7 +153,7 @@ func (p *Provider) sso(w http.ResponseWriter, r *http.Request) {
 		mfa = snap.Canonical.Spec.Auth.MFA.Mode
 	}
 	if p.rt.ForceFail() || mfa == "force-fail" {
-		htmlForm, err := p.responseHTML(snap, model.User{}, acs, req.ID, req.Issuer, r.FormValue("RelayState"), false)
+		htmlForm, err := p.responseHTML(snap, model.User{}, acs, req.ID, req.Issuer, r.FormValue("RelayState"), false, false)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -172,9 +172,9 @@ func (p *Provider) sso(w http.ResponseWriter, r *http.Request) {
 	})
 	iss := strings.TrimRight(snap.Issuer, "/")
 	if sid, err := r.Cookie(oidc.CookieName(snap)); err == nil && sid.Value != "" {
-		if sess, ok := p.rt.GetSession(sid.Value); ok {
+		if sess, ok := p.rt.GetSession(sid.Value); ok && oidc.SessionUsable(sess, mfa) {
 			if cl.PreConsent && !p.rt.ForceConsent() {
-				htmlForm, err := p.completeUser(pend.ID, sess.UserID, sess.Username)
+				htmlForm, err := p.completeUser(pend.ID, sess.UserID, sess.Username, sess.MFACompleted)
 				if err != nil {
 					http.Error(w, err.Error(), http.StatusBadRequest)
 					return
@@ -189,22 +189,22 @@ func (p *Provider) sso(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, iss+"/login?pending="+url.QueryEscape(pend.ID), http.StatusFound)
 }
 
-func (p *Provider) Complete(pendingID, userID, username string) (string, error) {
-	return p.completeUser(pendingID, userID, username)
+func (p *Provider) Complete(pendingID, userID, username string, mfa bool) (string, error) {
+	return p.completeUser(pendingID, userID, username, mfa)
 }
 
 func (p *Provider) Deny(pendingID string) (string, error) {
-	return p.finishPending(pendingID, "", "", false)
+	return p.finishPending(pendingID, "", "", false, false)
 }
 
-func (p *Provider) completeUser(pendingID, userID, username string) (string, error) {
+func (p *Provider) completeUser(pendingID, userID, username string, mfa bool) (string, error) {
 	if p.rt.ForceFail() {
 		return "", fmt.Errorf("access_denied")
 	}
-	return p.finishPending(pendingID, userID, username, true)
+	return p.finishPending(pendingID, userID, username, true, mfa)
 }
 
-func (p *Provider) finishPending(pendingID, userID, username string, success bool) (string, error) {
+func (p *Provider) finishPending(pendingID, userID, username string, success, mfa bool) (string, error) {
 	pend, ok := p.rt.GetPending(pendingID)
 	if !ok || pend.Protocol != oidc.ProtocolSAML {
 		return "", fmt.Errorf("pending request not found")
@@ -217,7 +217,7 @@ func (p *Provider) finishPending(pendingID, userID, username string, success boo
 	if !ok {
 		user = model.User{ID: userID, Username: username}
 	}
-	htmlForm, err := p.responseHTML(snap, user, pend.ACSURL, pend.RequestID, pend.SPEntityID, pend.RelayState, success)
+	htmlForm, err := p.responseHTML(snap, user, pend.ACSURL, pend.RequestID, pend.SPEntityID, pend.RelayState, success, mfa)
 	if err != nil {
 		return "", err
 	}
@@ -227,20 +227,20 @@ func (p *Provider) finishPending(pendingID, userID, username string, success boo
 	return htmlForm, nil
 }
 
-func (p *Provider) responseHTML(snap *snapshot.Snapshot, user model.User, acs, inResponseTo, audience, relay string, success bool) (string, error) {
-	return AutoPost(snap, user, acs, inResponseTo, audience, relay, success)
+func (p *Provider) responseHTML(snap *snapshot.Snapshot, user model.User, acs, inResponseTo, audience, relay string, success, mfa bool) (string, error) {
+	return AutoPost(snap, user, acs, inResponseTo, audience, relay, success, mfa)
 }
 
-func AutoPost(snap *snapshot.Snapshot, user model.User, acs, inResponseTo, audience, relay string, success bool) (string, error) {
-	b64, err := SignedResponseB64(snap, user, acs, inResponseTo, audience, success)
+func AutoPost(snap *snapshot.Snapshot, user model.User, acs, inResponseTo, audience, relay string, success, mfa bool) (string, error) {
+	b64, err := SignedResponseB64(snap, user, acs, inResponseTo, audience, success, mfa)
 	if err != nil {
 		return "", err
 	}
 	return autoPostForm(acs, b64, relay), nil
 }
 
-func SignedResponseB64(snap *snapshot.Snapshot, user model.User, acs, inResponseTo, audience string, success bool) (string, error) {
-	return buildResponse(snap, user, acs, inResponseTo, audience, time.Now(), success)
+func SignedResponseB64(snap *snapshot.Snapshot, user model.User, acs, inResponseTo, audience string, success, mfa bool) (string, error) {
+	return buildResponse(snap, user, acs, inResponseTo, audience, time.Now(), success, mfa)
 }
 
 func autoPostForm(acs, samlResponse, relay string) string {

@@ -2,7 +2,7 @@
 
 Status: FND catalog + REST/MCP + UI-001 session/audit adapters; `make test-parity` is the cross-transport gate
 Owners: Application, REST, MCP, UI
-Last reviewed: 2026-08-30
+Last reviewed: 2026-09-01
 Related ADRs: 0004
 
 ## Problem statement
@@ -83,6 +83,9 @@ Frozen names will live in `internal/capabilities` when implemented. Prefix `sso_
 | Import apply | `POST /v1/import:apply` | `sso_import_apply` | `sso.write` |
 | Clients list/get | `GET /v1/clients`, `GET /v1/clients/{id}` | `sso_clients_list`, `sso_client_get` | `sso.read` |
 | Users list/get | `GET /v1/users`, `GET /v1/users/{id}` | `sso_users_list`, `sso_user_get` | `sso.read` |
+| Set MFA mode | `POST /v1/auth/mfa` | `sso_auth_mfa_set` | `sso.write` |
+| Enroll TOTP overlay | `POST /v1/users/{id}/totp:enroll` | `sso_user_totp_enroll` | `sso.write` |
+| Clear TOTP overlay | `POST /v1/users/{id}/totp:clear` | `sso_user_totp_clear` | `sso.write` |
 | Groups list/get | `GET /v1/groups`, `GET /v1/groups/{id}` | `sso_groups_list`, `sso_group_get` | `sso.read` |
 | Sessions list/expire | `GET /v1/sessions`, `POST /v1/sessions/{id}:expire` | `sso_sessions_list`, `sso_session_expire` | `sso.sessions` |
 | Tunables (force fail, force consent, pause token, inject error, mint claims, set overage, swap vendor) | `POST /v1/tunables/...` | `sso_tunable_*` twins | `sso.tunables` |

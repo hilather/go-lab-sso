@@ -115,6 +115,29 @@ func (s *Server) registerTools() {
 	add(s, "sso_user_get", false, true, func(ctx context.Context, actor auth.Actor, in idIn) (any, error) {
 		return s.app.GetUser(actor, in.ID)
 	})
+	add(s, "sso_auth_mfa_set", true, true, func(ctx context.Context, actor auth.Actor, in struct {
+		Mode             string `json:"mode"`
+		ExpectedRevision string `json:"expectedRevision"`
+		IdempotencyKey   string `json:"idempotencyKey,omitempty"`
+		Reason           string `json:"reason,omitempty"`
+	}) (any, error) {
+		return s.app.SetMFA(actor, app.SetMFAIn{
+			Mode: in.Mode, ExpectedRevision: in.ExpectedRevision,
+			IdempotencyKey: in.IdempotencyKey, Reason: in.Reason,
+		})
+	})
+	add(s, "sso_user_totp_enroll", true, false, func(ctx context.Context, actor auth.Actor, in struct {
+		ID     string `json:"id"`
+		Reason string `json:"reason,omitempty"`
+	}) (any, error) {
+		return s.app.EnrollTOTP(actor, in.ID, in.Reason)
+	})
+	add(s, "sso_user_totp_clear", true, true, func(ctx context.Context, actor auth.Actor, in struct {
+		ID     string `json:"id"`
+		Reason string `json:"reason,omitempty"`
+	}) (any, error) {
+		return map[string]any{"ok": true}, s.app.ClearTOTP(actor, in.ID, in.Reason)
+	})
 	add(s, "sso_groups_list", false, true, func(ctx context.Context, actor auth.Actor, _ emptyIn) (any, error) {
 		return s.app.ListGroups(actor)
 	})

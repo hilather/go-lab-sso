@@ -11,6 +11,7 @@ import (
 
 	"github.com/hilather/go-lab-sso/internal/model"
 	"github.com/hilather/go-lab-sso/internal/snapshot"
+	"github.com/hilather/go-lab-sso/internal/totp"
 	"github.com/hilather/go-lab-sso/internal/vendor"
 )
 
@@ -272,13 +273,14 @@ func (p *Provider) authorize(w http.ResponseWriter, r *http.Request) {
 	}
 	iss := strings.TrimRight(snap.Issuer, "/")
 	if sid, err := r.Cookie(CookieName(snap)); err == nil && sid.Value != "" {
-		if sess, ok := p.rt.GetSession(sid.Value); ok {
+		if sess, ok := p.rt.GetSession(sid.Value); ok && SessionUsable(sess, mfa) {
 			if cl.PreConsent && !p.rt.ForceConsent() {
 				code := randomID()
 				p.rt.PutCode(AuthCode{
 					Code: code, ClientID: clientID, RedirectURI: redirect,
 					UserID: sess.UserID, Username: sess.Username, Scope: q.Get("scope"),
 					Nonce: q.Get("nonce"), Challenge: challenge, Expires: time.Now().Add(5 * time.Minute),
+					MFACompleted: sess.MFACompleted,
 				})
 				u, err := url.Parse(redirect)
 				if err != nil {
@@ -361,7 +363,7 @@ func (p *Provider) tokenCode(w http.ResponseWriter, r *http.Request, snap *snaps
 		writeTokenError(w, snap, http.StatusBadRequest, "invalid_grant", "PKCE verifier mismatch")
 		return
 	}
-	p.writeTokens(w, snap, c.ClientID, c.UserID, c.Username, c.Scope, c.Nonce)
+	p.writeTokens(w, snap, c.ClientID, c.UserID, c.Username, c.Scope, c.Nonce, c.MFACompleted)
 }
 
 func (p *Provider) tokenRefresh(w http.ResponseWriter, r *http.Request, snap *snapshot.Snapshot) {
@@ -376,7 +378,7 @@ func (p *Provider) tokenRefresh(w http.ResponseWriter, r *http.Request, snap *sn
 		writeTokenError(w, snap, http.StatusBadRequest, "invalid_grant", "")
 		return
 	}
-	p.writeTokens(w, snap, ref.ClientID, ref.UserID, ref.Username, ref.Scope, "")
+	p.writeTokens(w, snap, ref.ClientID, ref.UserID, ref.Username, ref.Scope, "", ref.MFACompleted)
 }
 
 func (p *Provider) clientFromRequest(r *http.Request, snap *snapshot.Snapshot) (model.Client, string, error) {
@@ -405,7 +407,7 @@ func (p *Provider) clientFromRequest(r *http.Request, snap *snapshot.Snapshot) (
 	return cl, id, nil
 }
 
-func (p *Provider) writeTokens(w http.ResponseWriter, snap *snapshot.Snapshot, clientID, userID, username, scope, nonce string) {
+func (p *Provider) writeTokens(w http.ResponseWriter, snap *snapshot.Snapshot, clientID, userID, username, scope, nonce string, mfa bool) {
 	sig, err := newSigner(snap.SigningKey)
 	if err != nil {
 		writeTokenError(w, snap, http.StatusInternalServerError, "server_error", "")
@@ -432,6 +434,12 @@ func (p *Provider) writeTokens(w http.ResponseWriter, snap *snapshot.Snapshot, c
 			}
 		}
 	}
+	if mfa {
+		extra["amr"] = []string{"pwd", "otp"}
+		extra["acr"] = totp.ACR
+		accessExtra["amr"] = []string{"pwd", "otp"}
+		accessExtra["acr"] = totp.ACR
+	}
 	applyClothesClaims(extra, snap, userID)
 	idTok, err := sig.mint(snap.Issuer, userID, clientID, nonce, time.Hour, extra)
 	if err != nil {
@@ -444,7 +452,7 @@ func (p *Provider) writeTokens(w http.ResponseWriter, snap *snapshot.Snapshot, c
 		return
 	}
 	ref := randomID()
-	p.rt.PutRefresh(Refresh{Token: ref, ClientID: clientID, UserID: userID, Username: username, Scope: scope, Expires: time.Now().Add(24 * time.Hour)})
+	p.rt.PutRefresh(Refresh{Token: ref, ClientID: clientID, UserID: userID, Username: username, Scope: scope, Expires: time.Now().Add(24 * time.Hour), MFACompleted: mfa})
 	writeJSON(w, http.StatusOK, map[string]any{
 		"access_token":  access,
 		"id_token":      idTok,
@@ -496,7 +504,7 @@ func (p *Provider) userinfo(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
-func (p *Provider) CompleteLogin(pendingID, userID, username string) (string, error) {
+func (p *Provider) CompleteLogin(pendingID, userID, username string, mfa bool) (string, error) {
 	if p.rt.ForceFail() {
 		return "", fmt.Errorf("access_denied")
 	}
@@ -515,6 +523,7 @@ func (p *Provider) CompleteLogin(pendingID, userID, username string) (string, er
 		Code: code, ClientID: pend.ClientID, RedirectURI: pend.RedirectURI,
 		UserID: userID, Username: username, Scope: pend.Scope,
 		Nonce: pend.Nonce, Challenge: pend.Challenge, Expires: time.Now().Add(5 * time.Minute),
+		MFACompleted: mfa,
 	})
 	u, err := url.Parse(pend.RedirectURI)
 	if err != nil {

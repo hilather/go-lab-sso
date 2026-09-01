@@ -36,6 +36,9 @@ func TestSPANoTokenStorage(t *testing.T) {
 	if !strings.Contains(blob, "X-LabSSO-CSRF") || !strings.Contains(blob, "credentials") {
 		t.Fatal("SPA must send CSRF and cookies")
 	}
+	if !strings.Contains(blob, "/v1/users/") || !strings.Contains(blob, "totp:enroll") || !strings.Contains(blob, "/v1/auth/mfa") {
+		t.Fatal("Users view must bind MFA enroll/set")
+	}
 }
 
 func TestScriptNoStore(t *testing.T) {

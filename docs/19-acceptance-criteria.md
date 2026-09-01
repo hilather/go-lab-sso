@@ -2,7 +2,7 @@
 
 Status: through VEN-003 implemented; INT-001 documented; SCIM design-only
 Owners: Program, Quality
-Last reviewed: 2026-08-30
+Last reviewed: 2026-09-01
 
 ## Design landing (this repository)
 
@@ -35,7 +35,7 @@ The design is accepted when all of the following are true on `main`:
 - Authorization code + PKCE S256 works against the exact issuer.
 - Discovery `iss` matches host+port derivation (port omitted iff 443).
 - Login and consent HTML work. `ui.enabled: false` does not 404 them.
-- MFA modes `never` | `always` | `force-fail` behave as documented.
+- MFA modes `never` | `always` | `force-fail` behave as documented. `always` verifies RFC 6238 TOTP (file ref or overlay). After MFA, OIDC `amr`/`acr` and SAML/WS-Fed `TimeSyncToken` are set. `lab-totp` is rejected.
 
 ## Clothes (VEN-001, implemented)
 

@@ -1,9 +1,9 @@
 # Protocols
 
-Status: through VEN-003 (OIDC + login + clothes + overage + SAML + WS-Fed)
+Status: through VEN-003 (OIDC + login + clothes + overage + SAML + WS-Fed + file-ref TOTP)
 Owners: Protocols, Application
-Last reviewed: 2026-08-30
-Related ADRs: 0002, 0005, 0009, 0010
+Last reviewed: 2026-09-01
+Related ADRs: 0002, 0005, 0009, 0010, 0011
 
 ## Problem statement
 
@@ -15,7 +15,7 @@ Protocols land as **sequential slices**. Do not start SAML before OIDC works. Do
 
 - OIDC/OAuth2 authorization code + PKCE as the first protocol slice after repo foundation.
 - Discovery, JWKS, `id_token`, `access_token`, and refresh under generic clothes.
-- Required data-plane login + consent + MFA HTML (MFA knobs: `never` | `always` | `force-fail`; TOTP stub later).
+- Required data-plane login + consent + MFA HTML (MFA knobs: `never` | `always` | `force-fail`; RFC 6238 TOTP).
 - SAML 2.0 SP-initiated SSO + IdP metadata after group overage.
 - WS-Fed passive profile with ADFS clothes (VEN-002).
 - Duo / SiteMinder / Shibboleth clothes including SAML URL clothes (VEN-003).
@@ -35,7 +35,7 @@ Protocols land as **sequential slices**. Do not start SAML before OIDC works. Do
 
 1. Repo foundation + YAML schema + snapshot/plan/apply + REST+MCP registry + CLI `validate|canonicalize|serve` + scratch image + example compose mapping 443:10443.
 2. OIDC/OAuth2 authorization code + PKCE + discovery + JWKS + id_token/access_token + refresh (generic clothes).
-3. Data-plane login + consent HTML (required; distinct from operator SPA). MFA knobs: `never` | `always` | `force-fail` (TOTP stub later).
+3. Data-plane login + consent HTML (required; distinct from operator SPA). MFA knobs: `never` | `always` | `force-fail`. RFC 6238 TOTP is implemented ([ADR 0011](adr/0011-file-ref-totp.md)).
 4. Vendor clothes: `entra`, `okta` (paths, claims `oid`/`tid`/`ver` vs Okta groups, cookies, error dialect).
 5. Group overage: Entra `_claim_names` / `_claim_sources` + minimal Graph-shaped stub; Okta fail-the-token after 100 groups (configurable); generic embed groups with a safety cap.
 6. SAML 2.0 SP-initiated SSO + IdP metadata.
@@ -142,7 +142,7 @@ Required. Distinct from the operator SPA. See [ADR 0009](adr/0009-data-plane-log
 
 - Login HTML collects username + password against `spec.users` (password file ref / PHC).
 - Consent HTML is shown when the client is not pre-consented or when the `force-consent` tunable is on.
-- MFA mode: `never` | `always` | `force-fail`. `always` challenges; TOTP verification is a stub in the first UI slice (accept a documented lab code or fail closed per fixture). `force-fail` always fails the MFA step so agents can reproduce locked-out users.
+- MFA mode: `never` | `always` | `force-fail`. `always` is a two-submit TOTP challenge (RFC 6238 SHA-1, 6 digits, ±1 step). Seed is `users[].totpSecretRef` or an in-memory enroll overlay. Missing seed fails closed. `lab-totp` is rejected. After MFA, OIDC emits `amr: ["pwd","otp"]` and `acr: "urn:labsso:acr:mfa"`; SAML/WS-Fed emit `TimeSyncToken`. Password-only omits `amr`/`acr`. `token:mint` stays password-only. `force-fail` always fails the MFA step so agents can reproduce locked-out users.
 - `spec.ui.enabled: false` does **not** 404 these pages.
 
 ## SAML 2.0 (SAML-001)

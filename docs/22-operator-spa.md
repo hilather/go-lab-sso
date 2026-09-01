@@ -2,7 +2,7 @@
 
 Status: first SPA implemented; **Mira review requested**
 Owners: UI, Application
-Last reviewed: 2026-08-30
+Last reviewed: 2026-09-01
 Related ADRs: 0004
 
 ## Surface
@@ -21,7 +21,7 @@ Recorded so Mira can review the first SPA without hunting:
 2. Cookie + CSRF contract (`TestCookieCSRFAndSPA`).
 3. `ui.enabled` matrix (`GET /` 200 vs 404).
 4. REST/MCP parity still holds for management tools (`make test-parity`).
-5. SPA binds existing capabilities only (status, clients, users, groups, sessions, audit). No independent business logic in JS.
+5. SPA binds existing capabilities only (status, clients, users, groups, sessions, audit, plus Users-view `mfa:set` / `totp:enroll` / `totp:clear`). No independent business logic in JS. Enroll seed is shown once in page memory; never `localStorage` / `sessionStorage` / IndexedDB / the URL.
 6. Login HTML remains `/login` `/consent` on the data plane.
 
 Mira: mark this document reviewed after the first visual pass. Blockers are (1)–(5) failing, not chrome.

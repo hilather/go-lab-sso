@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/hilather/go-lab-sso/internal/app"
@@ -256,4 +257,78 @@ func TestParityOverageSet(t *testing.T) {
 	if ov.EntraGraphStub || ov.GenericCap != 50 {
 		t.Fatalf("MCP merge want stub=false cap=50 got %+v", ov)
 	}
+}
+
+func TestParityMFAEnrollClear(t *testing.T) {
+	a, rh, cs := bootBoth(t)
+	ops := []map[string]any{
+		{"op": "add", "target": map[string]any{"kind": "user", "id": "u1"}, "value": map[string]any{"id": "u1", "username": "alice", "passwordRef": "testdata/secrets/users/alice.password"}},
+		{"op": "add", "target": map[string]any{"kind": "user", "id": "u2"}, "value": map[string]any{"id": "u2", "username": "bob", "passwordRef": "testdata/secrets/users/alice.password"}},
+	}
+	restJSON(t, rh, "POST", "/v1/changes:apply", map[string]any{
+		"expectedRevision": a.Status().RuntimeRevision, "reason": "users", "operations": ops,
+	})
+	rev := a.Status().RuntimeRevision
+	rr := restJSON(t, rh, "POST", "/v1/auth/mfa", map[string]any{
+		"mode": "always", "expectedRevision": rev, "reason": "parity",
+	})
+	if rr["applied"] != true {
+		t.Fatalf("REST mfa %v", rr)
+	}
+	if a.Store().Load().Canonical.Spec.Auth.SessionTTL == 0 {
+		t.Fatal("mfa:set zeroed sessionTTL")
+	}
+	rev2 := a.Status().RuntimeRevision
+	mr := mcpTool(t, cs, "sso_auth_mfa_set", map[string]any{
+		"mode": "never", "expectedRevision": rev2, "reason": "parity",
+	})
+	if mr["applied"] != true {
+		t.Fatalf("MCP mfa %v", mr)
+	}
+	re := restJSON(t, rh, "POST", "/v1/users/u1/totp:enroll", map[string]any{"reason": "parity"})
+	if re["secret"] == "" || re["source"] != "overlay" {
+		t.Fatalf("REST enroll %v", re)
+	}
+	me := mcpTool(t, cs, "sso_user_totp_enroll", map[string]any{"id": "u2", "reason": "parity"})
+	if me["secret"] == "" || me["userId"] != "u2" {
+		t.Fatalf("MCP enroll %v", me)
+	}
+	if re["secret"] == me["secret"] {
+		t.Fatal("enroll must not be compared across users as equality of the same seed")
+	}
+	gu := restJSON(t, rh, "GET", "/v1/users/u1", nil)
+	totp, _ := gu["totp"].(map[string]any)
+	if totp["configured"] != true || totp["source"] != "overlay" {
+		t.Fatalf("user view %v", gu)
+	}
+	if strings.Contains(fmtJSON(gu), re["secret"].(string)) || strings.Contains(fmtJSON(gu), "otpauth") {
+		t.Fatal("GET leaked enroll secret")
+	}
+	ex := restJSON(t, rh, "GET", "/v1/state:export", nil)
+	if strings.Contains(fmtJSON(ex), re["secret"].(string)) || strings.Contains(fmtJSON(ex), "otpauth://") {
+		t.Fatal("export leaked")
+	}
+	req := httptest.NewRequest("GET", "/v1/audit", nil)
+	req.RemoteAddr = "127.0.0.1:1"
+	rec := httptest.NewRecorder()
+	rh.ServeHTTP(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("audit %d %s", rec.Code, rec.Body)
+	}
+	if strings.Contains(rec.Body.String(), re["secret"].(string)) {
+		t.Fatal("audit leaked enroll secret")
+	}
+	rc := restJSON(t, rh, "POST", "/v1/users/u1/totp:clear", map[string]any{"reason": "parity"})
+	if rc["ok"] != true {
+		t.Fatalf("REST clear %v", rc)
+	}
+	mc := mcpTool(t, cs, "sso_user_totp_clear", map[string]any{"id": "u2", "reason": "parity"})
+	if mc["ok"] != true {
+		t.Fatalf("MCP clear %v", mc)
+	}
+}
+
+func fmtJSON(v any) string {
+	b, _ := json.Marshal(v)
+	return string(b)
 }

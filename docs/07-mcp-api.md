@@ -2,7 +2,7 @@
 
 Status: FND MCP adapter implemented (`internal/control/mcp`, protocol 2026-07-28, SDK v1.7.0)
 Owners: MCP, Application
-Last reviewed: 2026-08-30
+Last reviewed: 2026-09-01
 Target protocol baseline: 2026-07-28
 Related ADRs: 0004
 Implementation (later): `internal/control/mcp` wrapping `github.com/modelcontextprotocol/go-sdk v1.7.0`
@@ -73,6 +73,9 @@ sso_clients_list
 sso_client_get
 sso_users_list
 sso_user_get
+sso_auth_mfa_set
+sso_user_totp_enroll
+sso_user_totp_clear
 sso_groups_list
 sso_group_get
 
@@ -90,6 +93,8 @@ sso_tunable_vendor_swap
 sso_tunable_redirect_rewrite
 
 Implemented tunables today: `sso_tunable_token_pause`, `sso_tunable_token_resume`, `sso_tunable_auth_force_fail`, `sso_tunable_error_inject`, `sso_tunable_vendor_swap`, `sso_tunable_overage_set`, `sso_tunable_consent_force`, `sso_tunable_token_mint`, `sso_tunable_redirect_rewrite`. `sso_tunable_overage_set` input: optional `entraGraphStub` / `oktaFailAt` / `genericCap` pointers, `expectedRevision`, `reason`, `idempotencyKey`. Same domain types as REST.
+
+`sso_auth_mfa_set` merges `mode` onto current `Auth` (`expectedRevision` + reason). `sso_user_totp_enroll` is not idempotent and returns the seed once on the tool result only — never a resource, export, or audit payload. `sso_user_totp_clear` drops the overlay. `labsso://users/{id}` uses the `totp` view (`configured`/`source`) with no secret.
 
 sso_audit_query
 sso_audit_get

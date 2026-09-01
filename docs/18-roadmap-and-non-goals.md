@@ -2,8 +2,8 @@
 
 Status: through VEN-003 implemented; INT-001 documented here; SCIM-001 design-only
 Owners: Architecture, Program
-Last reviewed: 2026-08-30
-Related ADRs: 0001–0010
+Last reviewed: 2026-09-01
+Related ADRs: 0001–0011
 
 ## Problem statement
 
@@ -15,7 +15,7 @@ Implementation is opened at FND-001. Remaining slice order is:
 
 1. **Repo foundation** — Go 1.26 module `github.com/hilather/go-lab-sso`, YAML schema, snapshot/plan/apply, REST+MCP registry, CLI `validate|canonicalize|serve`, scratch image, example compose mapping `443:10443`.
 2. **OIDC/OAuth2** — authorization code + PKCE + discovery + JWKS + id_token/access_token + refresh (generic clothes).
-3. **Data-plane login + consent HTML** — required; distinct from operator SPA. MFA knobs `never` | `always` | `force-fail` (TOTP stub later).
+3. **Data-plane login + consent HTML** — required; distinct from operator SPA. MFA knobs `never` | `always` | `force-fail`. RFC 6238 file-ref TOTP + overlay enroll ([ADR 0011](adr/0011-file-ref-totp.md)).
 4. **Vendor clothes** — `entra`, `okta` (paths, claims `oid`/`tid`/`ver` vs Okta groups, cookies, error dialect). **Implemented.**
 5. **Group overage** — **Implemented (OVR-001).** Entra `_claim_names`/`_claim_sources` + minimal Graph-shaped stub served by LabSSO (not real Microsoft Graph). Okta: fail the token request after `oktaFailAt` groups. Generic: embed at most `genericCap` groups.
 6. **SAML 2.0** — **Implemented (SAML-001).** SP-initiated SSO + IdP metadata.

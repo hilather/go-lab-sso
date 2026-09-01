@@ -61,6 +61,9 @@ func (a *App) SchemaConfig(actor auth.Actor) (map[string]any, error) {
 			"vendor":   "generic|entra|okta|ping|adfs|google|keycloak|iam-identity-center|duo|siteminder|shibboleth implemented; unknown-to-Implemented compile-reject",
 			"tenantId": "optional; compile default 00000000-0000-0000-0000-000000000001 (not written into Canonical)",
 		},
+		"user": map[string]any{
+			"totpSecretRef": "optional file ref; RFC 4648 base32 seed; compile-parsed; apply values stay model.User (no totp view field)",
+		},
 	}, nil
 }
 
@@ -119,7 +122,29 @@ func (a *App) GetClient(actor auth.Actor, id string) (model.Client, error) {
 	return c.Clone(), nil
 }
 
-func (a *App) ListUsers(actor auth.Actor) ([]model.User, error) {
+type TOTPStatus struct {
+	Configured bool   `json:"configured"`
+	Source     string `json:"source,omitempty"`
+}
+
+type UserView struct {
+	model.User
+	TOTP TOTPStatus `json:"totp"`
+}
+
+func (a *App) userView(u model.User) UserView {
+	v := UserView{User: u.Clone()}
+	if a.oidc != nil && a.oidc.Runtime().HasTOTPOverlay(u.ID) {
+		v.TOTP = TOTPStatus{Configured: true, Source: "overlay"}
+		return v
+	}
+	if u.TOTPSecretRef != "" {
+		v.TOTP = TOTPStatus{Configured: true, Source: "file"}
+	}
+	return v
+}
+
+func (a *App) ListUsers(actor auth.Actor) ([]UserView, error) {
 	if err := a.authorize(actor, "sso.users.list"); err != nil {
 		return nil, err
 	}
@@ -127,26 +152,26 @@ func (a *App) ListUsers(actor auth.Actor) ([]model.User, error) {
 	if snap == nil || snap.Canonical == nil {
 		return nil, domainerr.Validation("no active snapshot")
 	}
-	out := make([]model.User, len(snap.Canonical.Spec.Users))
+	out := make([]UserView, len(snap.Canonical.Spec.Users))
 	for i, u := range snap.Canonical.Spec.Users {
-		out[i] = u.Clone()
+		out[i] = a.userView(u)
 	}
 	return out, nil
 }
 
-func (a *App) GetUser(actor auth.Actor, id string) (model.User, error) {
+func (a *App) GetUser(actor auth.Actor, id string) (UserView, error) {
 	if err := a.authorize(actor, "sso.user.get"); err != nil {
-		return model.User{}, err
+		return UserView{}, err
 	}
 	snap := a.store.Load()
 	if snap == nil {
-		return model.User{}, domainerr.Validation("no active snapshot")
+		return UserView{}, domainerr.Validation("no active snapshot")
 	}
 	u, ok := snap.UsersByID[id]
 	if !ok {
-		return model.User{}, domainerr.NotFound("user " + id)
+		return UserView{}, domainerr.NotFound("user " + id)
 	}
-	return u.Clone(), nil
+	return a.userView(u), nil
 }
 
 func (a *App) ListGroups(actor auth.Actor) ([]model.Group, error) {

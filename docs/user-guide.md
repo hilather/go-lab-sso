@@ -41,6 +41,14 @@ go run ./cmd/labsso validate --config testdata/config/valid/minimal.yaml
 go run ./cmd/labsso serve --config testdata/config/valid/minimal.yaml
 ```
 
+`minimal.yaml` has no users. For file-backed TOTP without enroll:
+
+```bash
+go run ./cmd/labsso serve --config testdata/config/valid/totp-alice.yaml
+```
+
+That document is a full copy of minimal plus alice (`passwordRef` + `totpSecretRef`), a public lab client, and `auth.mfa.mode: always`. The seed is [testdata/secrets/users/alice.totp](../testdata/secrets/users/alice.totp) (RFC 6238 Appendix B secret). Empty-bootstrap path: apply a **client and** a user, `POST /v1/users/{id}/totp:enroll`, then `POST /v1/auth/mfa` with `mode: always`. The process never writes `.totp` files.
+
 You should see something like:
 
 ```text
@@ -347,6 +355,9 @@ These change runtime behavior and die on reset unless noted:
 |---|---|
 | `POST /v1/sessions/{id}:expire` | Drop one login session |
 | `POST /v1/sessions:expire-all` | Drop all sessions |
+| `POST /v1/auth/mfa` | Set `mfa.mode` (merge; keeps `sessionTTL`) |
+| `POST /v1/users/{id}/totp:enroll` | Overlay TOTP seed (shown once) |
+| `POST /v1/users/{id}/totp:clear` | Drop overlay; file ref remains |
 | `POST /v1/tunables/auth:force-fail` | Next login fails |
 | `POST /v1/tunables/consent:force` | Ignore pre-consent shortcuts |
 | `POST /v1/tunables/token:pause` | Token endpoint pauses; authorize, JWKS, discovery, login stay up |
@@ -375,6 +386,9 @@ Same operations, different door. Streamable HTTP at `/mcp`. Protocol pin `2026-0
 | `sso_state_export` | `GET /v1/state:export` |
 | `sso_state_reset` | `POST /v1/state:reset` |
 | `sso_schema_get` | `GET /v1/schema/config` |
+| `sso_auth_mfa_set` | `POST /v1/auth/mfa` |
+| `sso_user_totp_enroll` | `POST /v1/users/{id}/totp:enroll` |
+| `sso_user_totp_clear` | `POST /v1/users/{id}/totp:clear` |
 
 Resources: `labsso://state`, `labsso://capabilities`, `labsso://status`, `labsso://schema/config`.
 

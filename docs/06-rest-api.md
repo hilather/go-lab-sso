@@ -2,7 +2,7 @@
 
 Status: FND REST adapter implemented (`internal/control/rest`)
 Owners: REST, Application
-Last reviewed: 2026-08-30
+Last reviewed: 2026-09-01
 Related ADRs: 0004, 0008
 
 ## Goals
@@ -75,11 +75,22 @@ GET /v1/clients
 GET /v1/clients/{id}
 GET /v1/users
 GET /v1/users/{id}
+POST /v1/auth/mfa
+POST /v1/users/{id}/totp:enroll
+POST /v1/users/{id}/totp:clear
 GET /v1/groups
 GET /v1/groups/{id}
 ```
 
-Typed writes compile to the same operations as `changes:apply`. First implementation may ship list/get only and require plan/apply for writes.
+List/get users return `totp: { configured, source }` (`file` | `overlay`). Apply user values stay `model.User` — do not copy `totp` into `changes:apply`.
+
+`POST /v1/auth/mfa` body: `{ "mode", "expectedRevision", "reason", "idempotencyKey" }`. Capability `sso.auth.mfa.set`, scope `sso.write`. Rejects empty `mode`, then merges onto current `Auth` (keeps `sessionTTL`).
+
+`POST /v1/users/{id}/totp:enroll` body: `{ "reason" }`. Capability `sso.user.totp.enroll`, not idempotent. Returns `secret` + `otpauth` once. Overlay only; the process never writes `.totp` files. 404 if the user is missing.
+
+`POST /v1/users/{id}/totp:clear` body: `{ "reason" }`. Drops overlay + last-step; file ref remains.
+
+Typed writes compile to the same operations as `changes:apply` unless they are overlay-only (enroll/clear).
 
 ### Session knobs
 
@@ -113,7 +124,7 @@ POST /v1/tunables/client/redirect:rewrite
 
 `POST /v1/tunables/consent:force` body: `{ "on": true }`. Runtime overlay; every `PreConsent` shortcut is ignored (authorize session reuse, login HTML, SAML, WS-Fed).
 
-`POST /v1/tunables/token:mint` body: `userId`, `clientId`, optional `scope` (default `openid`). Returns access + id tokens. Scoped (`sso.tunables`); audited. No secrets in the audit payload.
+`POST /v1/tunables/token:mint` body: `userId`, `clientId`, optional `scope` (default `openid`). Returns access + id tokens. Scoped (`sso.tunables`); audited. No secrets in the audit payload. Mint is password-only: it omits `amr`/`acr`.
 
 Pause token: data plane otherwise stays up (authorize, JWKS, discovery, login HTML).
 

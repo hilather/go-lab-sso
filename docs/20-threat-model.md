@@ -2,8 +2,8 @@
 
 Status: design (not implemented)
 Owners: Security
-Last reviewed: 2026-08-30
-Related ADRs: 0002, 0005, 0006, 0008
+Last reviewed: 2026-09-01
+Related ADRs: 0002, 0005, 0006, 0008, 0011
 
 ## Scope
 
@@ -22,6 +22,7 @@ Out of scope: nation-state targeting of a lab VM, physical theft of a lab disk, 
 | Bootstrap YAML | Desired state; no secrets inline |
 | labsso-tls leaf | HTTPS identity of the issuer |
 | Import blobs | Untrusted customer XML/JSON |
+| TOTP overlay seeds | One-shot enroll on a tool result; memory until reset |
 
 ## Actors
 
@@ -54,6 +55,8 @@ Out of scope: nation-state targeting of a lab VM, physical theft of a lab disk, 
 | T16 | Graph stub egress to Microsoft | Stub is local only |
 | T17 | PKCE downgrade | `plain` rejected |
 | T18 | Wildcard redirect URIs | Exact match in v1 |
+| T19 | Overlay TOTP seed in export/audit/MCP resources | Enroll returns secret once on the tool/REST result; leak tests hunt that secret |
+| T20 | Incomplete MFA cookie reused after `never`→`always` | `ExpireIncompleteMFA` drops sessions, codes, and refresh with `MFACompleted=false` |
 
 ## Residual lab risks (accepted)
 

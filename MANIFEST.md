@@ -58,6 +58,7 @@ Inventory of the design pack and the implemented appliance. There is no generate
 - `docs/adr/0008-import-allowlist-rewriter.md`
 - `docs/adr/0009-data-plane-login-ui.md`
 - `docs/adr/0010-duo-siteminder-shibboleth-clothes.md`
+- `docs/adr/0011-file-ref-totp.md`
 
 ## Agent task plans
 
@@ -69,11 +70,13 @@ Inventory of the design pack and the implemented appliance. There is no generate
 ## Fixtures and sketches
 
 - `testdata/config/valid/minimal.yaml`
+- `testdata/config/valid/totp-alice.yaml`
 - `testdata/config/valid/duo.yaml`, `testdata/config/valid/siteminder.yaml`, `testdata/config/valid/shibboleth.yaml`
 - `testdata/config/invalid/unknown-field.yaml`
 - `testdata/secrets/tls/tls.crt`, `testdata/secrets/tls/tls.key` (self-signed leaf, `0644`)
 - `testdata/secrets/oidc/signing.pem` (JWT signing key, `0644`)
 - `testdata/secrets/labsso-token` (management bearer, `0644`)
+- `testdata/secrets/users/alice.totp` (RFC 6238 Appendix B seed, `0644`)
 - `examples/compose.yaml` (runnable `443:10443`)
 - `docs/assets/header.svg`
 

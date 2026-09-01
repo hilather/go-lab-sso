@@ -1,6 +1,7 @@
 package wsfed_test
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -13,6 +14,8 @@ import (
 	"github.com/hilather/go-lab-sso/internal/app"
 	"github.com/hilather/go-lab-sso/internal/auth"
 	"github.com/hilather/go-lab-sso/internal/model"
+	"github.com/hilather/go-lab-sso/internal/oidc"
+	"github.com/hilather/go-lab-sso/internal/totp"
 	"github.com/hilather/go-lab-sso/internal/vendor"
 )
 
@@ -191,4 +194,69 @@ func TestWSFedADFSClothes(t *testing.T) {
 	if rec.Code != 302 || !strings.Contains(rec.Header().Get("Location"), "/login?pending=") {
 		t.Fatalf("adfs passive %d %s", rec.Code, rec.Header().Get("Location"))
 	}
+}
+
+func TestWSFedLoggedInPreConsentTimeSync(t *testing.T) {
+	a, h := bootWSFed(t, "generic")
+	sess := a.OIDC().Runtime().PutSession(oidc.LoginSession{UserID: "u1", Username: "alice", MFACompleted: true})
+	u := "/wsfed/passive?wa=wsignin1.0&wtrealm=" + url.QueryEscape("https://rp.example.net") +
+		"&wreply=" + url.QueryEscape("https://rp.example.net/wreply")
+	req := httptest.NewRequest("GET", u, nil)
+	req.AddCookie(&http.Cookie{Name: oidc.CookieLogin, Value: sess.ID})
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != 200 || !strings.Contains(rec.Body.String(), `name="wresult"`) {
+		t.Fatalf("planted session %d %s", rec.Code, rec.Body)
+	}
+	xmlBody := decodeWresult(t, rec.Body.String())
+	if !strings.Contains(xmlBody, totp.TimeSync) {
+		t.Fatalf("want TimeSyncToken: %s", xmlBody)
+	}
+}
+
+func TestWSFedConsentPathTimeSync(t *testing.T) {
+	a, h := bootWSFed(t, "generic")
+	if err := a.ForceConsent(auth.AdminActor(), true); err != nil {
+		t.Fatal(err)
+	}
+	sess := a.OIDC().Runtime().PutSession(oidc.LoginSession{UserID: "u1", Username: "alice", MFACompleted: true})
+	u := "/wsfed/passive?wa=wsignin1.0&wtrealm=" + url.QueryEscape("https://rp.example.net") +
+		"&wreply=" + url.QueryEscape("https://rp.example.net/wreply")
+	req := httptest.NewRequest("GET", u, nil)
+	req.AddCookie(&http.Cookie{Name: oidc.CookieLogin, Value: sess.ID})
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != 302 || !strings.Contains(rec.Header().Get("Location"), "/consent") {
+		t.Fatalf("force-consent %d %s", rec.Code, rec.Header().Get("Location"))
+	}
+	loc, _ := url.Parse(rec.Header().Get("Location"))
+	form := url.Values{"pending": {loc.Query().Get("pending")}, "approve": {"1"}}
+	req = httptest.NewRequest("POST", "/consent", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(&http.Cookie{Name: oidc.CookieLogin, Value: sess.ID})
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	xmlBody := decodeWresult(t, rec.Body.String())
+	if !strings.Contains(xmlBody, totp.TimeSync) {
+		t.Fatalf("consent MFA %s", xmlBody)
+	}
+}
+
+func decodeWresult(t *testing.T, page string) string {
+	t.Helper()
+	marker := `name="wresult" value="`
+	i := strings.Index(page, marker)
+	if i < 0 {
+		t.Fatalf("no wresult in %s", page)
+	}
+	rest := page[i+len(marker):]
+	j := strings.Index(rest, `"`)
+	if j < 0 {
+		t.Fatal("wresult unclosed")
+	}
+	raw, err := base64.StdEncoding.DecodeString(rest[:j])
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(raw)
 }

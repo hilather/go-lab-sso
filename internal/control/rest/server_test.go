@@ -363,6 +363,64 @@ func TestBearerWinsOverCookieCSRF(t *testing.T) {
 
 func adminREST() auth.Actor { return auth.AdminActor() }
 
+func TestLoopbackEnrollAndRemote401(t *testing.T) {
+	a, h := boot(t)
+	body, _ := json.Marshal(map[string]any{
+		"expectedRevision": a.Status().RuntimeRevision,
+		"reason":           "user",
+		"operations": []map[string]any{
+			{"op": "add", "target": map[string]any{"kind": "user", "id": "u1"}, "value": map[string]any{"id": "u1", "username": "alice", "passwordRef": "testdata/secrets/users/alice.password"}},
+		},
+	})
+	rec := do(t, h, "POST", "/v1/changes:apply", "127.0.0.1:9", "", body)
+	if rec.Code != 200 {
+		t.Fatalf("apply %d %s", rec.Code, rec.Body)
+	}
+	rec = do(t, h, "POST", "/v1/users/u1/totp:enroll", "127.0.0.1:9", "", []byte(`{"reason":"lab"}`))
+	if rec.Code != 200 || !strings.Contains(rec.Body.String(), `"source":"overlay"`) {
+		t.Fatalf("loopback enroll %d %s", rec.Code, rec.Body)
+	}
+	rec = do(t, h, "POST", "/v1/users/u1/totp:enroll", "10.1.2.3:9", "", []byte(`{"reason":"lab"}`))
+	if rec.Code != 401 {
+		t.Fatalf("remote enroll without bearer want 401 got %d %s", rec.Code, rec.Body)
+	}
+}
+
+func TestCookieCSRFOnTOTPEnroll(t *testing.T) {
+	a, h := boot(t)
+	body, _ := json.Marshal(map[string]any{
+		"expectedRevision": a.Status().RuntimeRevision,
+		"reason":           "user",
+		"operations": []map[string]any{
+			{"op": "add", "target": map[string]any{"kind": "user", "id": "u1"}, "value": map[string]any{"id": "u1", "username": "alice", "passwordRef": "testdata/secrets/users/alice.password"}},
+		},
+	})
+	if rec := do(t, h, "POST", "/v1/changes:apply", "127.0.0.1:9", "", body); rec.Code != 200 {
+		t.Fatalf("apply %d %s", rec.Code, rec.Body)
+	}
+	rec := do(t, h, "POST", "/v1/session", "127.0.0.1:9", "", []byte(`{}`))
+	sess, csrf := cookieCSRF(t, rec)
+	req := httptest.NewRequest("POST", "/v1/users/u1/totp:enroll", strings.NewReader(`{"reason":"spa"}`))
+	req.RemoteAddr = "10.1.2.3:9"
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(&http.Cookie{Name: auth.CookieSession, Value: sess})
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != 403 {
+		t.Fatalf("enroll without CSRF want 403 got %d %s", rec.Code, rec.Body)
+	}
+	req = httptest.NewRequest("POST", "/v1/users/u1/totp:enroll", strings.NewReader(`{"reason":"spa"}`))
+	req.RemoteAddr = "10.1.2.3:9"
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-LabSSO-CSRF", csrf)
+	req.AddCookie(&http.Cookie{Name: auth.CookieSession, Value: sess})
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("enroll with CSRF %d %s", rec.Code, rec.Body)
+	}
+}
+
 func TestCrossSitePOSTRejected(t *testing.T) {
 	_, h := boot(t)
 	req := httptest.NewRequest("POST", "/v1/state:reset", strings.NewReader(`{"reason":"x"}`))

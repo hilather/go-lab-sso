@@ -14,6 +14,7 @@ func TestCatalogIDsFrozen(t *testing.T) {
 		"sso.state.export", "sso.state.reset",
 		"sso.clients.list", "sso.client.get",
 		"sso.users.list", "sso.user.get",
+		"sso.auth.mfa.set", "sso.user.totp.enroll", "sso.user.totp.clear",
 		"sso.groups.list", "sso.group.get",
 		"sso.sessions.list", "sso.session.expire",
 		"sso.tunable.token.pause", "sso.tunable.token.resume",

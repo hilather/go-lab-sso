@@ -4,7 +4,7 @@ Start with the [README](../README.md) and the [user guide](user-guide.md). Contr
 
 This page is the catalog. When a design document and a task summary disagree, the design document wins.
 
-Status: **through VEN-003**. Last reviewed: 2026-08-31.
+Status: **through VEN-003** plus file-ref TOTP. Last reviewed: 2026-09-01.
 
 ## Root
 
@@ -68,6 +68,7 @@ Status: **through VEN-003**. Last reviewed: 2026-08-31.
 | [0008](adr/0008-import-allowlist-rewriter.md) | Import allow-list rewriter |
 | [0009](adr/0009-data-plane-login-ui.md) | Data-plane login UI |
 | [0010](adr/0010-duo-siteminder-shibboleth-clothes.md) | Duo, SiteMinder, Shibboleth clothes |
+| [0011](adr/0011-file-ref-totp.md) | File-ref TOTP replaces the lab-totp stub |
 
 ## Task lists
 
@@ -77,7 +78,8 @@ See [tasks/README.md](../tasks/README.md) and the [program board](../tasks/00-pr
 
 | Path | Role |
 |---|---|
-| [testdata/config/valid/minimal.yaml](../testdata/config/valid/minimal.yaml) | Minimal valid document |
+| [testdata/config/valid/minimal.yaml](../testdata/config/valid/minimal.yaml) | Minimal valid document (no users) |
+| [testdata/config/valid/totp-alice.yaml](../testdata/config/valid/totp-alice.yaml) | File-backed TOTP + lab client |
 | [testdata/config/invalid/unknown-field.yaml](../testdata/config/invalid/unknown-field.yaml) | Unknown-field reject |
 | [examples/compose.yaml](../examples/compose.yaml) | Compose with `443:10443` |
 | [docs/assets/header.svg](assets/header.svg) | README banner |

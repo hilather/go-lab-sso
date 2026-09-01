@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/hilather/go-lab-sso/internal/snapshot"
+	"github.com/hilather/go-lab-sso/internal/totp"
 )
 
 type Pending struct {
@@ -30,31 +31,34 @@ const ProtocolOIDC = "oidc"
 const ProtocolSAML = "saml"
 
 type AuthCode struct {
-	Code        string
-	ClientID    string
-	RedirectURI string
-	UserID      string
-	Username    string
-	Scope       string
-	Nonce       string
-	Challenge   string
-	Expires     time.Time
+	Code         string
+	ClientID     string
+	RedirectURI  string
+	UserID       string
+	Username     string
+	Scope        string
+	Nonce        string
+	Challenge    string
+	Expires      time.Time
+	MFACompleted bool
 }
 
 type Refresh struct {
-	Token    string
-	ClientID string
-	UserID   string
-	Username string
-	Scope    string
-	Expires  time.Time
+	Token        string
+	ClientID     string
+	UserID       string
+	Username     string
+	Scope        string
+	Expires      time.Time
+	MFACompleted bool
 }
 
 type LoginSession struct {
-	ID       string
-	UserID   string
-	Username string
-	Expires  time.Time
+	ID           string
+	UserID       string
+	Username     string
+	Expires      time.Time
+	MFACompleted bool
 }
 
 type Runtime struct {
@@ -63,6 +67,8 @@ type Runtime struct {
 	codes        map[string]AuthCode
 	refresh      map[string]Refresh
 	sessions     map[string]LoginSession
+	totpOverlay  map[string][]byte
+	totpLastStep map[string]int64
 	paused       bool
 	forceFail    bool
 	forceConsent bool
@@ -71,10 +77,12 @@ type Runtime struct {
 
 func NewRuntime() *Runtime {
 	return &Runtime{
-		pending:  map[string]Pending{},
-		codes:    map[string]AuthCode{},
-		refresh:  map[string]Refresh{},
-		sessions: map[string]LoginSession{},
+		pending:      map[string]Pending{},
+		codes:        map[string]AuthCode{},
+		refresh:      map[string]Refresh{},
+		sessions:     map[string]LoginSession{},
+		totpOverlay:  map[string][]byte{},
+		totpLastStep: map[string]int64{},
 	}
 }
 
@@ -248,10 +256,88 @@ func (r *Runtime) Reset() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.purgeProtocolLocked()
+	r.totpOverlay = map[string][]byte{}
+	r.totpLastStep = map[string]int64{}
 	r.paused = false
 	r.forceFail = false
 	r.forceConsent = false
 	r.inject = ""
+}
+
+func (r *Runtime) GetTOTPOverlay(userID string) ([]byte, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	s, ok := r.totpOverlay[userID]
+	if !ok {
+		return nil, false
+	}
+	out := make([]byte, len(s))
+	copy(out, s)
+	return out, true
+}
+
+func (r *Runtime) SetTOTPOverlay(userID string, secret []byte) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]byte, len(secret))
+	copy(out, secret)
+	r.totpOverlay[userID] = out
+	delete(r.totpLastStep, userID)
+}
+
+func (r *Runtime) ClearTOTPOverlay(userID string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.totpOverlay, userID)
+	delete(r.totpLastStep, userID)
+}
+
+func (r *Runtime) HasTOTPOverlay(userID string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	_, ok := r.totpOverlay[userID]
+	return ok
+}
+
+func (r *Runtime) VerifyAndRecordTOTP(userID string, secret []byte, code string, now time.Time) bool {
+	step, ok := totp.Verify(secret, code, now)
+	if !ok {
+		return false
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if last, seen := r.totpLastStep[userID]; seen && last == step {
+		return false
+	}
+	r.totpLastStep[userID] = step
+	return true
+}
+
+func (r *Runtime) ExpireIncompleteMFA() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for id, s := range r.sessions {
+		if !s.MFACompleted {
+			delete(r.sessions, id)
+		}
+	}
+	for k, c := range r.codes {
+		if !c.MFACompleted {
+			delete(r.codes, k)
+		}
+	}
+	for k, t := range r.refresh {
+		if !t.MFACompleted {
+			delete(r.refresh, k)
+		}
+	}
+}
+
+func SessionUsable(sess LoginSession, mode string) bool {
+	if mode == "always" && !sess.MFACompleted {
+		return false
+	}
+	return true
 }
 
 func (r *Runtime) SetPaused(v bool)       { r.mu.Lock(); r.paused = v; r.mu.Unlock() }

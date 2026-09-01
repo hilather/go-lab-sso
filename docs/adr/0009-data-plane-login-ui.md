@@ -2,7 +2,7 @@
 
 Status: Accepted for design
 Date: 2026-08-30
-Last reviewed: 2026-08-30
+Last reviewed: 2026-09-01
 
 ## Context
 
@@ -16,7 +16,7 @@ Mira reviews the operator SPA after the first UI implementation. This design lan
 
 Data-plane login + consent + MFA HTML is **required** (slice 3) and is served on the HTTPS issuer listener. It is not the operator SPA.
 
-MFA knobs: `never` | `always` | `force-fail`. TOTP stub later.
+MFA knobs: `never` | `always` | `force-fail`. RFC 6238 TOTP is implemented in [ADR 0011](0011-file-ref-totp.md).
 
 `spec.ui.enabled: false` 404s the operator SPA only. It does not disable data-plane login pages.
 

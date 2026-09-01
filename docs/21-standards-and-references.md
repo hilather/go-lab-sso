@@ -2,7 +2,7 @@
 
 Status: through VEN-003 implemented; SCIM design-only
 Owners: Protocols, MCP
-Last reviewed: 2026-08-30
+Last reviewed: 2026-09-01
 
 ## Purpose
 
@@ -20,6 +20,7 @@ Normative protocol pins and reading list. LabSSO implements **enough** of these 
 | [OpenID Connect Discovery 1.0](https://openid.net/specs/openid-connect-discovery-1_0.html) | `/.well-known/openid-configuration` plus vendor path clothes |
 | [RFC 7517](https://www.rfc-editor.org/rfc/rfc7517) / [RFC 7519](https://www.rfc-editor.org/rfc/rfc7519) JWK / JWT | JWKS and signed tokens |
 | [RFC 8414](https://www.rfc-editor.org/rfc/rfc8414) AS metadata | Informative; OIDC discovery is primary |
+| [RFC 6238](https://www.rfc-editor.org/rfc/rfc6238) TOTP | SHA-1, 30s, 6 digits, ±1 window; file-ref + overlay enroll ([ADR 0011](adr/0011-file-ref-totp.md)) |
 
 Implicit and hybrid flows are rejected. Client-credentials and device code are out of the first OIDC slice.
 
