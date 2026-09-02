@@ -2,7 +2,7 @@
 
 Status: through VEN-003 implemented; INT-001 documented here; SCIM-001 design-only
 Owners: Architecture, Program
-Last reviewed: 2026-09-01
+Last reviewed: 2026-09-02
 Related ADRs: 0001–0011
 
 ## Problem statement
@@ -19,7 +19,7 @@ Implementation is opened at FND-001. Remaining slice order is:
 4. **Vendor clothes** — `entra`, `okta` (paths, claims `oid`/`tid`/`ver` vs Okta groups, cookies, error dialect). **Implemented.**
 5. **Group overage** — **Implemented (OVR-001).** Entra `_claim_names`/`_claim_sources` + minimal Graph-shaped stub served by LabSSO (not real Microsoft Graph). Okta: fail the token request after `oktaFailAt` groups. Generic: embed at most `genericCap` groups.
 6. **SAML 2.0** — **Implemented (SAML-001).** SP-initiated SSO + IdP metadata.
-7. **Operator SPA** — **Implemented (UI-001).** REST+MCP+UI parity. First SPA ready for Mira (`docs/22-operator-spa.md`).
+7. **Operator SPA** — **Implemented (UI-001).** REST+MCP+UI parity. Mira afters landed (sessions/users chrome + expire bind; `docs/22-operator-spa.md`).
 8. **Customer-config import** — **Implemented (IMP-001).** Allow-list rewriter.
 9. **More vendor clothes** — **Implemented (VEN-002).** ping, adfs, google, keycloak, iam-identity-center. WS-Fed with ADFS clothes.
 10. **Duo, SiteMinder, Shibboleth clothes** — **Implemented (VEN-003).** OIDC paths plus SAML URL clothes. [ADR 0010](adr/0010-duo-siteminder-shibboleth-clothes.md).

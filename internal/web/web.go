@@ -251,6 +251,8 @@ const appJS = `
       String(it.id||"").toLowerCase().indexOf(q) >= 0;
   }
   function renderSessions(){
+    var keep = document.activeElement && document.activeElement.id === "sess-filter";
+    var pos = keep && typeof document.activeElement.selectionStart === "number" ? document.activeElement.selectionStart : sessionFilter.length;
     var rows = "";
     var shown = [];
     for (var i = 0; i < sessionItems.length; i++) {
@@ -286,7 +288,10 @@ const appJS = `
       "<input class=\"filter\" id=\"sess-filter\" placeholder=\"Filter Username or ID\" value=\"" + esc(sessionFilter) + "\"/>" +
       rows + "<p class=\"note\">GET /v1/sessions items[] · LoginSession fields only.</p></div>" + insp + "</div>";
     var f = $("sess-filter");
-    if (f) f.oninput = function(){ sessionFilter = f.value; renderSessions(); };
+    if (f) {
+      f.oninput = function(){ sessionFilter = f.value; renderSessions(); };
+      if (keep) { f.focus(); try { f.setSelectionRange(pos, pos); } catch (e) {} }
+    }
   }
   function loadSessions(){
     return api("GET","/v1/sessions").then(function(r){
@@ -313,6 +318,8 @@ const appJS = `
     });
   }
   function renderUsers(){
+    var keepU = document.activeElement && document.activeElement.id === "user-filter";
+    var posU = keepU && typeof document.activeElement.selectionStart === "number" ? document.activeElement.selectionStart : userFilter.length;
     var rows = "";
     var shown = [];
     for (var i = 0; i < userItems.length; i++) {
@@ -366,7 +373,10 @@ const appJS = `
       "<input class=\"filter\" id=\"user-filter\" placeholder=\"Filter username or id\" value=\"" + esc(userFilter) + "\"/>" +
       rows + "</div>" + insp + "</div>";
     var uf = $("user-filter");
-    if (uf) uf.oninput = function(){ userFilter = uf.value; renderUsers(); };
+    if (uf) {
+      uf.oninput = function(){ userFilter = uf.value; renderUsers(); };
+      if (keepU) { uf.focus(); try { uf.setSelectionRange(posU, posU); } catch (e) {} }
+    }
     var sel = $("mfa-mode");
     if (sel) sel.value = mfaMode;
     var form = $("mfa-form");
@@ -379,7 +389,7 @@ const appJS = `
     };
   }
   function loadUsers(){
-    return api("GET","/v1/users").then(function(r){
+    return refreshMeta().then(function(){ return api("GET","/v1/users"); }).then(function(r){
       if (!r.ok) { showErr(r.status + " " + r.text); return; }
       showErr("");
       var users = JSON.parse(r.text);
@@ -388,7 +398,7 @@ const appJS = `
     });
   }
   function enrollUser(id){
-    api("POST","/v1/users/"+id+"/totp:enroll",{reason:"spa enroll"}).then(function(r){
+    api("POST","/v1/users/"+encodeURIComponent(id)+"/totp:enroll",{reason:"spa enroll"}).then(function(r){
       if (!r.ok) { showErr(r.status + " " + r.text); return; }
       var out = JSON.parse(r.text);
       lastEnroll = {userId:id, secret: out.secret||"", otpauth: out.otpauth||""};
@@ -397,7 +407,7 @@ const appJS = `
     });
   }
   function clearUser(id){
-    api("POST","/v1/users/"+id+"/totp:clear",{reason:"spa clear"}).then(function(r){
+    api("POST","/v1/users/"+encodeURIComponent(id)+"/totp:clear",{reason:"spa clear"}).then(function(r){
       if (!r.ok) { showErr(r.status + " " + r.text); return; }
       if (lastEnroll && lastEnroll.userId === id) lastEnroll = null;
       loadUsers();
@@ -424,8 +434,9 @@ const appJS = `
     var a = e.target.closest("a[data-view]");
     if (!a) return;
     e.preventDefault();
-    if (location.hash !== "#" + a.getAttribute("data-view")) location.hash = a.getAttribute("data-view");
-    load(a.getAttribute("data-view"));
+    var v = a.getAttribute("data-view");
+    if (location.hash !== "#" + v) location.hash = v;
+    else load(v);
   });
   $("workspace").onclick = function(ev){
     var t = ev.target;

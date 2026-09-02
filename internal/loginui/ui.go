@@ -40,7 +40,7 @@ func (u *UI) Mount(mux *http.ServeMux) {
 
 func (u *UI) getLogin(w http.ResponseWriter, r *http.Request) {
 	pending := r.URL.Query().Get("pending")
-	writeHTML(w, loginPage(u.store.Load(), pending, "", false))
+	writeHTML(w, loginPage(u.store.Load(), pending, "", r.URL.Query().Get("username"), false))
 }
 
 func (u *UI) postLogin(w http.ResponseWriter, r *http.Request) {
@@ -53,7 +53,7 @@ func (u *UI) postLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if u.oidc.Runtime().ForceFail() {
-		writeHTML(w, loginPage(u.store.Load(), r.FormValue("pending"), "access denied", false))
+		writeHTML(w, loginPage(u.store.Load(), r.FormValue("pending"), "access denied", r.FormValue("username"), false))
 		return
 	}
 	pending := r.FormValue("pending")
@@ -67,11 +67,11 @@ func (u *UI) postLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	rec, ok := findUser(snap, user)
 	if !ok {
-		writeHTML(w, loginPage(snap, pending, "invalid credentials", false))
+		writeHTML(w, loginPage(snap, pending, "invalid credentials", user, false))
 		return
 	}
 	if err := u.checkPassword(rec, []byte(pass)); err != nil {
-		writeHTML(w, loginPage(snap, pending, "invalid credentials", false))
+		writeHTML(w, loginPage(snap, pending, "invalid credentials", user, false))
 		return
 	}
 	mode := snap.Canonical.Spec.Auth.MFA.Mode
@@ -79,18 +79,18 @@ func (u *UI) postLogin(w http.ResponseWriter, r *http.Request) {
 		mode = "never"
 	}
 	if mode == "force-fail" {
-		writeHTML(w, loginPage(snap, pending, "MFA failed", true))
+		writeHTML(w, loginPage(snap, pending, "MFA failed", user, true))
 		return
 	}
 	mfaOK := false
 	if mode == "always" {
 		if mfa == "" {
-			writeHTML(w, loginPage(snap, pending, "", true))
+			writeHTML(w, loginPage(snap, pending, "", user, true))
 			return
 		}
 		secret, ok := u.totpSecret(rec)
 		if !ok || !u.oidc.Runtime().VerifyAndRecordTOTP(rec.ID, secret, mfa, time.Now()) {
-			writeHTML(w, loginPage(snap, pending, "MFA failed", true))
+			writeHTML(w, loginPage(snap, pending, "MFA failed", user, true))
 			return
 		}
 		mfaOK = true
@@ -327,7 +327,7 @@ func loginClothes(snap *snapshot.Snapshot) (title, heading, issuer, vendor, mode
 	return title, heading, issuer, vendor, mode
 }
 
-func loginPage(snap *snapshot.Snapshot, pending, errMsg string, mfa bool) string {
+func loginPage(snap *snapshot.Snapshot, pending, errMsg, username string, mfa bool) string {
 	title, heading, issuer, vendor, mode := loginClothes(snap)
 	extra := ""
 	if mfa {
@@ -343,7 +343,7 @@ func loginPage(snap *snapshot.Snapshot, pending, errMsg string, mfa bool) string
 	}
 	foot := `Data-plane login. Not the operator SPA. Cookie is the clothes name, not labsso_session.`
 	if mfa {
-		foot = `Data-plane login. Password already accepted; TOTP is required because mode is ` + html.EscapeString(mode) + `.`
+		foot = `Data-plane login. TOTP is required because mode is ` + html.EscapeString(mode) + `. Submit username, password, and the 6-digit code.`
 	}
 	return familyHead(title) + `<body><div class="card">
 <div class="brand"><span class="dot"></span>LabSSO</div>
@@ -352,7 +352,7 @@ func loginPage(snap *snapshot.Snapshot, pending, errMsg string, mfa bool) string
 <h1>` + html.EscapeString(heading) + `</h1>` + msg + `
 <form method="post" action="/login">
 <input type="hidden" name="pending" value="` + html.EscapeString(pending) + `"/>
-<label>Username</label><input name="username" autocomplete="username"/>
+<label>Username</label><input name="username" autocomplete="username" value="` + html.EscapeString(username) + `"/>
 <label>Password</label><input name="password" type="password" autocomplete="current-password"/>
 ` + extra + `
 <button class="continue" type="submit">Continue</button>

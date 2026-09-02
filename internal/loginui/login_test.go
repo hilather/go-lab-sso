@@ -508,6 +508,20 @@ func TestMFATwoSubmitAndLabTOTPRejected(t *testing.T) {
 	if rec.Code != 200 || !strings.Contains(rec.Body.String(), `name="mfa"`) {
 		t.Fatalf("want TOTP field %d %s", rec.Code, rec.Body)
 	}
+	if strings.Contains(rec.Body.String(), "Password already accepted") {
+		t.Fatal("footer must not claim password persist; second POST still needs username and password")
+	}
+	if !strings.Contains(rec.Body.String(), `value="alice"`) {
+		t.Fatal("MFA step should keep the username")
+	}
+	totpOnly := url.Values{"pending": {"p1"}, "mfa": {"123456"}}
+	req = httptest.NewRequest("POST", "/login", strings.NewReader(totpOnly.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if !strings.Contains(rec.Body.String(), "invalid credentials") {
+		t.Fatal("TOTP-only second POST must not skip username/password")
+	}
 	if strings.Contains(rec.Header().Get("Set-Cookie"), oidc.CookieLogin) {
 		t.Fatal("cookie before MFA")
 	}
