@@ -40,7 +40,7 @@ func (u *UI) Mount(mux *http.ServeMux) {
 
 func (u *UI) getLogin(w http.ResponseWriter, r *http.Request) {
 	pending := r.URL.Query().Get("pending")
-	writeHTML(w, loginPage(u.store.Load(), pending, "", r.URL.Query().Get("username"), false))
+	writeHTML(w, loginPage(u.store.Load(), pending, "", "", false))
 }
 
 func (u *UI) postLogin(w http.ResponseWriter, r *http.Request) {
@@ -269,7 +269,7 @@ func findUser(snap *snapshot.Snapshot, username string) (model.User, bool) {
 func familyHead(title string) string {
 	return `<!doctype html><html lang="en"><head><meta charset="utf-8"/><title>` + html.EscapeString(title) + `</title>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap"/>
+<link rel="stylesheet" referrerpolicy="no-referrer" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap"/>
 <style>
 :root {
   --bg: #0b0c0e;
@@ -342,7 +342,9 @@ func loginPage(snap *snapshot.Snapshot, pending, errMsg, username string, mfa bo
 		step = `<p class="step">TOTP · spec.auth.mfa.mode ` + html.EscapeString(mode) + `</p>`
 	}
 	foot := `Data-plane login. Not the operator SPA. Cookie is the clothes name, not labsso_session.`
-	if mfa {
+	if mfa && mode == "force-fail" {
+		foot = `Data-plane login. MFA mode force-fail rejects after password.`
+	} else if mfa {
 		foot = `Data-plane login. TOTP is required because mode is ` + html.EscapeString(mode) + `. Submit username, password, and the 6-digit code.`
 	}
 	return familyHead(title) + `<body><div class="card">
@@ -390,6 +392,7 @@ func consentPage(snap *snapshot.Snapshot, pending string) string {
 
 func writeHTML(w http.ResponseWriter, body string) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
 	_, _ = w.Write([]byte(body))
 }
 

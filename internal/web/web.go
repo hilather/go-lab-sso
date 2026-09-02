@@ -33,7 +33,7 @@ const indexHTML = `<!doctype html>
 <meta charset="utf-8"/>
 <title>LabSSO operator</title>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap"/>
+<link rel="stylesheet" referrerpolicy="no-referrer" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap"/>
 <style>
 :root {
   --bg: #0b0c0e;
@@ -295,7 +295,7 @@ const appJS = `
   }
   function loadSessions(){
     return api("GET","/v1/sessions").then(function(r){
-      if (!r.ok) { showErr(r.status + " " + r.text); return; }
+      if (!r.ok) { showErr(r.status + " " + r.text); $("out").textContent = ""; return; }
       showErr("");
       var body = JSON.parse(r.text);
       sessionItems = body.items || [];
@@ -390,7 +390,7 @@ const appJS = `
   }
   function loadUsers(){
     return refreshMeta().then(function(){ return api("GET","/v1/users"); }).then(function(r){
-      if (!r.ok) { showErr(r.status + " " + r.text); return; }
+      if (!r.ok) { showErr(r.status + " " + r.text); $("out").textContent = ""; return; }
       showErr("");
       var users = JSON.parse(r.text);
       userItems = users.items || [];
