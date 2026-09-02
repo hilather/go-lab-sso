@@ -336,7 +336,7 @@ const appJS = `
       var overlay = "";
       if (lastEnroll && lastEnroll.userId === cur.id) {
         overlay = "<div class=\"panel overlay\"><h3>TOTP SEED Overlay (shown once)</h3>" +
-          "<p class=\"note\">Held in page memory only. Not localStorage, sessionStorage, IndexedDB, or the URL.</p>" +
+          "<p class=\"note\">Held in page memory only. Not browser storage or the URL.</p>" +
           "<pre>secret " + esc(lastEnroll.secret) + "</pre><pre>" + esc(lastEnroll.otpauth) + "</pre>" +
           "<button type=\"button\" class=\"ghost\" id=\"dismiss-enroll\">Dismiss</button></div>";
       }
