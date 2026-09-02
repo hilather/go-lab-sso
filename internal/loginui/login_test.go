@@ -410,6 +410,9 @@ func TestMFAForceFail(t *testing.T) {
 	if rec.Code != 200 || !strings.Contains(rec.Body.String(), "MFA failed") {
 		t.Fatal(rec.Body.String())
 	}
+	if strings.Contains(rec.Body.String(), `name="mfa"`) {
+		t.Fatal("force-fail must not solicit a TOTP field")
+	}
 }
 
 func TestPHCArgon2id(t *testing.T) {

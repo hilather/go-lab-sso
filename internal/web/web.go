@@ -295,6 +295,7 @@ const appJS = `
   }
   function loadSessions(){
     return api("GET","/v1/sessions").then(function(r){
+      if (currentView !== "sessions") return;
       if (!r.ok) { showErr(r.status + " " + r.text); $("out").textContent = ""; return; }
       showErr("");
       var body = JSON.parse(r.text);
@@ -390,6 +391,7 @@ const appJS = `
   }
   function loadUsers(){
     return refreshMeta().then(function(){ return api("GET","/v1/users"); }).then(function(r){
+      if (currentView !== "users") return;
       if (!r.ok) { showErr(r.status + " " + r.text); $("out").textContent = ""; return; }
       showErr("");
       var users = JSON.parse(r.text);
@@ -417,6 +419,7 @@ const appJS = `
   function loadLeftover(view){
     var path = leftover[view] || "/v1/status";
     api("GET", path).then(function(r){
+      if (currentView !== view) return;
       if (!r.ok) { showErr(r.status + " " + r.text); $("out").textContent = ""; return; }
       showErr("");
       $("out").innerHTML = "<div class=\"leftover\"><pre>" + esc(r.text) + "</pre></div>";
@@ -463,7 +466,8 @@ const appJS = `
     if (clear) { clearUser(clear); }
   };
   $("logout").onclick = function(){
-    api("DELETE","/v1/session").then(function(){
+    api("DELETE","/v1/session").then(function(r){
+      if (!r.ok) { showErr(r.status + " " + r.text); return; }
       csrf = "";
       refreshWho().then(paintChrome);
       showErr("");

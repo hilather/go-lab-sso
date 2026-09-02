@@ -330,7 +330,7 @@ func loginClothes(snap *snapshot.Snapshot) (title, heading, issuer, vendor, mode
 func loginPage(snap *snapshot.Snapshot, pending, errMsg, username string, mfa bool) string {
 	title, heading, issuer, vendor, mode := loginClothes(snap)
 	extra := ""
-	if mfa {
+	if mfa && mode != "force-fail" {
 		extra = `<label>TOTP</label><input name="mfa" autocomplete="one-time-code" placeholder="6-digit code"/>`
 	}
 	msg := ""
@@ -338,7 +338,7 @@ func loginPage(snap *snapshot.Snapshot, pending, errMsg, username string, mfa bo
 		msg = `<p class="err">` + html.EscapeString(errMsg) + `</p>`
 	}
 	step := ""
-	if mfa || mode == "always" || mode == "force-fail" {
+	if (mfa && mode != "force-fail") || mode == "always" {
 		step = `<p class="step">TOTP · spec.auth.mfa.mode ` + html.EscapeString(mode) + `</p>`
 	}
 	foot := `Data-plane login. Not the operator SPA. Cookie is the clothes name, not labsso_session.`
