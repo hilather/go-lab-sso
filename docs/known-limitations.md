@@ -1,7 +1,7 @@
 # Known Limitations
 
 Status: through VEN-003 implemented; SCIM design-only; integrator pin not in this repo
-Last reviewed: 2026-09-01
+Last reviewed: 2026-09-02
 
 Honest residuals for the design phase and the first implementation slices. This is not a promise that v1 is “done enough for production SSO.”
 
@@ -17,7 +17,7 @@ Honest residuals for the design phase and the first implementation slices. This 
 - No database. No multi-replica consensus.
 - TOTP overlay enroll is process memory; restart and `state:reset` drop it. Durable MFA needs `totpSecretRef`.
 - `token:mint` stays password-only (no `amr`/`acr`). No `acr_values` step-up.
-- Operator SPA first implementation is ready for Mira (`docs/22-operator-spa.md`).
+- Operator SPA chrome (sessions/users + data-plane login card) is implemented; leftover groups/clients/status/audit stay JSON dumps (`docs/22-operator-spa.md`).
 - LDAP bind is not v1.
 - SCIM outbound is later; no SCIM inbound server.
 - No client-credentials or device-code grant in the first OIDC slice.

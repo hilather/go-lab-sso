@@ -401,7 +401,7 @@ With the sample config and `serve` running:
 - Issuer: `https://lab.example.net` (or whatever you set; locally the listener is still `:10443`)
 - Discovery lives on the data-plane HTTPS listener under the vendor clothes
 - Login HTML is on that same listener
-- Operator UI is `http://127.0.0.1:8080/` when `ui.enabled` is true
+- Operator UI is `http://127.0.0.1:8080/` when `ui.enabled` is true (Lab* chrome: sessions and users are structured; expire uses the session REST above)
 
 Trust the lab TLS leaf in `testdata/secrets/tls/tls.crt` for local browsers and curl (`curl -k` only in a throwaway lab).
 

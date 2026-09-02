@@ -1,7 +1,7 @@
 # Program Board
 
 Status: through VEN-003 done; INT-001 documented here; SCIM-001 design-only
-Last reviewed: 2026-09-01
+Last reviewed: 2026-09-02
 
 Implementation is **opened** at FND-001. Later slices stay not-started until their wave.
 
@@ -15,7 +15,7 @@ Implementation is **opened** at FND-001. Later slices stay not-started until the
 | 4 | Vendor clothes: `entra`, `okta` (paths, claims, cookies, error dialect) | VEN-001 | LOGIN-001 | Clothes tables | done |
 | 5 | Group overage: Entra `_claim_names`/`_claim_sources` + Graph-shaped stub; Okta fail-at; generic cap | OVR-001 | VEN-001 | Overage behaviors | done |
 | 6 | SAML 2.0 SP-initiated SSO + IdP metadata | SAML-001 | OVR-001 | SAML IdP | done |
-| 7 | Operator SPA with REST+MCP+UI parity | UI-001 | FND-001, LOGIN-001 | SPA; first implementation ready for Mira (`docs/22-operator-spa.md`) | done (Mira review requested) |
+| 7 | Operator SPA with REST+MCP+UI parity | UI-001 | FND-001, LOGIN-001 | SPA; Mira afters landed (sessions/users chrome + expire bind; `docs/22-operator-spa.md`) | done |
 | 8 | Customer-config import (allow-list rewriter) | IMP-001 | FND-001 | Import plan/apply | done |
 | 9 | More vendor clothes: ping, adfs, google, keycloak, iam-identity-center; WS-Fed with ADFS clothes | VEN-002 | VEN-001, SAML-001 | Additional clothes + WS-Fed | done |
 | 10 | Duo, SiteMinder, Shibboleth clothes including SAML URL clothes | VEN-003 | VEN-002, SAML-001 | Remaining named SSO clothes | done |

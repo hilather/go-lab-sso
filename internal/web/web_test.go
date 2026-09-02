@@ -39,6 +39,15 @@ func TestSPANoTokenStorage(t *testing.T) {
 	if !strings.Contains(blob, "/v1/users/") || !strings.Contains(blob, "totp:enroll") || !strings.Contains(blob, "/v1/auth/mfa") {
 		t.Fatal("Users view must bind MFA enroll/set")
 	}
+	if !strings.Contains(blob, "/v1/sessions:expire-all") {
+		t.Fatal("Sessions view must bind expire-all")
+	}
+	if !strings.Contains(blob, ":expire") || !strings.Contains(blob, "encodeURIComponent") {
+		t.Fatal("Sessions view must bind POST /v1/sessions/{id}:expire")
+	}
+	if !strings.Contains(blob, "MFACompleted") || !strings.Contains(blob, "UserID") {
+		t.Fatal("Sessions inspector must paint LoginSession fields")
+	}
 }
 
 func TestScriptNoStore(t *testing.T) {

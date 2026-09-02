@@ -9,6 +9,7 @@ This project will use [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ### Added
 
+- Operator chrome (Mira afters): Lab* family shell in `internal/web` (sessions + users list/inspector). SPA binds existing `POST /v1/sessions/{id}:expire` and `POST /v1/sessions:expire-all` (no `expectedRevision`). Data-plane `/login` `/consent` are a 380px lab IdP card, not the operator rail. Leftover groups/clients/status/audit keep JSON bodies. IBM Plex via Google Fonts CSS CDN; no third-party JS.
 - File-ref TOTP ([ADR 0011](docs/adr/0011-file-ref-totp.md)): RFC 6238 SHA-1 6-digit verification, optional `users[].totpSecretRef`, in-memory enroll/rotate/clear overlay, typed `POST /v1/auth/mfa` / `sso_auth_mfa_set`, `totp:enroll` / `totp:clear` REST+MCP twins, operator Users view. After MFA, OIDC `amr`/`acr` and SAML/WS-Fed `TimeSyncToken`. `lab-totp` is rejected. Fixture `testdata/config/valid/totp-alice.yaml`.
 - Product page polish: illustrated header banner, CI badge, and a user-guide table of contents.
 - Operator docs: README rewrite with header banner, YAML and state-API quick starts, and `docs/user-guide.md`. Onboarding no longer talks like the CLI is future work.

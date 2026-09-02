@@ -366,6 +366,33 @@ func TestUIDisabledStillServesLogin(t *testing.T) {
 	}
 }
 
+func TestLoginChromeIsLabIdPNotOperatorRail(t *testing.T) {
+	a := bootLogin(t, true)
+	rec := httptest.NewRecorder()
+	a.HTTPSHandler().ServeHTTP(rec, httptest.NewRequest("GET", "/login", nil))
+	body := rec.Body.String()
+	if rec.Code != 200 || !strings.Contains(body, "Sign in") || !strings.Contains(body, "--bg: #0b0c0e") {
+		t.Fatalf("login chrome %d %s", rec.Code, body)
+	}
+	if strings.Contains(body, `name="mfa"`) {
+		t.Fatal("GET /login must not include TOTP input")
+	}
+	for _, bad := range []string{"data-view", "IDENTITY", "Expire all", "Entra"} {
+		if strings.Contains(body, bad) {
+			t.Fatalf("login must not contain %q", bad)
+		}
+	}
+	crec := httptest.NewRecorder()
+	a.HTTPSHandler().ServeHTTP(crec, httptest.NewRequest("GET", "/consent?pending=p", nil))
+	cbody := crec.Body.String()
+	if !strings.Contains(cbody, `name="approve" value="1"`) || !strings.Contains(cbody, `name="approve" value="0"`) {
+		t.Fatal(cbody)
+	}
+	if strings.Contains(cbody, "IDENTITY") || strings.Contains(cbody, "data-view") {
+		t.Fatal("consent must not be the operator rail")
+	}
+}
+
 func TestMFAForceFail(t *testing.T) {
 	a := bootLogin(t, true)
 	val, _ := json.Marshal(model.Auth{MFA: model.MFA{Mode: "force-fail"}})
