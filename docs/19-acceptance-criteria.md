@@ -2,7 +2,7 @@
 
 Status: through VEN-003 implemented; INT-001 documented; SCIM design-only
 Owners: Program, Quality
-Last reviewed: 2026-09-01
+Last reviewed: 2026-09-02
 
 ## Design landing (this repository)
 
@@ -55,7 +55,7 @@ The design is accepted when all of the following are true on `main`:
 ## Later implementation — SAML / SPA / import / integrator
 
 - Slice 6 (SAML-001, implemented): SP-initiated SAML + metadata; EntityID = issuer; hardened XML; lab cert from `signing.keyRef`; login pending branches OIDC vs SAML.
-- Slice 7 (UI-001, implemented): SPA cookie+CSRF; no `localStorage` tokens; `ui.enabled` 404s SPA only; audit list/get; Mira checklist in `docs/22-operator-spa.md`.
+- Slice 7 (UI-001, implemented): SPA cookie+CSRF; no `localStorage` tokens; `ui.enabled` 404s SPA only; audit list/get; sessions expire/expire-all bound; Mira afters in `docs/22-operator-spa.md`.
 - Slice 8 (IMP-001, implemented): import allow-list rewriter; unmapped parked; plan/apply only; `redirect:rewrite`.
 - Slice 9 (VEN-002, implemented): remaining enum clothes + WS-Fed passive; Keycloak realm = `metadata.name`; no hostname impersonation.
 - Slice 10 (VEN-003, implemented): `duo`, `siteminder`, `shibboleth` OIDC + SAML URL clothes; exact issuer; [ADR 0010](adr/0010-duo-siteminder-shibboleth-clothes.md).

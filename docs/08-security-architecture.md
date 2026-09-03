@@ -2,7 +2,7 @@
 
 Status: through VEN-003 implemented
 Owners: Security, Protocols, Control Plane
-Last reviewed: 2026-09-01
+Last reviewed: 2026-09-02
 Related ADRs: 0002, 0003, 0004, 0005, 0006, 0008, 0009, 0010, 0011
 
 ## Goals
@@ -40,7 +40,7 @@ LabSSO does **not** trust vendor-cloud hostnames and does not present them.
 - SAML XML parse rejects DOCTYPE/ENTITY and is size-capped. Assertion signatures use `goxmldsig` on XML LabSSO generates (not hostile-input verification).
 - Vendor clothes never change the issuer host to a vendor cloud.
 - Graph-shaped stub (Entra overage) is local; no egress to Microsoft.
-- Login / consent HTML is first-party. No third-party JS.
+- Login / consent HTML is first-party. No third-party JS. Chrome may load IBM Plex from a Google Fonts CSS `<link>` (not a JS loader); fallback is `system-ui`.
 - MFA `force-fail` is an explicit lab knob, not a bypass of `always`.
 
 ## Management-plane controls

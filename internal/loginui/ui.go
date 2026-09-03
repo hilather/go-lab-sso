@@ -40,7 +40,7 @@ func (u *UI) Mount(mux *http.ServeMux) {
 
 func (u *UI) getLogin(w http.ResponseWriter, r *http.Request) {
 	pending := r.URL.Query().Get("pending")
-	writeHTML(w, loginPage(u.store.Load(), pending, "", false))
+	writeHTML(w, loginPage(u.store.Load(), pending, "", "", false))
 }
 
 func (u *UI) postLogin(w http.ResponseWriter, r *http.Request) {
@@ -53,7 +53,7 @@ func (u *UI) postLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if u.oidc.Runtime().ForceFail() {
-		writeHTML(w, loginPage(u.store.Load(), r.FormValue("pending"), "access denied", false))
+		writeHTML(w, loginPage(u.store.Load(), r.FormValue("pending"), "access denied", r.FormValue("username"), false))
 		return
 	}
 	pending := r.FormValue("pending")
@@ -67,11 +67,11 @@ func (u *UI) postLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	rec, ok := findUser(snap, user)
 	if !ok {
-		writeHTML(w, loginPage(snap, pending, "invalid credentials", false))
+		writeHTML(w, loginPage(snap, pending, "invalid credentials", user, false))
 		return
 	}
 	if err := u.checkPassword(rec, []byte(pass)); err != nil {
-		writeHTML(w, loginPage(snap, pending, "invalid credentials", false))
+		writeHTML(w, loginPage(snap, pending, "invalid credentials", user, false))
 		return
 	}
 	mode := snap.Canonical.Spec.Auth.MFA.Mode
@@ -79,18 +79,18 @@ func (u *UI) postLogin(w http.ResponseWriter, r *http.Request) {
 		mode = "never"
 	}
 	if mode == "force-fail" {
-		writeHTML(w, loginPage(snap, pending, "MFA failed", true))
+		writeHTML(w, loginPage(snap, pending, "MFA failed", user, true))
 		return
 	}
 	mfaOK := false
 	if mode == "always" {
 		if mfa == "" {
-			writeHTML(w, loginPage(snap, pending, "", true))
+			writeHTML(w, loginPage(snap, pending, "", user, true))
 			return
 		}
 		secret, ok := u.totpSecret(rec)
 		if !ok || !u.oidc.Runtime().VerifyAndRecordTOTP(rec.ID, secret, mfa, time.Now()) {
-			writeHTML(w, loginPage(snap, pending, "MFA failed", true))
+			writeHTML(w, loginPage(snap, pending, "MFA failed", user, true))
 			return
 		}
 		mfaOK = true
@@ -266,49 +266,133 @@ func findUser(snap *snapshot.Snapshot, username string) (model.User, bool) {
 	return model.User{}, false
 }
 
-func loginPage(snap *snapshot.Snapshot, pending, errMsg string, mfa bool) string {
-	title, heading := "LabSSO login", "Sign in"
-	if snap != nil && snap.Clothes.HTMLTitle != "" {
-		title = snap.Clothes.HTMLTitle
-		if snap.Clothes.HTMLHeading != "" {
-			heading = snap.Clothes.HTMLHeading
-		}
+func familyHead(title string) string {
+	return `<!doctype html><html lang="en"><head><meta charset="utf-8"/><title>` + html.EscapeString(title) + `</title>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<link rel="stylesheet" referrerpolicy="no-referrer" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap"/>
+<style>
+:root {
+  --bg: #0b0c0e;
+  --elev: #121317;
+  --panel: #181a1f;
+  --fg: #ecece8;
+  --muted: #9a9b97;
+  --subtle: #6d6e6a;
+  --line: color-mix(in oklab, #ecece8 12%, transparent);
+  --accent: #7c8cff;
+  --danger: #c45c5c;
+  --ok: #7c8cff;
+  --mono: "IBM Plex Mono", ui-monospace, monospace;
+  --sans: "IBM Plex Sans", system-ui, sans-serif;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:var(--sans)}
+body{display:flex;align-items:center;justify-content:center}
+.card{width:380px;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:22px 22px 18px}
+.brand{display:flex;align-items:center;gap:8px;font-weight:600}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--accent)}
+.sub{color:var(--muted);font-size:13px;margin:6px 0 14px;font-family:var(--mono)}
+.step{color:var(--accent);font-size:13px;border-top:2px solid var(--accent);padding-top:10px;margin:0 0 16px}
+h1{margin:0 0 16px;font-size:28px}
+label{display:block;font-size:11px;letter-spacing:.08em;color:var(--muted);margin:12px 0 4px}
+input{width:100%;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:10px;font-family:var(--mono)}
+button{font-family:var(--sans);cursor:pointer}
+.continue{width:100%;margin-top:18px;background:var(--fg);color:#0b0c0e;border:0;border-radius:10px;padding:12px;font-weight:600}
+.row{display:flex;gap:10px;margin-top:16px}
+.row button{flex:1;border-radius:10px;padding:12px;border:1px solid var(--line);background:var(--elev);color:var(--fg)}
+.row button[value="1"]{background:var(--fg);color:#0b0c0e;border:0;font-weight:600}
+.err{color:var(--danger);font-size:13px}
+.foot{margin-top:16px;color:var(--subtle);font-size:11px;font-family:var(--mono)}
+</style></head>`
+}
+
+func loginClothes(snap *snapshot.Snapshot) (title, heading, issuer, vendor, mode string) {
+	title, heading, issuer, vendor, mode = "LabSSO login", "Sign in", "", "generic", "never"
+	if snap == nil {
+		return title, heading, issuer, vendor, mode
 	}
+	issuer = snap.Issuer
+	if snap.Clothes.HTMLTitle != "" {
+		title = snap.Clothes.HTMLTitle
+	}
+	if snap.Clothes.HTMLHeading != "" {
+		heading = snap.Clothes.HTMLHeading
+	}
+	if snap.Clothes.Vendor != "" {
+		vendor = snap.Clothes.Vendor
+	}
+	if snap.Canonical != nil && snap.Canonical.Spec.Auth.MFA.Mode != "" {
+		mode = snap.Canonical.Spec.Auth.MFA.Mode
+	}
+	return title, heading, issuer, vendor, mode
+}
+
+func loginPage(snap *snapshot.Snapshot, pending, errMsg, username string, mfa bool) string {
+	title, heading, issuer, vendor, mode := loginClothes(snap)
 	extra := ""
-	if mfa {
-		extra = `<label>TOTP</label><input name="mfa" autocomplete="one-time-code"/>`
+	if mfa && mode != "force-fail" {
+		extra = `<label>TOTP</label><input name="mfa" autocomplete="one-time-code" placeholder="6-digit code"/>`
 	}
 	msg := ""
 	if errMsg != "" {
 		msg = `<p class="err">` + html.EscapeString(errMsg) + `</p>`
 	}
-	return `<!doctype html><html><head><title>` + html.EscapeString(title) + `</title></head><body>
+	step := ""
+	if (mfa && mode != "force-fail") || mode == "always" {
+		step = `<p class="step">TOTP · spec.auth.mfa.mode ` + html.EscapeString(mode) + `</p>`
+	}
+	foot := `Data-plane login. Not the operator SPA. Cookie is the clothes name, not labsso_session.`
+	if mfa && mode == "force-fail" {
+		foot = `Data-plane login. MFA mode force-fail rejects after password.`
+	} else if mfa {
+		foot = `Data-plane login. TOTP is required because mode is ` + html.EscapeString(mode) + `. Submit username, password, and the 6-digit code.`
+	}
+	return familyHead(title) + `<body><div class="card">
+<div class="brand"><span class="dot"></span>LabSSO</div>
+<div class="sub">` + html.EscapeString(issuer) + ` · ` + html.EscapeString(vendor) + `</div>
+` + step + `
 <h1>` + html.EscapeString(heading) + `</h1>` + msg + `
 <form method="post" action="/login">
 <input type="hidden" name="pending" value="` + html.EscapeString(pending) + `"/>
-<label>Username</label><input name="username" autocomplete="username"/>
+<label>Username</label><input name="username" autocomplete="username" value="` + html.EscapeString(username) + `"/>
 <label>Password</label><input name="password" type="password" autocomplete="current-password"/>
 ` + extra + `
-<button type="submit">Continue</button>
-</form></body></html>`
+<button class="continue" type="submit">Continue</button>
+</form>
+<p class="foot">` + foot + `</p>
+</div></body></html>`
 }
 
 func consentPage(snap *snapshot.Snapshot, pending string) string {
 	title := "LabSSO consent"
-	if snap != nil && snap.Clothes.ConsentTitle != "" {
-		title = snap.Clothes.ConsentTitle
+	issuer, vendor := "", "generic"
+	if snap != nil {
+		issuer = snap.Issuer
+		if snap.Clothes.ConsentTitle != "" {
+			title = snap.Clothes.ConsentTitle
+		}
+		if snap.Clothes.Vendor != "" {
+			vendor = snap.Clothes.Vendor
+		}
 	}
-	return `<!doctype html><html><head><title>` + html.EscapeString(title) + `</title></head><body>
+	return familyHead(title) + `<body><div class="card">
+<div class="brand"><span class="dot"></span>LabSSO</div>
+<div class="sub">` + html.EscapeString(issuer) + ` · ` + html.EscapeString(vendor) + `</div>
 <h1>Consent</h1>
 <form method="post" action="/consent">
 <input type="hidden" name="pending" value="` + html.EscapeString(pending) + `"/>
+<div class="row">
 <button type="submit" name="approve" value="1">Allow</button>
 <button type="submit" name="approve" value="0">Deny</button>
-</form></body></html>`
+</div>
+</form>
+<p class="foot">Data-plane consent. Not the operator SPA.</p>
+</div></body></html>`
 }
 
 func writeHTML(w http.ResponseWriter, body string) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
 	_, _ = w.Write([]byte(body))
 }
 

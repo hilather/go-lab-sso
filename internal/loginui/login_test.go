@@ -366,6 +366,33 @@ func TestUIDisabledStillServesLogin(t *testing.T) {
 	}
 }
 
+func TestLoginChromeIsLabIdPNotOperatorRail(t *testing.T) {
+	a := bootLogin(t, true)
+	rec := httptest.NewRecorder()
+	a.HTTPSHandler().ServeHTTP(rec, httptest.NewRequest("GET", "/login", nil))
+	body := rec.Body.String()
+	if rec.Code != 200 || !strings.Contains(body, "Sign in") || !strings.Contains(body, "--bg: #0b0c0e") {
+		t.Fatalf("login chrome %d %s", rec.Code, body)
+	}
+	if strings.Contains(body, `name="mfa"`) {
+		t.Fatal("GET /login must not include TOTP input")
+	}
+	for _, bad := range []string{"data-view", "IDENTITY", "Expire all", "Entra"} {
+		if strings.Contains(body, bad) {
+			t.Fatalf("login must not contain %q", bad)
+		}
+	}
+	crec := httptest.NewRecorder()
+	a.HTTPSHandler().ServeHTTP(crec, httptest.NewRequest("GET", "/consent?pending=p", nil))
+	cbody := crec.Body.String()
+	if !strings.Contains(cbody, `name="approve" value="1"`) || !strings.Contains(cbody, `name="approve" value="0"`) {
+		t.Fatal(cbody)
+	}
+	if strings.Contains(cbody, "IDENTITY") || strings.Contains(cbody, "data-view") {
+		t.Fatal("consent must not be the operator rail")
+	}
+}
+
 func TestMFAForceFail(t *testing.T) {
 	a := bootLogin(t, true)
 	val, _ := json.Marshal(model.Auth{MFA: model.MFA{Mode: "force-fail"}})
@@ -382,6 +409,9 @@ func TestMFAForceFail(t *testing.T) {
 	a.HTTPSHandler().ServeHTTP(rec, req)
 	if rec.Code != 200 || !strings.Contains(rec.Body.String(), "MFA failed") {
 		t.Fatal(rec.Body.String())
+	}
+	if strings.Contains(rec.Body.String(), `name="mfa"`) {
+		t.Fatal("force-fail must not solicit a TOTP field")
 	}
 }
 
@@ -480,6 +510,20 @@ func TestMFATwoSubmitAndLabTOTPRejected(t *testing.T) {
 	h.ServeHTTP(rec, req)
 	if rec.Code != 200 || !strings.Contains(rec.Body.String(), `name="mfa"`) {
 		t.Fatalf("want TOTP field %d %s", rec.Code, rec.Body)
+	}
+	if strings.Contains(rec.Body.String(), "Password already accepted") {
+		t.Fatal("footer must not claim password persist; second POST still needs username and password")
+	}
+	if !strings.Contains(rec.Body.String(), `value="alice"`) {
+		t.Fatal("MFA step should keep the username")
+	}
+	totpOnly := url.Values{"pending": {"p1"}, "mfa": {"123456"}}
+	req = httptest.NewRequest("POST", "/login", strings.NewReader(totpOnly.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if !strings.Contains(rec.Body.String(), "invalid credentials") {
+		t.Fatal("TOTP-only second POST must not skip username/password")
 	}
 	if strings.Contains(rec.Header().Get("Set-Cookie"), oidc.CookieLogin) {
 		t.Fatal("cookie before MFA")
