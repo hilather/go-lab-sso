@@ -9,8 +9,6 @@ This project will use [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ### Added
 
-- Operator chrome (Mira afters): Lab* family shell in `internal/web` (sessions + users list/inspector). SPA binds existing `POST /v1/sessions/{id}:expire` and `POST /v1/sessions:expire-all` (no `expectedRevision`). Data-plane `/login` `/consent` are a 380px lab IdP card, not the operator rail. Leftover groups/clients/status/audit keep JSON bodies. IBM Plex via Google Fonts CSS CDN; no third-party JS.
-- File-ref TOTP ([ADR 0011](docs/adr/0011-file-ref-totp.md)): RFC 6238 SHA-1 6-digit verification, optional `users[].totpSecretRef`, in-memory enroll/rotate/clear overlay, typed `POST /v1/auth/mfa` / `sso_auth_mfa_set`, `totp:enroll` / `totp:clear` REST+MCP twins, operator Users view. After MFA, OIDC `amr`/`acr` and SAML/WS-Fed `TimeSyncToken`. `lab-totp` is rejected. Fixture `testdata/config/valid/totp-alice.yaml`.
 - Product page polish: illustrated header banner, CI badge, and a user-guide table of contents.
 - Operator docs: README rewrite with header banner, YAML and state-API quick starts, and `docs/user-guide.md`. Onboarding no longer talks like the CLI is future work.
 - VEN-001: Entra and Okta clothes on the exact issuer (`internal/vendor`, snapshot `Clothes`, path dispatch). Optional `spec.profile.tenantId` (compile default, not Normalized). Cookie names `labsso_entra` / `labsso_okta`. Entra `oid`/`tid`/`ver` on id_token and userinfo. Entra token errors add `error_codes` + `trace_id`. `POST /v1/tunables/vendor:swap` / `sso_tunable_vendor_swap` merges profile and purges protocol memory (not pause/force-fail/inject).
@@ -56,4 +54,24 @@ This project will use [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Program board and reviewer/agent templates.
 - YAML fixtures and a non-runnable Compose sketch.
 
-[Unreleased]: https://github.com/hilather/go-lab-sso/compare/main...HEAD
+## 1.0.0-rc.3 - 2026-09-07
+
+File-ref TOTP and operator chrome after v1.0.0-rc.2. Notes: [docs/releases/v1.0.0-rc.3.md](docs/releases/v1.0.0-rc.3.md).
+
+### Added
+
+- File-ref TOTP ([ADR 0011](docs/adr/0011-file-ref-totp.md)): RFC 6238 SHA-1 6-digit verification, optional `users[].totpSecretRef`, in-memory enroll/rotate/clear overlay, typed `POST /v1/auth/mfa` / `sso_auth_mfa_set`, `totp:enroll` / `totp:clear` REST+MCP twins, operator Users view. After MFA, OIDC `amr`/`acr` and SAML/WS-Fed `TimeSyncToken`. `lab-totp` is rejected. Fixture `testdata/config/valid/totp-alice.yaml`.
+
+### Changed
+
+- Operator chrome (Mira afters, [#3](https://github.com/hilather/go-lab-sso/pull/3)): Lab* family shell in `internal/web` (sessions + users list/inspector). SPA binds existing `POST /v1/sessions/{id}:expire` and `POST /v1/sessions:expire-all` (no `expectedRevision`). Data-plane `/login` `/consent` are a 380px lab IdP card, not the operator rail. Leftover groups/clients/status/audit keep JSON bodies. IBM Plex via Google Fonts CSS CDN; no third-party JS.
+
+### Fixed
+
+- None.
+
+### Removed or deprecated
+
+- Shared literal `lab-totp` is rejected.
+
+[Unreleased]: https://github.com/hilather/go-lab-sso/compare/v1.0.0-rc.2...HEAD

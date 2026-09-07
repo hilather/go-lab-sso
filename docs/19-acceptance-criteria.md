@@ -2,7 +2,7 @@
 
 Status: through VEN-003 implemented; INT-001 documented; SCIM design-only
 Owners: Program, Quality
-Last reviewed: 2026-09-02
+Last reviewed: 2026-09-07
 
 ## Design landing (this repository)
 
@@ -73,4 +73,4 @@ The design is accepted when all of the following are true on `main`:
 
 ## Evidence
 
-Design evidence is this repository on `main`. Implementation evidence will live under `docs/releases/` when tags exist. Do not invent release notes now.
+Design evidence is this repository on `main`. Implementation evidence lives under [`docs/releases/`](releases/). Candidate notes for the next tag: [v1.0.0-rc.3.md](releases/v1.0.0-rc.3.md). Do not invent notes for tags that were never cut.

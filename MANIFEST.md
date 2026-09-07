@@ -1,7 +1,7 @@
 # Pack Manifest
 
 Status: through VEN-003; INT-001 documented; SCIM design-only
-Last reviewed: 2026-08-31
+Last reviewed: 2026-09-07
 
 Inventory of the design pack and the implemented appliance. There is no generated OpenAPI or MCP manifest file.
 
@@ -21,6 +21,7 @@ Inventory of the design pack and the implemented appliance. There is no generate
 - `CONTRIBUTING.md`: contribution workflow.
 - `SECURITY.md`: vulnerability reporting.
 - `CHANGELOG.md`: curated history.
+- `docs/releases/v1.0.0-rc.3.md`: 1.0.0-rc.3 notes (file-ref TOTP + operator chrome #3).
 - `LICENSE`: Apache-2.0, Copyright 2026 hilather.
 
 ## Design documents

@@ -4,7 +4,7 @@ Start with the [README](../README.md) and the [user guide](user-guide.md). Contr
 
 This page is the catalog. When a design document and a task summary disagree, the design document wins.
 
-Status: **through VEN-003** plus file-ref TOTP. Last reviewed: 2026-09-01.
+Status: **through VEN-003** plus file-ref TOTP and operator chrome. Last reviewed: 2026-09-07.
 
 ## Root
 
@@ -17,6 +17,7 @@ Status: **through VEN-003** plus file-ref TOTP. Last reviewed: 2026-09-01.
 | [CONTRIBUTING.md](../CONTRIBUTING.md) | PR workflow |
 | [SECURITY.md](../SECURITY.md) | Vulnerability reporting |
 | [CHANGELOG.md](../CHANGELOG.md) | Curated history |
+| [releases/v1.0.0-rc.3.md](releases/v1.0.0-rc.3.md) | 1.0.0-rc.3 notes (2026-09-07) |
 | [MANIFEST.md](../MANIFEST.md) | Pack inventory |
 | [LICENSE](../LICENSE) | Apache-2.0 |
 
