@@ -135,7 +135,7 @@ Clients list exact redirect URIs. No wildcard in v1. An agent tunable may rewrit
 
 ### Error dialect
 
-Authorize redirect errors stay RFC 6749 query params (`error`, `error_description`) for every vendor. Token JSON is RFC 6749 (`error`, `error_description`) for generic and okta. Entra token errors add `error_codes` (array of ints) and `trace_id`. Domain error codes in the management plane stay family-stable (`invalid_client`, `invalid_grant`, `access_denied`, …).
+Authorize redirect errors stay RFC 6749 query params (`error`, `error_description`) for every vendor. Token JSON is RFC 6749 (`error`, `error_description`) for generic and okta. Entra token errors add `error_codes` (array of ints) and `trace_id`. The lab maps `invalid_client` → 700016, `invalid_grant` → 70008, `invalid_request` and `unsupported_grant_type` → 90014, `temporarily_unavailable` → 90033 (a transient service error; used by pause, capacity, rate limiting, and injected errors), and `server_error` → 50000. Domain error codes in the management plane stay family-stable (`invalid_client`, `invalid_grant`, `access_denied`, …).
 
 ## Login, consent, MFA
 

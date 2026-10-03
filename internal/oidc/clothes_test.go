@@ -274,6 +274,42 @@ func TestClothesEntraClaimsAndTokenError(t *testing.T) {
 	}
 }
 
+// TestClothesEntraTransientErrorCode checks that Entra clothes map
+// temporarily_unavailable to AADSTS90033 (a transient service error), not
+// 50058 (an interaction-required SSO code).
+func TestClothesEntraTransientErrorCode(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		fail     func(*testing.T, *app.App)
+		wantCode int
+	}{
+		{name: "paused", wantCode: http.StatusServiceUnavailable, fail: func(t *testing.T, a *app.App) {
+			if err := a.PauseToken(auth.AdminActor(), "pause"); err != nil {
+				t.Fatal(err)
+			}
+		}},
+		{name: "injected", wantCode: http.StatusBadRequest, fail: func(t *testing.T, a *app.App) {
+			if err := a.InjectError(auth.AdminActor(), "temporarily_unavailable", "inject"); err != nil {
+				t.Fatal(err)
+			}
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			a, h := bootOIDC(t)
+			ensureOIDCUser(t, a)
+			swapVendor(t, a, "entra")
+			tc.fail(t, a)
+			req := httptest.NewRequest("POST", "/oauth2/v2.0/token", strings.NewReader(url.Values{"grant_type": {"refresh_token"}, "refresh_token": {"any"}, "client_id": {"app-1"}}.Encode()))
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			rec := httptest.NewRecorder()
+			h.ServeHTTP(rec, req)
+			if rec.Code != tc.wantCode || !strings.Contains(rec.Body.String(), `"error":"temporarily_unavailable"`) || !strings.Contains(rec.Body.String(), `"error_codes":[90033]`) {
+				t.Fatalf("entra transient error %d %s", rec.Code, rec.Body)
+			}
+		})
+	}
+}
+
 func TestClothesOktaAuthorizeAndLogout(t *testing.T) {
 	a, h := bootOIDC(t)
 	ensureOIDCUser(t, a)

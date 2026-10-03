@@ -893,7 +893,9 @@ func entraTokenErrorCode(code string) int {
 	case "invalid_request":
 		return 90014
 	case "temporarily_unavailable":
-		return 50058
+		// AADSTS90033 MsodsServiceUnavailable: a transient error. (50058 is
+		// UserInformationNotProvided, an interaction-required SSO code.)
+		return 90033
 	case "unsupported_grant_type":
 		return 90014
 	case "server_error":
