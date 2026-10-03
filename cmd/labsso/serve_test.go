@@ -66,13 +66,13 @@ func TestServeTLSAndReady(t *testing.T) {
 	if !ready {
 		t.Fatal("ready never 200")
 	}
-	resp, err := client.Get("https://" + httpsAddr + "/")
+	resp, err := client.Get("https://" + httpsAddr + "/.well-known/openid-configuration")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != 404 {
-		t.Fatalf("data plane status %d (OIDC not implemented yet)", resp.StatusCode)
+	if resp.StatusCode != 200 {
+		t.Fatalf("OIDC discovery status %d", resp.StatusCode)
 	}
 	cancel()
 	select {

@@ -61,7 +61,7 @@ func TestIncompleteSessionIgnoredWhenAlways(t *testing.T) {
 	sess := a.OIDC().Runtime().PutSession(oidc.LoginSession{
 		UserID: "u1", Username: "alice", MFACompleted: false, Expires: time.Now().Add(time.Hour),
 	})
-	ch := s256("verifier-value-1234567890")
+	ch := s256("verifier-value-1234567890-abcdefghijklmnopqrstuvwxyz")
 	req := httptest.NewRequest("GET", "/oauth2/authorize?response_type=code&client_id=app-1&redirect_uri="+url.QueryEscape("https://sut.example.net/cb")+"&code_challenge="+ch+"&code_challenge_method=S256", nil)
 	req.AddCookie(&http.Cookie{Name: oidc.CookieLogin, Value: sess.ID})
 	rec := httptest.NewRecorder()
@@ -93,7 +93,7 @@ func TestMFACompletedCookieReuseClaims(t *testing.T) {
 	sess := a.OIDC().Runtime().PutSession(oidc.LoginSession{
 		UserID: "u1", Username: "alice", MFACompleted: true, Expires: time.Now().Add(time.Hour),
 	})
-	ch := s256("verifier-value-1234567890")
+	ch := s256("verifier-value-1234567890-abcdefghijklmnopqrstuvwxyz")
 	req := httptest.NewRequest("GET", "/oauth2/authorize?response_type=code&client_id=app-1&redirect_uri="+url.QueryEscape("https://sut.example.net/cb")+"&code_challenge="+ch+"&code_challenge_method=S256&scope=openid", nil)
 	req.AddCookie(&http.Cookie{Name: oidc.CookieLogin, Value: sess.ID})
 	rec := httptest.NewRecorder()
@@ -103,7 +103,7 @@ func TestMFACompletedCookieReuseClaims(t *testing.T) {
 	if code == "" {
 		t.Fatalf("%d %s", rec.Code, rec.Header().Get("Location"))
 	}
-	tokForm := url.Values{"grant_type": {"authorization_code"}, "code": {code}, "redirect_uri": {"https://sut.example.net/cb"}, "code_verifier": {"verifier-value-1234567890"}, "client_id": {"app-1"}}
+	tokForm := url.Values{"grant_type": {"authorization_code"}, "code": {code}, "redirect_uri": {"https://sut.example.net/cb"}, "code_verifier": {"verifier-value-1234567890-abcdefghijklmnopqrstuvwxyz"}, "client_id": {"app-1"}}
 	req = httptest.NewRequest("POST", "/oauth2/token", strings.NewReader(tokForm.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	rec = httptest.NewRecorder()

@@ -7,6 +7,7 @@ type ChangeIn struct {
 	IdempotencyKey   string
 	Reason           string
 	Operations       []model.Operation
+	fingerprint      string
 }
 
 type ValidateIn struct {
@@ -15,7 +16,10 @@ type ValidateIn struct {
 }
 
 type ResetIn struct {
-	Reason string
+	ExpectedRevision string
+	IdempotencyKey   string
+	DryRun           bool
+	Reason           string
 }
 
 type Plan struct {
@@ -53,6 +57,7 @@ type Impact struct {
 type Export struct {
 	Format   string
 	YAML     []byte
+	Data     []byte
 	Revision string
 }
 

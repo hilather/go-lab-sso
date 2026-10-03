@@ -2,7 +2,7 @@
 
 Status: all enum clothes implemented (VEN-001 + VEN-002 + VEN-003). Group overage (OVR-001) implemented.
 Owners: Protocols, Application
-Last reviewed: 2026-08-31
+Last reviewed: 2026-10-03
 Related ADRs: 0005, 0010
 
 ## Problem statement
@@ -78,6 +78,8 @@ Paths are relative to the exact lab issuer. Hosts are **never** vendor-cloud hos
 
 Login and consent stay `/login` and `/consent` for all clothes.
 
+Every active logout path in the table also accepts POST for confirmation. GET with a valid `id_token_hint` for the session's user logs out directly. Without a valid hint, GET/HEAD shows the confirmation form without clearing cookies; POST validates the session-bound form token and request origin before logout. Inactive vendor paths remain 404 for both methods.
+
 ## `spec.profile.tenantId`
 
 Optional. `yaml:"tenantId,omitempty"`. Empty stays empty in Canonical, export, and `GET /v1/state`. The compiler fills `snapshot.Clothes.TenantID` with `00000000-0000-0000-0000-000000000001` when omitted. Entra `tid` and the Entra discovery alias use that compiled value. Do not Normalize the default into Canonical.
@@ -135,3 +137,7 @@ Adding a vendor value is additive. Removing or renaming one is breaking. Changin
 ## Open questions
 
 - None for VEN-003. `metadata.name` is the path segment for Keycloak realm, Duo app id, and SiteMinder client name (`Resolve` uses `lab` only if called with an empty name). `genericCap` is the frozen Entra/generic threshold (default 200). Live issuer suffixes and Duo metadata-as-EntityID are not copied; see [docs/known-limitations.md](known-limitations.md).
+
+## Signing and pending-flow safety
+
+Vendor clothes retain the loaded key's actual OIDC signature algorithm and public-key-derived `kid`. WS-Fed metadata, including ADFS clothes, publishes the compiled signing certificate. Browser completion checks the registered ACS or reply URL and realm again; protocol, recipient, user, or authentication-policy revocation invalidates pending flows. Each HTTPS request retains one immutable snapshot.

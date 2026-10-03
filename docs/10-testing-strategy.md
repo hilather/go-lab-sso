@@ -2,27 +2,27 @@
 
 Status: through VEN-003 tests implemented; SCIM design-only
 Owners: Quality, Application, Protocols
-Last reviewed: 2026-09-01
+Last reviewed: 2026-10-03
 Related ADRs: 0001, 0004
 
 ## Problem statement
 
-Once LabSSO is implemented, protocol mistakes become “the lab does not look like the customer.” Tests must cover YAML fail-closed behavior, snapshot swaps, OIDC/PKCE, login HTML vs SPA, vendor clothes (issuer stability), overage, import hardening, REST/MCP parity, and container dest-443 — without a CI graph that fails while this repo is docs-only.
+Protocol mistakes become “the lab does not look like the customer.” Tests must cover YAML fail-closed behavior, snapshot swaps, OIDC/PKCE, login HTML vs SPA, vendor clothes (issuer stability), overage, import hardening, REST/MCP parity, and container dest-443.
 
 ## Goals
 
-- Mandatory tests when code exists: unit, race, protocol, parity, config-compat, docs, container, changelog.
+- Mandatory tests: unit, race, protocol, parity, config-compat, docs, container, changelog.
 - Bug fixes start with a failing test.
 - Placeholders fail closed.
-- No CI workflows in the design landing (they would fail: no Go module).
+- CI runs all implemented required checks; no failing gate may be bypassed.
 
 ## Non-goals
 
-- Adding GitHub Actions now.
+- Claiming exhaustive external protocol conformance.
 - Claiming coverage for unimplemented code.
 - Vendoring huge protocol suites as git submodules.
 
-## Layers (when implemented)
+## Layers
 
 | Layer | What it proves |
 |---|---|
@@ -53,22 +53,22 @@ A required regression: `spec.ui.enabled: false` returns 404 for operator SPA rou
 
 Pause-token tests must show authorize, discovery, JWKS, and login still succeed.
 
-## CI (later)
+## CI
 
-Required jobs (no bypass), when REL opens:
+Required jobs (no bypass):
 
 ```text
-format lint unit race fuzz-smoke generated-file documentation
+format lint unit race fuzz-smoke generated integration documentation
 security-scan container-test changelog parity config-compat
 ```
 
-Do not add an empty workflow today.
+The workflow pins action revisions and Go 1.26.7. Docker-dependent checks remain mandatory in CI.
 
-Make targets, when a Makefile appears, must exist or `false`.
+All required Make targets execute real checks.
 
-## Design-phase verification
+## Historical design-phase verification
 
-For this landing, verification is:
+The original design landing used the following checks; implementation now uses the CI graph above:
 
 - Required files present and non-stub.
 - YAML sketches parse as YAML.
@@ -88,5 +88,15 @@ Golden discovery documents and clothed paths are compatibility surfaces. Update 
 
 ## Open questions
 
-- Exact golangci-lint and govulncheck pins (copy family versions at FND-001).
+- Tool pins are declared in Makefile and CI.
 - Whether Playwright appears with UI-001 (Mira reviews then).
+
+## Implemented hardening checks
+
+`make test-integration` starts actual TLS and management listeners on ephemeral loopback ports. It verifies OIDC discovery with management disabled, new TLS handshakes after certificate apply, failed TLS apply retaining the active snapshot, readiness/shutdown behavior, listener-error cleanup, and forced closure of stalled connections after the grace deadline. Tests never bind host 443.
+
+`make test-fuzz-smoke` fuzzes strict YAML decoding (without resolving fuzzed secret paths), SAML metadata XML, and SAML AuthnRequest XML for two seconds each with two workers. `make generate` builds config schema and capability/MCP binding artifacts from source; `make verify-generated` compares regenerated temporary output. `make test-docs` checks repository-local Markdown links, YAML fence syntax, full documented config compilation, and valid fixture compilation without network access.
+
+The container gate verifies UID/capabilities/read-only root plus real TLS OIDC discovery, public JWKS, login HTML, management readiness, and the compose dest-443 publish contract. External full OIDC/SAML certification and live vendor RP interoperability are not claimed.
+
+QA follow-up regressions cover retrying a refresh token after rejected scope widening, successful scope narrowing and rotation, and concurrent single-use redemption. Deterministic password-verifier tests cover unknown/disabled users and mixed plaintext/Argon2id configurations without wall-clock timing assertions. Logout HTTP tests cover direct logout by a valid `id_token_hint` across vendor clothes, confirmation fallback for missing, mismatched, forged, expired, wrong-issuer, unregistered-audience, and access-token hints, side-effect-free unhinted GET and HEAD, invalid redirects, protected confirmation, and cross-site or forged POST rejection.

@@ -209,15 +209,17 @@ curl -sS http://127.0.0.1:8080/v1/state
 
 You get `bootstrapRevision`, `runtimeRevision`, `generation`, `drifted`, and `canonical`.
 
-### Validate a document without applying it
+### Validate current state without applying changes
 
 ```bash
 curl -sS -X POST http://127.0.0.1:8080/v1/state:validate \
   -H 'content-type: application/json' \
   --data-binary @- <<'JSON'
-{"document": {"apiVersion": "labsso.dev/v1alpha1", "kind": "LabSSO"}}
+{"operations": []}
 JSON
 ```
+
+To validate a replacement document, send the complete configuration in `document`. Validation does not require an expected revision.
 
 ### Plan and apply a change
 
@@ -274,7 +276,10 @@ JSON
 
 ```bash
 curl -sS 'http://127.0.0.1:8080/v1/state:export?format=yaml'
-curl -sS -X POST http://127.0.0.1:8080/v1/state:reset
+REV=$(curl -sS http://127.0.0.1:8080/v1/state | python3 -c 'import json,sys; print(json.load(sys.stdin)["runtimeRevision"])')
+curl -sS -X POST http://127.0.0.1:8080/v1/state:reset \
+  -H 'Content-Type: application/json' -H "X-LabSSO-Expected-Revision: $REV" \
+  --data '{"reason":"restore bootstrap"}'
 ```
 
 Reset never writes the bootstrap file. Restart has the same effect as reset: the memory overlay is gone, and the mounted YAML is loaded again.

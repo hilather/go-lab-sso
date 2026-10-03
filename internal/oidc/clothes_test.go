@@ -229,15 +229,16 @@ func TestClothesSharedTokenLogoutInactive(t *testing.T) {
 
 func TestClothesEntraClaimsAndTokenError(t *testing.T) {
 	a, h := bootOIDC(t)
+	ensureOIDCUser(t, a)
 	swapVendor(t, a, "entra")
 	a.OIDC().Runtime().PutCode(oidc.AuthCode{
 		Code: "entra-code", ClientID: "app-1", RedirectURI: "https://sut.example.net/cb",
-		UserID: "u1", Username: "alice", Scope: "openid groups", Challenge: s256("verifier-value-1234567890"),
+		UserID: "u1", Username: "alice", Scope: "openid groups", Challenge: s256("verifier-value-1234567890-abcdefghijklmnopqrstuvwxyz"),
 		Expires: time.Now().Add(time.Minute),
 	})
 	form := url.Values{
 		"grant_type": {"authorization_code"}, "code": {"entra-code"},
-		"redirect_uri": {"https://sut.example.net/cb"}, "code_verifier": {"verifier-value-1234567890"},
+		"redirect_uri": {"https://sut.example.net/cb"}, "code_verifier": {"verifier-value-1234567890-abcdefghijklmnopqrstuvwxyz"},
 		"client_id": {"app-1"},
 	}
 	req := httptest.NewRequest("POST", "/oauth2/v2.0/token", strings.NewReader(form.Encode()))
@@ -275,9 +276,10 @@ func TestClothesEntraClaimsAndTokenError(t *testing.T) {
 
 func TestClothesOktaAuthorizeAndLogout(t *testing.T) {
 	a, h := bootOIDC(t)
+	ensureOIDCUser(t, a)
 	swapVendor(t, a, "okta")
 	sess := a.OIDC().Runtime().PutSession(oidc.LoginSession{UserID: "u1", Username: "alice", Expires: time.Now().Add(time.Hour)})
-	u := "/oauth2/default/v1/authorize?response_type=code&client_id=app-1&redirect_uri=" + url.QueryEscape("https://sut.example.net/cb") + "&code_challenge=abc&code_challenge_method=S256"
+	u := "/oauth2/default/v1/authorize?response_type=code&client_id=app-1&redirect_uri=" + url.QueryEscape("https://sut.example.net/cb") + "&code_challenge=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&code_challenge_method=S256"
 	req := httptest.NewRequest("GET", u, nil)
 	req.AddCookie(&http.Cookie{Name: "labsso_okta", Value: sess.ID})
 	rec := httptest.NewRecorder()
@@ -286,7 +288,12 @@ func TestClothesOktaAuthorizeAndLogout(t *testing.T) {
 		t.Fatalf("okta authorize %d %s", rec.Code, rec.Header().Get("Location"))
 	}
 	rec = httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest("GET", "/oauth2/default/v1/logout", nil))
+	cookie := &http.Cookie{Name: "labsso_okta", Value: sess.ID}
+	form := logoutForm(t, h, "/oauth2/default/v1/logout", cookie)
+	req = httptest.NewRequest("POST", "/oauth2/default/v1/logout", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(cookie)
+	h.ServeHTTP(rec, req)
 	if rec.Code != 200 || !strings.Contains(rec.Header().Get("Set-Cookie"), "labsso_okta") {
 		t.Fatalf("okta logout %d %s", rec.Code, rec.Header().Get("Set-Cookie"))
 	}

@@ -3,6 +3,7 @@ package app
 import (
 	"net/http"
 	"sync"
+	"sync/atomic"
 
 	"github.com/hilather/go-lab-sso/internal/audit"
 	"github.com/hilather/go-lab-sso/internal/compiler"
@@ -21,8 +22,8 @@ type App struct {
 	env           compiler.Env
 	idemp         *idempCache
 	audit         *audit.Ring
-	requireHTTPS  bool
-	httpsBound    bool
+	requireHTTPS  atomic.Bool
+	httpsBound    atomic.Bool
 	httpsHandler  http.Handler
 	oidc          *oidc.Provider
 	saml          *saml.Provider
@@ -47,6 +48,9 @@ func New(opt Options) *App {
 		ring = audit.NewRing(256)
 	}
 	prov := oidc.New(st)
+	prov.Runtime().SetReject(func(category string) {
+		ring.Emit(audit.Event{Capability: "sso.auth.rejected", Transport: "data-plane", Reason: category, Result: audit.ResultDenied})
+	})
 	prov.SetWarn(func(msg string) {
 		ring.Emit(audit.Event{Capability: "sso.oidc.overage", Reason: msg, Result: audit.ResultOK})
 	})
@@ -66,7 +70,7 @@ func New(opt Options) *App {
 		audit:         ring,
 		oidc:          prov,
 		saml:          samlProv,
-		httpsHandler:  mux,
+		httpsHandler:  snapshot.Capture(st, mux),
 	}
 }
 

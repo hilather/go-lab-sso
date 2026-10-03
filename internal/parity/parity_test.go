@@ -144,7 +144,7 @@ func TestParityStatusExportReset(t *testing.T) {
 	if re["yaml"] != me["yaml"] {
 		t.Fatal("export yaml mismatch")
 	}
-	rr := restJSON(t, rh, "POST", "/v1/state:reset", map[string]any{"reason": "parity"})
+	rr := restJSON(t, rh, "POST", "/v1/state:reset", map[string]any{"reason": "parity", "expectedRevision": rs["runtimeRevision"]})
 	if rr["applied"] != true {
 		t.Fatalf("reset REST %v", rr)
 	}
@@ -331,4 +331,112 @@ func TestParityMFAEnrollClear(t *testing.T) {
 func fmtJSON(v any) string {
 	b, _ := json.Marshal(v)
 	return string(b)
+}
+
+func TestParityValidationWithoutRevisionAndResetReplay(t *testing.T) {
+	a, rh, cs := bootBoth(t)
+	input := map[string]any{"operations": []any{}}
+	rp := restJSON(t, rh, "POST", "/v1/state:validate", input)
+	mp := mcpTool(t, cs, "sso_state_validate", input)
+	if rp["candidateRevision"] != mp["candidateRevision"] {
+		t.Fatal("validation parity")
+	}
+	reset := map[string]any{"reason": "parity reset", "expectedRevision": a.Status().RuntimeRevision, "idempotencyKey": "reset-parity", "dryRun": true}
+	rp = restJSON(t, rh, "POST", "/v1/state:reset", reset)
+	mp = mcpTool(t, cs, "sso_state_reset", reset)
+	if rp["applied"] != false || mp["applied"] != false {
+		t.Fatal("reset planning mutated")
+	}
+	reset["dryRun"] = false
+	rp = restJSON(t, rh, "POST", "/v1/state:reset", reset)
+	mp = mcpTool(t, cs, "sso_state_reset", reset)
+	if rp["generation"] != mp["generation"] || rp["auditEventId"] != mp["auditEventId"] {
+		t.Fatal("reset cross-adapter replay differs")
+	}
+}
+
+func TestParityCanonicalIdempotencyAndDocumentValidation(t *testing.T) {
+	a, rh, cs := bootBoth(t)
+	state := restJSON(t, rh, "GET", "/v1/state", nil)
+	input := map[string]any{"document": state["canonical"]}
+	rp := restJSON(t, rh, "POST", "/v1/state:validate", input)
+	mp := mcpTool(t, cs, "sso_state_validate", input)
+	if rp["candidateRevision"] != mp["candidateRevision"] {
+		t.Fatal("full document validation mismatch")
+	}
+	body := map[string]any{"expectedRevision": a.Status().RuntimeRevision, "idempotencyKey": "semantic-parity", "reason": "group", "operations": []any{map[string]any{"op": "add", "target": map[string]any{"kind": "group", "id": "semantic"}, "value": map[string]any{"name": "Semantic", "id": "semantic"}}}}
+	first := restJSON(t, rh, "POST", "/v1/changes:apply", body)
+	replay := mcpTool(t, cs, "sso_change_apply", body)
+	if first["generation"] != replay["generation"] || first["auditEventId"] != replay["auditEventId"] {
+		t.Fatal("canonical cross transport retry mismatch")
+	}
+}
+
+func TestParityPaginationAndJSONExport(t *testing.T) {
+	a, rh, cs := bootBoth(t)
+	for _, id := range []string{"page-z", "page-a", "page-m"} {
+		restJSON(t, rh, "POST", "/v1/changes:apply", map[string]any{"expectedRevision": a.Status().RuntimeRevision, "reason": "page fixture", "operations": []any{map[string]any{"op": "add", "target": map[string]any{"kind": "group", "id": id}, "value": map[string]any{"id": id, "name": id}}}})
+	}
+	rest := restJSON(t, rh, "GET", "/v1/groups?limit=1", nil)
+	mcp := mcpTool(t, cs, "sso_groups_list", map[string]any{"limit": 1})
+	rb, _ := json.Marshal(rest)
+	mb, _ := json.Marshal(mcp)
+	if string(rb) != string(mb) {
+		t.Fatalf("page parity %s %s", rb, mb)
+	}
+	cursor := rest["nextCursor"].(string)
+	rest = restJSON(t, rh, "GET", "/v1/groups?limit=1&cursor="+cursor, nil)
+	mcp = mcpTool(t, cs, "sso_groups_list", map[string]any{"limit": 1, "cursor": cursor})
+	rb, _ = json.Marshal(rest)
+	mb, _ = json.Marshal(mcp)
+	if string(rb) != string(mb) {
+		t.Fatalf("next page parity %s %s", rb, mb)
+	}
+	export := restJSON(t, rh, "GET", "/v1/state:export?format=json", nil)
+	mex := mcpTool(t, cs, "sso_state_export", map[string]any{"format": "json"})
+	rb, _ = json.Marshal(export)
+	mb, _ = json.Marshal(mex["json"])
+	if string(rb) != string(mb) {
+		t.Fatal("JSON export mismatch")
+	}
+}
+
+func TestParityRawDefaultsAndIntegerPrecision(t *testing.T) {
+	a, rh, cs := bootBoth(t)
+	state := restJSON(t, rh, "GET", "/v1/state", nil)
+	doc := state["canonical"].(map[string]any)
+	spec := doc["spec"].(map[string]any)
+	delete(spec, "auth")
+	delete(spec, "profile")
+	delete(spec, "protocols")
+	spec["clients"] = []any{map[string]any{"id": "fallback", "public": true, "redirectURIs": []any{"https://sut.example/cb"}}}
+	input := map[string]any{"document": doc}
+	rest := restJSON(t, rh, "POST", "/v1/state:validate", input)
+	mcp := mcpTool(t, cs, "sso_state_validate", input)
+	if rest["candidateRevision"] != mcp["candidateRevision"] {
+		t.Fatal("default/fallback validation mismatch")
+	}
+	big := int64(9007199254740993)
+	body := map[string]any{"expectedRevision": a.Status().RuntimeRevision, "idempotencyKey": "precision", "reason": "precision", "operations": []any{map[string]any{"op": "update", "target": map[string]any{"kind": "groupOverage"}, "value": map[string]any{"genericCap": big, "oktaFailAt": 100, "entraGraphStub": true}}}}
+	rest = restJSON(t, rh, "POST", "/v1/changes:apply", body)
+	mcp = mcpTool(t, cs, "sso_change_apply", body)
+	if rest["auditEventId"] != mcp["auditEventId"] {
+		t.Fatal("integer precision retry parity")
+	}
+}
+
+func TestParitySuppliedEphemeralReasons(t *testing.T) {
+	a, rh, cs := bootBoth(t)
+	for _, entry := range []struct {
+		path, tool string
+		input      map[string]any
+	}{{"/v1/tunables/auth:force-fail", "sso_tunable_auth_force_fail", map[string]any{"on": false, "reason": "operator fail"}}, {"/v1/tunables/error:inject", "sso_tunable_error_inject", map[string]any{"code": "", "reason": "operator inject"}}, {"/v1/tunables/consent:force", "sso_tunable_consent_force", map[string]any{"on": false, "reason": "operator consent"}}} {
+		restJSON(t, rh, "POST", entry.path, entry.input)
+		mcpTool(t, cs, entry.tool, entry.input)
+		events := a.Audit().Recent()
+		r, m := events[len(events)-2], events[len(events)-1]
+		if r.Reason != entry.input["reason"] || m.Reason != r.Reason || r.Transport != "rest" || m.Transport != "mcp" {
+			t.Fatalf("reason/transport mismatch %+v %+v", r, m)
+		}
+	}
 }

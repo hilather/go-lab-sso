@@ -5,6 +5,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/rsa"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/pem"
 	"fmt"
 	"time"
@@ -43,12 +44,26 @@ func newSigner(pemBytes []byte) (*signer, error) {
 		alg = jose.RS256
 		pub = &k.PublicKey
 	case *ecdsa.PrivateKey:
-		alg = jose.ES256
+		switch k.Curve.Params().BitSize {
+		case 256:
+			alg = jose.ES256
+		case 384:
+			alg = jose.ES384
+		case 521:
+			alg = jose.ES512
+		default:
+			return nil, fmt.Errorf("unsupported EC curve")
+		}
 		pub = &k.PublicKey
 	default:
 		return nil, fmt.Errorf("unsupported key type %T", key)
 	}
-	kid := "labsso-1"
+	publicKey := jose.JSONWebKey{Key: pub}
+	thumb, err := publicKey.Thumbprint(crypto.SHA256)
+	if err != nil {
+		return nil, err
+	}
+	kid := base64.RawURLEncoding.EncodeToString(thumb)
 	jwk := jose.JSONWebKey{Key: pub, KeyID: kid, Algorithm: string(alg), Use: "sig"}
 	sig, err := jose.NewSigner(jose.SigningKey{Algorithm: alg, Key: key}, (&jose.SignerOptions{}).WithType("JWT").WithHeader("kid", kid))
 	if err != nil {
@@ -86,7 +101,7 @@ func parseAndVerify(token string, jwk jose.JSONWebKey, iss string, accessOnly bo
 }
 
 func parseAndVerifyExtra(token string, jwk jose.JSONWebKey, iss string, accessOnly bool) (jwt.Claims, map[string]any, error) {
-	tok, err := jwt.ParseSigned(token, []jose.SignatureAlgorithm{jose.RS256, jose.ES256})
+	tok, err := jwt.ParseSigned(token, []jose.SignatureAlgorithm{jose.RS256, jose.ES256, jose.ES384, jose.ES512})
 	if err != nil {
 		return jwt.Claims{}, nil, err
 	}

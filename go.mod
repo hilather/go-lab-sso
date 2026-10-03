@@ -12,7 +12,7 @@ require (
 )
 
 require (
-	github.com/google/jsonschema-go v0.4.3 // indirect
+	github.com/google/jsonschema-go v0.4.3
 	github.com/jonboulle/clockwork v0.5.0 // indirect
 	github.com/kr/text v0.2.0 // indirect
 	github.com/segmentio/asm v1.1.3 // indirect

@@ -2,7 +2,7 @@
 
 Status: through VEN-003 implemented
 Owners: Configuration, Application
-Last reviewed: 2026-09-01
+Last reviewed: 2026-10-03
 Related ADRs: 0003, 0008
 
 ## Problem statement
@@ -110,7 +110,7 @@ This is the v1 design surface. Implementation may add optional fields only with 
 
 ### `spec.issuer`
 
-Exact issuer string. If `LAB_PUBLIC_HOST` is set, the compiled issuer must match this field or compile fails. Standalone `labsso serve` without that env uses the YAML value as-is. Derived form: `https://$LAB_PUBLIC_HOST` when the published HTTPS port is 443, otherwise `https://$LAB_PUBLIC_HOST:$LABSSO_HTTPS_PORT`.
+Exact issuer string. If `LAB_PUBLIC_HOST` is set, the compiled issuer must match this field or compile fails. Standalone `labsso serve` without that env uses the validated YAML value as-is. The issuer must be an absolute HTTPS origin with a valid DNS name or IP and port 1–65535; userinfo, path (including a trailing slash), query, and fragment reject. IPv6 hosts use brackets in the issuer; `LAB_PUBLIC_HOST` accepts a bare or bracketed IPv6 address and never includes a port. Invalid host or published-port environment values reject. Derived form: `https://$LAB_PUBLIC_HOST` when the published HTTPS port is 443, otherwise `https://$LAB_PUBLIC_HOST:$LABSSO_HTTPS_PORT`.
 
 ### `spec.profile.vendor`
 
@@ -130,13 +130,13 @@ List of client objects (empty in minimal). Fields: `id`, `clientId`, `redirectUR
 
 ### `spec.users` / `spec.groups`
 
-Source of truth in v1. User: `id`, `username`, optional `email`, `passwordRef` or `passwordHashRef` (PHC file), optional `totpSecretRef` (base32 file; compile-parsed), `groupIds`, `enabled`. Usernames are unique. Group: `id`, `name`. Membership is **only** `user.groupIds`. `group.memberUserIds` is **not a field**; a document that contains it is an unknown-field reject. Dangling `groupIds` reject at validate. List/get add a `totp: { configured, source }` view (`file` | `overlay`); apply values stay `model.User` (a GET `totp` field on apply 400s).
+Source of truth in v1. User: `id`, `username`, optional `email`, `passwordRef` or `passwordHashRef` (PHC file), optional `totpSecretRef` (base32 file; compile-parsed), `groupIds`, `enabled`. Usernames are unique. Exactly one password reference is required; supplying both rejects. Password credentials and decoded file TOTP seeds are resolved into private snapshot memory at compile, and login never rereads their files. External file edits take effect only after a successful compile/apply/reset. Group: `id`, `name`. Membership is **only** `user.groupIds`. `group.memberUserIds` is **not a field**; a document that contains it is an unknown-field reject. Dangling `groupIds` reject at validate. List/get add a `totp: { configured, source }` view (`file` | `overlay`); apply values stay `model.User` (a GET `totp` field on apply 400s).
 
 ### `spec.auth`
 
 - `sessionTTL`: Go duration.
 - `mfa.mode`: `never` | `always` | `force-fail`. Typed `POST /v1/auth/mfa` merges `mode` onto current `Auth` (keeps `sessionTTL`). Empty mode is rejected. Overlay enroll/clear live on `oidc.Runtime` and die on restart/`state:reset`. Clothes swap does not drop overlay. Changing `totpSecretRef` or removing the user does.
-- PHC (LOGIN-001): `passwordHashRef` files must be Argon2id (`$argon2id$v=19$m=65536,t=3,p=4$…`). Unknown PHC id fail-closed. Plaintext/unsalted hash material is rejected. `passwordRef` files are compared with constant-time equality (lab plaintext).
+- PHC (LOGIN-001): `passwordHashRef` files must be Argon2id (`$argon2id$v=19$m=65536,t=3,p=4$…`). Unknown PHC id fails closed. PHC fields and parameters must be complete and unique, with no extra fields; salt is 8–64 bytes and digest is 32 bytes, both strict unpadded standard base64. Plaintext/unsalted hash material is rejected. `passwordRef` files are compared with constant-time equality (lab plaintext).
 
 ### `spec.groupOverage`
 
@@ -241,3 +241,9 @@ Field names, duration syntax, vendor enum, and export shape are public. Adding o
 ## Open questions
 
 - None for OVR-001. `genericCap` is the frozen field name (default 200; also the Entra threshold). Membership SoT, bootstrapRevision hash, and issuer-when-env stay frozen above.
+
+### Endpoint validation
+
+Listener addresses require a valid host and numeric port 0–65535 (zero requests an ephemeral local port); management port 443 rejects. REST and MCP mount paths must be clean literal non-root paths without wildcards, escapes, trailing slashes, or overlap with each other or reserved management routes. `metadata.name` and a supplied `tenantId` must be safe single path segments (letters, digits, dot, underscore, hyphen; neither `.` nor `..`). Negative session TTL rejects; zero retains the one-hour runtime default.
+
+Registered HTTP(S) redirects require valid hosts and ports, without userinfo, fragments, or wildcards. Native OIDC redirects may use a reverse-domain custom scheme with a nonempty path or opaque target. SAML ACS and fallback redirects require HTTPS. TLS certificate/key references must form a valid matching key pair before a candidate activates. Compilation clones the source before normalization and indexing, so caller edits cannot change active authorization state.

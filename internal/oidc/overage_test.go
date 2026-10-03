@@ -44,7 +44,7 @@ func exchangeCode(t *testing.T, h http.Handler, path, code string) *httptest.Res
 	t.Helper()
 	form := url.Values{
 		"grant_type": {"authorization_code"}, "code": {code},
-		"redirect_uri": {"https://sut.example.net/cb"}, "code_verifier": {"verifier-value-1234567890"},
+		"redirect_uri": {"https://sut.example.net/cb"}, "code_verifier": {"verifier-value-1234567890-abcdefghijklmnopqrstuvwxyz"},
 		"client_id": {"app-1"},
 	}
 	req := httptest.NewRequest("POST", path, strings.NewReader(form.Encode()))
@@ -57,7 +57,7 @@ func exchangeCode(t *testing.T, h http.Handler, path, code string) *httptest.Res
 func plantCode(a *app.App, code, scope string) {
 	a.OIDC().Runtime().PutCode(oidc.AuthCode{
 		Code: code, ClientID: "app-1", RedirectURI: "https://sut.example.net/cb",
-		UserID: "u1", Username: "alice", Scope: scope, Challenge: s256("verifier-value-1234567890"),
+		UserID: "u1", Username: "alice", Scope: scope, Challenge: s256("verifier-value-1234567890-abcdefghijklmnopqrstuvwxyz"),
 		Expires: time.Now().Add(time.Minute),
 	})
 }

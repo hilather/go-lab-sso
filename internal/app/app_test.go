@@ -123,7 +123,7 @@ func TestResetDoesNotWriteBootstrap(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := a.Reset(admin(), app.ResetIn{Reason: "test"}); err != nil {
+	if _, err := a.Reset(admin(), app.ResetIn{ExpectedRevision: a.Status().RuntimeRevision, Reason: "test"}); err != nil {
 		t.Fatal(err)
 	}
 	after, err := os.ReadFile(boot)
@@ -148,7 +148,7 @@ func TestResetBadFileKeepsLive(t *testing.T) {
 	if err := os.WriteFile(boot, []byte("not: yaml: ["), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := a.Reset(admin(), app.ResetIn{Reason: "bad"}); err == nil {
+	if _, err := a.Reset(admin(), app.ResetIn{ExpectedRevision: a.Status().RuntimeRevision, Reason: "bad"}); err == nil {
 		t.Fatal("expected reset to fail")
 	}
 	got := a.Status()
@@ -176,7 +176,7 @@ func TestApplyThenResetClearsDrift(t *testing.T) {
 	if !res.Plan.Drifted {
 		t.Fatal("expected drift after apply")
 	}
-	if _, err := a.Reset(admin(), app.ResetIn{Reason: "restore"}); err != nil {
+	if _, err := a.Reset(admin(), app.ResetIn{ExpectedRevision: a.Status().RuntimeRevision, Reason: "restore"}); err != nil {
 		t.Fatal(err)
 	}
 	if a.Status().Drifted {
@@ -289,7 +289,7 @@ func TestPlanIdempotencyDoesNotIgnoreLaterApply(t *testing.T) {
 func TestResetClearsOIDCRuntime(t *testing.T) {
 	a, _ := bootApp(t)
 	a.OIDC().Runtime().PutCode(mustCode())
-	if _, err := a.Reset(admin(), app.ResetIn{Reason: "wipe"}); err != nil {
+	if _, err := a.Reset(admin(), app.ResetIn{ExpectedRevision: a.Status().RuntimeRevision, Reason: "wipe"}); err != nil {
 		t.Fatal(err)
 	}
 	if _, ok := a.OIDC().Runtime().TakeCode("code1"); ok {
@@ -541,15 +541,14 @@ func TestSchemaConfigVendorImplemented(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	prof, _ := out["profile"].(map[string]any)
-	v, _ := prof["vendor"].(string)
+	props := out["properties"].(map[string]any)
+	spec := props["spec"].(map[string]any)["properties"].(map[string]any)
+	prof := spec["profile"].(map[string]any)["properties"].(map[string]any)
+	values, _ := json.Marshal(prof["vendor"].(map[string]any)["enum"])
 	for _, name := range []string{"generic", "entra", "okta", "ping", "adfs", "google", "keycloak", "iam-identity-center", "duo", "siteminder", "shibboleth"} {
-		if !strings.Contains(v, name) {
-			t.Fatalf("schema missing %s: %s", name, v)
+		if !strings.Contains(string(values), name) {
+			t.Fatalf("schema missing %s", name)
 		}
-	}
-	if strings.Contains(v, "other ValidVendor values compile-reject") {
-		t.Fatalf("stale VEN-001 schema: %s", v)
 	}
 }
 

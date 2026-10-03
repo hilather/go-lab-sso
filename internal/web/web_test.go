@@ -60,3 +60,23 @@ func TestScriptNoStore(t *testing.T) {
 		t.Fatal(rec.Code)
 	}
 }
+
+func TestCustomRESTBaseSerializedSafely(t *testing.T) {
+	rec := httptest.NewRecorder()
+	web.Script(`/admin</script>"`).ServeHTTP(rec, httptest.NewRequest("GET", "/app.js", nil))
+	js := rec.Body.String()
+	if !strings.Contains(js, `var labssoRESTBase="/admin\u003c/script\u003e\""`) || !strings.Contains(js, `path = labssoRESTBase + path.slice(3)`) {
+		t.Fatalf("unsafe or missing REST base: %.100s", js)
+	}
+}
+
+func TestListsFollowPagination(t *testing.T) {
+	rec := httptest.NewRecorder()
+	web.Script().ServeHTTP(rec, httptest.NewRequest("GET", "/app.js", nil))
+	js := rec.Body.String()
+	for _, fragment := range []string{`apiPages("/v1/users")`, `apiPages("/v1/sessions")`, `if (page.nextCursor) return load(page.nextCursor)`} {
+		if !strings.Contains(js, fragment) {
+			t.Fatalf("SPA missing pagination behavior %s", fragment)
+		}
+	}
+}

@@ -83,7 +83,7 @@ func mustJSON(v any) json.RawMessage {
 func TestAuthorizeLoginConsentToken(t *testing.T) {
 	a := bootLogin(t, true)
 	h := a.HTTPSHandler()
-	verifier := "pkce-verifier-value-1234567890"
+	verifier := "pkce-verifier-value-1234567890-abcdefghijklmnopqrstuvwxyz-abcdefghijklmnopqrstuvwxyz"
 	ch := pkceS256(verifier)
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest("GET", "/oauth2/authorize?response_type=code&client_id=app-1&redirect_uri="+url.QueryEscape("https://sut.example.net/cb")+"&code_challenge="+ch+"&code_challenge_method=S256&state=st&scope=openid", nil))
@@ -226,7 +226,7 @@ func clothedLoginToken(t *testing.T, vendorName, authorizePath, tokenPath, cooki
 		t.Fatal(err)
 	}
 	h := a.HTTPSHandler()
-	verifier := "pkce-verifier-value-1234567890"
+	verifier := "pkce-verifier-value-1234567890-abcdefghijklmnopqrstuvwxyz-abcdefghijklmnopqrstuvwxyz"
 	ch := pkceS256(verifier)
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest("GET", authorizePath+"?response_type=code&client_id=app-1&redirect_uri="+url.QueryEscape("https://sut.example.net/cb")+"&code_challenge="+ch+"&code_challenge_method=S256&state=st&scope=openid", nil))
@@ -339,6 +339,7 @@ func TestEntraLoginChromeAndUIDisabled(t *testing.T) {
 	if rec.Code != 200 || !strings.Contains(rec.Body.String(), "LabSSO Entra login") {
 		t.Fatalf("ui disabled login %d %s", rec.Code, rec.Body)
 	}
+	validLoginPending(a, "x")
 	form := url.Values{"pending": {"x"}, "username": {"alice"}, "password": {"alice-password"}}
 	req := httptest.NewRequest("POST", "/login", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -402,6 +403,7 @@ func TestMFAForceFail(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+	validLoginPending(a, "x")
 	form := url.Values{"pending": {"x"}, "username": {"alice"}, "password": {"alice-password"}}
 	req := httptest.NewRequest("POST", "/login", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -439,6 +441,7 @@ func TestPHCArgon2id(t *testing.T) {
 	if _, err := a.Apply(auth.AdminActor(), app.ChangeIn{ExpectedRevision: a.Status().RuntimeRevision, Reason: "u", Operations: ops}); err != nil {
 		t.Fatal(err)
 	}
+	validLoginPending(a, "x")
 	form := url.Values{"pending": {"x"}, "username": {"bob"}, "password": {"secret"}}
 	req := httptest.NewRequest("POST", "/login", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -503,6 +506,7 @@ func TestMFATwoSubmitAndLabTOTPRejected(t *testing.T) {
 	if strings.Contains(rec.Body.String(), `name="mfa"`) || strings.Contains(rec.Body.String(), "lab-totp") {
 		t.Fatal(rec.Body.String())
 	}
+	validLoginPending(a, "p1")
 	form := url.Values{"pending": {"p1"}, "username": {"alice"}, "password": {"alice-password"}}
 	req := httptest.NewRequest("POST", "/login", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -558,6 +562,7 @@ func TestMFAFileRefLogin(t *testing.T) {
 	}
 	enableAlways(t, a)
 	code := totp.Code([]byte("12345678901234567890"), time.Now())
+	validLoginPending(a, "x")
 	form := url.Values{"pending": {"x"}, "username": {"alice"}, "password": {"alice-password"}, "mfa": {code}}
 	req := httptest.NewRequest("POST", "/login", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -581,6 +586,7 @@ func TestMFAOverlayRotateSameWindow(t *testing.T) {
 	}
 	now := time.Now()
 	code1 := totp.Code(sec, now)
+	validLoginPending(a, "x")
 	form := url.Values{"pending": {"x"}, "username": {"alice"}, "password": {"alice-password"}, "mfa": {code1}}
 	req := httptest.NewRequest("POST", "/login", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -598,6 +604,7 @@ func TestMFAOverlayRotateSameWindow(t *testing.T) {
 		t.Fatal(err)
 	}
 	code2 := totp.Code(sec2, now)
+	validLoginPending(a, "x")
 	form.Set("mfa", code2)
 	req = httptest.NewRequest("POST", "/login", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -617,7 +624,7 @@ func TestMFAConsentPathClaims(t *testing.T) {
 	}
 	sec, _ := totp.ParseSecret([]byte(en.Secret))
 	h := a.HTTPSHandler()
-	verifier := "pkce-verifier-value-1234567890"
+	verifier := "pkce-verifier-value-1234567890-abcdefghijklmnopqrstuvwxyz-abcdefghijklmnopqrstuvwxyz"
 	ch := pkceS256(verifier)
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest("GET", "/oauth2/authorize?response_type=code&client_id=app-1&redirect_uri="+url.QueryEscape("https://sut.example.net/cb")+"&code_challenge="+ch+"&code_challenge_method=S256&scope=openid", nil))
@@ -696,4 +703,9 @@ func jwtClaims(t *testing.T, tok string) map[string]any {
 		t.Fatal(err)
 	}
 	return claims
+}
+
+// Older login fixtures used nonexistent handles; successful sign-ins must have a live flow.
+func validLoginPending(a *app.App, id string) {
+	a.OIDC().Runtime().PutPending(oidc.Pending{ID: id, Protocol: oidc.ProtocolOIDC, ClientID: "app-1", RedirectURI: "https://sut.example.net/cb", Scope: "openid", Challenge: pkceS256("abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG"), Method: "S256"})
 }

@@ -64,7 +64,7 @@ func Generate() ([]byte, error) {
 }
 
 func OTPAuth(username, secretB32 string) string {
-	label := Issuer + ":" + url.QueryEscape(username)
+	label := Issuer + ":" + url.PathEscape(username)
 	q := url.Values{}
 	q.Set("secret", secretB32)
 	q.Set("issuer", Issuer)

@@ -1,9 +1,11 @@
 # Program Board
 
 Status: through VEN-003 done; INT-001 documented here; SCIM-001 design-only
-Last reviewed: 2026-09-02
+Last reviewed: 2026-10-03
 
-Implementation is **opened** at FND-001. Later slices stay not-started until their wave.
+Implementation through VEN-003 is complete. The table distinguishes implemented slices from SCIM design and external integrator work.
+
+The 2026-10-03 code/design review adds authentication and protocol regressions, strict configuration/import and REST/MCP contracts, serving lifecycle repairs, and executable generated/fuzz/integration checks. Remaining schema-generation and filtering gaps are tracked in [known limitations](../docs/known-limitations.md).
 
 ## Work packages
 
@@ -22,7 +24,7 @@ Implementation is **opened** at FND-001. Later slices stay not-started until the
 | 11 | SCIM outbound client | SCIM-001 | FND-001 | Design-only (`docs/23-scim-outbound.md`); may trail M6 | design |
 | 12 | Integrator last in mcp-integration-lab | INT-001 | Appliance exists | Wiring documented here; pin is last in mcp-integration-lab (not from this repo) | documented |
 
-UI-001 must not start in this design landing. Mira reviews after the first UI implementation.
+UI-001 and its initial chrome review are complete. Future UI changes preserve the shared capability registry and cookie/CSRF contract.
 
 INT-001 is **last**. Document the wiring in [docs/11-deployment.md](../docs/11-deployment.md). Do not implement it from this repository. LabMITM-style service in the **main** `docker-compose.yaml` (not an overlay). BOM: vendor pin, `profile.env`, `publishedPortSpecs`, `CanonicalReloadApps`, `secrets.go` (token 0o644 for UID 65532), `register.go`, labinfo `connection` block (issuer, OIDC discovery, SAML metadata, JWKS, client_id, redirect URIs, dest port 443), mcpjungle `servers/labsso.json`, new TLS leaf under `secrets/labsso-tls/` (lab-CA signed; **new leaf**, do not reuse LabMITM or LabLDAP cert).
 

@@ -9,6 +9,7 @@ type Event struct {
 	ID         string    `json:"id"`
 	Time       time.Time `json:"time"`
 	ActorID    string    `json:"actorId"`
+	Transport  string    `json:"transport,omitempty"`
 	ActorClass string    `json:"actorClass"`
 	Capability string    `json:"capability"`
 	Reason     string    `json:"reason,omitempty"`

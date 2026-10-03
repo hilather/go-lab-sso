@@ -5,45 +5,53 @@ import (
 	"html"
 	"net"
 	"net/http"
-	"os"
-	"path/filepath"
 	"sync"
 	"time"
 
 	"github.com/hilather/go-lab-sso/internal/model"
 	"github.com/hilather/go-lab-sso/internal/oidc"
+	"github.com/hilather/go-lab-sso/internal/password"
 	"github.com/hilather/go-lab-sso/internal/saml"
 	"github.com/hilather/go-lab-sso/internal/snapshot"
-	"github.com/hilather/go-lab-sso/internal/totp"
 	"github.com/hilather/go-lab-sso/internal/wsfed"
 )
 
 type UI struct {
-	store   *snapshot.Store
-	oidc    *oidc.Provider
-	saml    *saml.Provider
-	wsfed   *wsfed.Provider
-	baseDir string
-	limit   *limiter
+	store          *snapshot.Store
+	oidc           *oidc.Provider
+	saml           *saml.Provider
+	wsfed          *wsfed.Provider
+	baseDir        string
+	limit          *limiter
+	verifies       chan struct{}
+	verifyPassword func(password.Credential, []byte) error
 }
 
 func New(store *snapshot.Store, p *oidc.Provider, s *saml.Provider, w *wsfed.Provider, baseDir string) *UI {
-	return &UI{store: store, oidc: p, saml: s, wsfed: w, baseDir: baseDir, limit: newLimiter(10, time.Minute)}
+	return &UI{store: store, oidc: p, saml: s, wsfed: w, baseDir: baseDir, limit: newLimiter(10, time.Minute), verifies: make(chan struct{}, 4), verifyPassword: password.Credential.Verify}
 }
 
 func (u *UI) Mount(mux *http.ServeMux) {
 	mux.HandleFunc("GET /login", u.getLogin)
-	mux.HandleFunc("POST /login", u.postLogin)
+	mux.Handle("POST /login", u.oidc.Runtime().AuditRejected("login_request_rejected", http.NewCrossOriginProtection().Handler(snapshot.Capture(u.store, http.HandlerFunc(u.postLogin)))))
 	mux.HandleFunc("GET /consent", u.getConsent)
-	mux.HandleFunc("POST /consent", u.postConsent)
+	mux.Handle("POST /consent", u.oidc.Runtime().AuditRejected("consent_request_rejected", http.NewCrossOriginProtection().Handler(snapshot.Capture(u.store, http.HandlerFunc(u.postConsent)))))
 }
 
 func (u *UI) getLogin(w http.ResponseWriter, r *http.Request) {
 	pending := r.URL.Query().Get("pending")
-	writeHTML(w, loginPage(u.store.Load(), pending, "", "", false))
+	writeHTML(w, loginPage(snapshot.FromRequest(r, u.store), pending, "", "", false))
 }
 
 func (u *UI) postLogin(w http.ResponseWriter, r *http.Request) {
+	select {
+	case u.verifies <- struct{}{}:
+		defer func() { <-u.verifies }()
+	default:
+		http.Error(w, "busy", http.StatusTooManyRequests)
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
 	if !u.limit.allow(clientIP(r)) {
 		http.Error(w, "rate limited", http.StatusTooManyRequests)
 		return
@@ -53,24 +61,27 @@ func (u *UI) postLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if u.oidc.Runtime().ForceFail() {
-		writeHTML(w, loginPage(u.store.Load(), r.FormValue("pending"), "access denied", r.FormValue("username"), false))
+		u.oidc.Runtime().Reject("login_force_failure")
+		writeHTML(w, loginPage(snapshot.FromRequest(r, u.store), r.FormValue("pending"), "access denied", r.FormValue("username"), false))
 		return
 	}
 	pending := r.FormValue("pending")
 	user := r.FormValue("username")
 	pass := r.FormValue("password")
 	mfa := r.FormValue("mfa")
-	snap := u.store.Load()
+	snap := snapshot.FromRequest(r, u.store)
 	if snap == nil {
 		http.Error(w, "not ready", http.StatusServiceUnavailable)
 		return
 	}
-	rec, ok := findUser(snap, user)
-	if !ok {
-		writeHTML(w, loginPage(snap, pending, "invalid credentials", user, false))
+	pend, valid := u.oidc.Runtime().GetPending(pending)
+	if !valid || !oidc.PendingUsable(snap, pend) {
+		http.Error(w, "invalid pending request", http.StatusBadRequest)
 		return
 	}
-	if err := u.checkPassword(rec, []byte(pass)); err != nil {
+	rec, ok := findUser(snap, user)
+	if err := u.checkPassword(snap, rec, []byte(pass)); err != nil || !ok {
+		u.oidc.Runtime().Reject("login_credentials_rejected")
 		writeHTML(w, loginPage(snap, pending, "invalid credentials", user, false))
 		return
 	}
@@ -79,6 +90,7 @@ func (u *UI) postLogin(w http.ResponseWriter, r *http.Request) {
 		mode = "never"
 	}
 	if mode == "force-fail" {
+		u.oidc.Runtime().Reject("login_mfa_rejected")
 		writeHTML(w, loginPage(snap, pending, "MFA failed", user, true))
 		return
 	}
@@ -88,8 +100,9 @@ func (u *UI) postLogin(w http.ResponseWriter, r *http.Request) {
 			writeHTML(w, loginPage(snap, pending, "", user, true))
 			return
 		}
-		secret, ok := u.totpSecret(rec)
-		if !ok || !u.oidc.Runtime().VerifyAndRecordTOTP(rec.ID, secret, mfa, time.Now()) {
+		secret, ok := u.totpSecret(snap, rec)
+		if !ok || !u.oidc.Runtime().VerifyAndRecordTOTPGeneration(rec.ID, secret, mfa, time.Now(), snap.Generation) {
+			u.oidc.Runtime().Reject("login_mfa_rejected")
 			writeHTML(w, loginPage(snap, pending, "MFA failed", user, true))
 			return
 		}
@@ -99,9 +112,13 @@ func (u *UI) postLogin(w http.ResponseWriter, r *http.Request) {
 	if snap.Canonical.Spec.Auth.SessionTTL > 0 {
 		ttl = snap.Canonical.Spec.Auth.SessionTTL.Duration()
 	}
-	sess := u.oidc.Runtime().PutSession(oidc.LoginSession{
+	sess := u.oidc.Runtime().PutSession(oidc.LoginSession{Generation: snap.Generation,
 		UserID: rec.ID, Username: rec.Username, Expires: time.Now().Add(ttl), MFACompleted: mfaOK,
 	})
+	if sess.ID == "" {
+		http.Error(w, "request revoked", http.StatusBadRequest)
+		return
+	}
 	secure := r.TLS != nil
 	http.SetCookie(w, &http.Cookie{
 		Name: oidc.CookieName(snap), Value: sess.ID, Path: "/", HttpOnly: true,
@@ -116,10 +133,11 @@ func (u *UI) postLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (u *UI) getConsent(w http.ResponseWriter, r *http.Request) {
-	writeHTML(w, consentPage(u.store.Load(), r.URL.Query().Get("pending")))
+	writeHTML(w, consentPage(snapshot.FromRequest(r, u.store), r.URL.Query().Get("pending")))
 }
 
 func (u *UI) postConsent(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "bad form", http.StatusBadRequest)
 		return
@@ -129,7 +147,7 @@ func (u *UI) postConsent(w http.ResponseWriter, r *http.Request) {
 		u.deny(w, r, pending)
 		return
 	}
-	c, err := r.Cookie(oidc.CookieName(u.store.Load()))
+	c, err := r.Cookie(oidc.CookieName(snapshot.FromRequest(r, u.store)))
 	if err != nil {
 		http.Redirect(w, r, "/login?pending="+pending, http.StatusFound)
 		return
@@ -140,10 +158,10 @@ func (u *UI) postConsent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	mode := ""
-	if snap := u.store.Load(); snap != nil && snap.Canonical != nil {
+	if snap := snapshot.FromRequest(r, u.store); snap != nil && snap.Canonical != nil {
 		mode = snap.Canonical.Spec.Auth.MFA.Mode
 	}
-	if !oidc.SessionUsable(sess, mode) {
+	if !oidc.SessionUsable(sess, mode) || !oidc.UserUsable(snapshot.FromRequest(r, u.store), sess.UserID) {
 		http.Redirect(w, r, "/login?pending="+pending, http.StatusFound)
 		return
 	}
@@ -152,7 +170,7 @@ func (u *UI) postConsent(w http.ResponseWriter, r *http.Request) {
 
 func (u *UI) finish(w http.ResponseWriter, r *http.Request, pending, userID, username string, mfa bool) {
 	if pend, ok := u.oidc.Runtime().GetPending(pending); ok && pend.Protocol == wsfed.Protocol && u.wsfed != nil {
-		body, err := u.wsfed.Complete(pending, userID, username, mfa)
+		body, err := u.wsfed.CompleteSnapshot(snapshot.FromRequest(r, u.store), pending, userID, username, mfa)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -161,7 +179,7 @@ func (u *UI) finish(w http.ResponseWriter, r *http.Request, pending, userID, use
 		return
 	}
 	if pend, ok := u.oidc.Runtime().GetPending(pending); ok && pend.Protocol == oidc.ProtocolSAML && u.saml != nil {
-		body, err := u.saml.Complete(pending, userID, username, mfa)
+		body, err := u.saml.CompleteSnapshot(snapshot.FromRequest(r, u.store), pending, userID, username, mfa)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -169,7 +187,7 @@ func (u *UI) finish(w http.ResponseWriter, r *http.Request, pending, userID, use
 		writeHTML(w, body)
 		return
 	}
-	loc, err := u.oidc.CompleteLogin(pending, userID, username, mfa)
+	loc, err := u.oidc.CompleteLoginSnapshot(snapshot.FromRequest(r, u.store), pending, userID, username, mfa)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -179,7 +197,7 @@ func (u *UI) finish(w http.ResponseWriter, r *http.Request, pending, userID, use
 
 func (u *UI) deny(w http.ResponseWriter, r *http.Request, pending string) {
 	if pend, ok := u.oidc.Runtime().GetPending(pending); ok && pend.Protocol == wsfed.Protocol && u.wsfed != nil {
-		body, err := u.wsfed.Deny(pending)
+		body, err := u.wsfed.DenySnapshot(snapshot.FromRequest(r, u.store), pending)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -188,7 +206,7 @@ func (u *UI) deny(w http.ResponseWriter, r *http.Request, pending string) {
 		return
 	}
 	if pend, ok := u.oidc.Runtime().GetPending(pending); ok && pend.Protocol == oidc.ProtocolSAML && u.saml != nil {
-		body, err := u.saml.Deny(pending)
+		body, err := u.saml.DenySnapshot(snapshot.FromRequest(r, u.store), pending)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -196,7 +214,7 @@ func (u *UI) deny(w http.ResponseWriter, r *http.Request, pending string) {
 		writeHTML(w, body)
 		return
 	}
-	loc, err := u.oidc.DenyConsent(pending)
+	loc, err := u.oidc.DenyConsentSnapshot(snapshot.FromRequest(r, u.store), pending)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -204,46 +222,34 @@ func (u *UI) deny(w http.ResponseWriter, r *http.Request, pending string) {
 	http.Redirect(w, r, loc, http.StatusFound)
 }
 
-func (u *UI) checkPassword(user model.User, provided []byte) error {
-	ref := user.PasswordHashRef
-	if ref == "" {
-		ref = user.PasswordRef
+func (u *UI) checkPassword(snap *snapshot.Snapshot, user model.User, provided []byte) error {
+	// Match the most expensive configured credential, including disabled users.
+	// Plaintext credentials need the same padding in a mixed snapshot; otherwise
+	// they remain distinguishable from unknown usernames and Argon2id users.
+	usesArgon2 := false
+	for _, candidate := range snap.Canonical.Spec.Users {
+		if candidate.PasswordHashRef != "" {
+			usesArgon2 = true
+			break
+		}
 	}
-	if ref == "" {
-		return fmt.Errorf("no password ref")
+	credential, ok := snap.Password(user.ID)
+	if !ok {
+		credential = password.Dummy(usesArgon2)
+	} else if usesArgon2 && user.PasswordHashRef == "" {
+		_ = u.verifyPassword(password.Dummy(true), provided)
 	}
-	p := ref
-	if !filepath.IsAbs(p) && u.baseDir != "" {
-		p = filepath.Join(u.baseDir, p)
+	err := u.verifyPassword(credential, provided)
+	if !ok {
+		return fmt.Errorf("no credential")
 	}
-	b, err := os.ReadFile(p)
-	if err != nil {
-		return err
-	}
-	return verifyPassword(b, provided)
+	return err
 }
-
-func (u *UI) totpSecret(user model.User) ([]byte, bool) {
-	if sec, ok := u.oidc.Runtime().GetTOTPOverlay(user.ID); ok {
-		return sec, true
+func (u *UI) totpSecret(snap *snapshot.Snapshot, user model.User) ([]byte, bool) {
+	if secret, ok := u.oidc.Runtime().GetTOTPOverlay(user.ID); ok {
+		return secret, true
 	}
-	ref := user.TOTPSecretRef
-	if ref == "" {
-		return nil, false
-	}
-	p := ref
-	if !filepath.IsAbs(p) && u.baseDir != "" {
-		p = filepath.Join(u.baseDir, p)
-	}
-	b, err := os.ReadFile(p)
-	if err != nil {
-		return nil, false
-	}
-	sec, err := totp.ParseSecret(b)
-	if err != nil {
-		return nil, false
-	}
-	return sec, true
+	return snap.TOTP(user.ID)
 }
 
 func pendingClient(u *UI, pendingID string) string {
@@ -420,6 +426,14 @@ func (l *limiter) allow(key string) bool {
 	defer l.mu.Unlock()
 	now := time.Now()
 	cut := now.Add(-l.window)
+	for k, hits := range l.hits {
+		if len(hits) == 0 || !hits[len(hits)-1].After(cut) {
+			delete(l.hits, k)
+		}
+	}
+	if _, exists := l.hits[key]; !exists && len(l.hits) >= 4096 {
+		return false
+	}
 	cur := l.hits[key]
 	kept := cur[:0]
 	for _, t := range cur {

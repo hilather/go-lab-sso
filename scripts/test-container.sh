@@ -92,11 +92,19 @@ if [ "${ok}" -ne 1 ]; then
 	exit 1
 fi
 
-code="$(curl -sk -o /dev/null -w '%{http_code}' "https://127.0.0.1:${https_port}/")"
-if [ "${code}" != "404" ]; then
-	echo "HTTPS dest-443 mapping (ephemeral host port -> :10443) expected 404 until OIDC, got ${code}" >&2
-	docker logs "${NAME}" >&2 || true
-	exit 1
+discovery="$(curl -fsk "https://127.0.0.1:${https_port}/.well-known/openid-configuration")"
+python3 -c 'import json,sys; data=json.load(sys.stdin); assert data["issuer"] == "https://lab.example.net"; assert data["jwks_uri"] == "https://lab.example.net/oauth2/jwks"; assert "code" in data["response_types_supported"]' <<< "${discovery}"
+jwks="$(curl -fsk "https://127.0.0.1:${https_port}/oauth2/jwks")"
+python3 -c 'import json,sys; data=json.load(sys.stdin); assert len(data["keys"]) == 1; assert data["keys"][0]["kid"]; assert "d" not in data["keys"][0]' <<< "${jwks}"
+code="$(curl -sk -o /dev/null -w '%{http_code}' "https://127.0.0.1:${https_port}/login")"
+if [ "${code}" != "200" ]; then
+ echo "HTTPS login HTML expected 200, got ${code}" >&2
+ exit 1
+fi
+readonly="$(docker inspect --format '{{.HostConfig.ReadonlyRootfs}}' "${NAME}")"
+if [ "${readonly}" != "true" ]; then
+ echo "container root filesystem must be read-only" >&2
+ exit 1
 fi
 
 echo "container contract ok user=65532 read-only cap_drop=ALL https=127.0.0.1:${https_port}->10443 ready=ok compose=443:10443"

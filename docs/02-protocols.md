@@ -2,7 +2,7 @@
 
 Status: through VEN-003 (OIDC + login + clothes + overage + SAML + WS-Fed + file-ref TOTP)
 Owners: Protocols, Application
-Last reviewed: 2026-09-01
+Last reviewed: 2026-10-03
 Related ADRs: 0002, 0005, 0009, 0010, 0011
 
 ## Problem statement
@@ -62,7 +62,7 @@ First implementation implements:
 | Discovery (`/.well-known/openid-configuration` plus vendor path clothes) | Required |
 | JWKS | Required |
 | UserInfo | Required |
-| RP-initiated logout | Required (active clothes path). `post_logout_redirect_uri` must match a registered client redirect URI; otherwise 400. Missing URI returns a logged-out HTML page. |
+| RP-initiated logout | Required (active clothes path). GET with a valid `id_token_hint` for the live session's user ends the session immediately. Without a valid hint, GET/HEAD displays confirmation without changing the session and a protected POST confirms logout. `post_logout_redirect_uri` must match a registered client redirect URI; otherwise 400 without clearing the session. Missing URI returns logged-out HTML. |
 | Client credentials | Out of first OIDC slice |
 | Device code | Out of first OIDC slice |
 | Implicit / hybrid | Reject |
@@ -89,6 +89,7 @@ POST {issuer}/oauth2/token
 GET  {issuer}/oauth2/jwks
 GET  {issuer}/oauth2/userinfo
 GET  {issuer}/oauth2/logout
+POST {issuer}/oauth2/logout  (confirmation fallback)
 GET  {issuer}/login          (HTML)
 POST {issuer}/login
 GET  {issuer}/consent        (HTML)
@@ -229,3 +230,19 @@ Enabling a protocol, renaming a generic path, or changing `iss` derivation is a 
 - Whether `id_token` encryption is ever needed in lab (default: unsigned request objects, signed tokens only).
 - UserInfo vs token group placement per vendor beyond the clothes table.
 - SAML EntityID exactly equal to issuer (sweep 2: **yes**; a later ADR would be required to change it).
+
+## Protocol hardening
+
+OIDC accepts RFC 7636 S256 challenges and 43–128 character unreserved verifiers. Registered scopes, when nonempty, restrict requests to that list; an omitted list permits the implemented `openid profile email groups offline_access` scopes. Refresh requests may narrow their original scope and cannot widen it. Current user, client, redirect, protocol, and MFA policy are checked before issuance. Token responses, including errors, and userinfo use `Cache-Control: no-store` and `Pragma: no-cache`.
+
+A refresh request rejected with `invalid_scope` leaves its original grant available for a corrected request. Successful refresh still consumes the old handle exactly once and returns a rotated handle; concurrent redemptions cannot both succeed.
+
+Logout GET with a valid `id_token_hint` ends the live session and expires its cookie immediately, then follows the validated redirect or returns logged-out HTML. A hint is valid when its signature and `iss` verify against this provider's signing key and exact issuer, it is not expired, it is an ID token (not an access token), its `aud` names a registered client, and its `sub` is the live session's user. Expired hints are not accepted: the shared JWT verifier enforces `exp` (with go-jose's one-minute clock leeway), so an expired hint falls back to confirmation rather than failing. GET without a hint, with an invalid or mismatched hint, or any HEAD, shows confirmation for a live session without changing it, including when reached from another site. Confirmation POST requires a session-bound hidden token and passes cross-origin protection before expiring the login session and cookie. Without a live session, GET returns logged-out HTML or a validated redirect, without clearing cookies. The redirect is validated before any logout side effect and checked again on confirmation; `state` is returned only with the validated redirect. Confirmation responses are not cached or frameable. This follows [RP-Initiated Logout](https://openid.net/specs/openid-connect-rpinitiated-1_0.html#RPLogout); LabSSO does not implement RP logout notifications.
+
+Discovery reflects the loaded signing key: RSA uses RS256; P-256, P-384, and P-521 use ES256, ES384, and ES512. JWKS and JWT key IDs are stable SHA-256 public-key thumbprints and change when the key changes.
+
+SAML AuthnRequest validates its namespace, root, version, issuer, and optional Destination against the active SSO URL. Unsupported ForceAuthn and IsPassive requests reject. SAML and WS-Fed completion revalidate the live recipient registration and enabled user; revoked pending flows cannot produce assertions. WS-Fed metadata includes its signing certificate and protocol declaration.
+
+OIDC state, SAML RelayState, and WS-Fed wctx are limited to 4096 bytes; nonce, scope, and SAML request ID are limited to 1024 bytes. The complete pending record has a 16 KiB context budget. Oversized values reject without truncation, including cookie-reuse flows. SAML POST forms have a 512 KiB body limit, allowing the existing 64 KiB XML request budget plus base64/form encoding overhead. The Entra group stub applies the same local access-token generation, current-client, user, and force-fail checks as userinfo and requires the `groups` scope.
+
+OAuth client HTTP Basic authentication form-decodes the client ID and secret once, as required by RFC 6749; malformed percent escapes reject. Form-body credentials arrive decoded from form parsing and are not decoded a second time.

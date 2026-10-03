@@ -1,9 +1,9 @@
 # Pack Manifest
 
 Status: through VEN-003; INT-001 documented; SCIM design-only
-Last reviewed: 2026-09-07
+Last reviewed: 2026-10-03
 
-Inventory of the design pack and the implemented appliance. There is no generated OpenAPI or MCP manifest file.
+Inventory of the design pack and the implemented appliance. Source-generated config schema and capability/MCP binding manifests live in `docs/generated/`; OpenAPI generation remains outside the current contract.
 
 ## Root guidance
 
@@ -12,9 +12,9 @@ Inventory of the design pack and the implemented appliance. There is no generate
 - `docs/user-guide.md`: operator guide.
 - `docs/assets/header.svg`: README banner.
 - `go.mod`: module `github.com/hilather/go-lab-sso`, Go 1.26.
-- `Makefile`: format/lint/test/parity/container targets; unused targets stay `false`.
+- `Makefile`: format/lint/generated/unit/race/fuzz/integration/parity/config/docs/container/security/changelog checks.
 - `Dockerfile`: scratch image, UID 65532.
-- `.github/workflows/ci.yml`: jobs for implemented Make targets.
+- `.github/workflows/ci.yml`: mandatory jobs for every required Make check.
 - `docs/README.md`: documentation catalog.
 - `AGENTS.md`: repository instructions for contributors.
 - `.cursor/rules/`: Cursor summaries of `AGENTS.md`. Not vendored agent-skills.
@@ -85,3 +85,12 @@ Inventory of the design pack and the implemented appliance. There is no generate
 
 - Vendored Origin/Cursor agent-skills
 - Fake CI / Go / Release badges
+
+## Generated contracts and verification tools
+
+- `cmd/generate`: deterministic model/catalog contract generator.
+- `docs/generated/config.schema.json`, `docs/generated/capabilities.json`, `docs/generated/mcp-bindings.json`: generated public contracts (never edit manually).
+- `scripts/fuzz-smoke.sh`: bounded YAML/XML fuzz runs.
+- `scripts/check-markdown-links.py`: offline local Markdown link verification.
+- `cmd/labsso/serve_hardening_test.go`: actual TLS rotation, data-plane isolation, shutdown, and listener cleanup regressions.
+- `internal/password`: strict compiled Argon2id/plaintext credentials.

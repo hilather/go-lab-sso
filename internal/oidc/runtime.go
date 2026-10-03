@@ -11,6 +11,7 @@ import (
 )
 
 type Pending struct {
+	Generation  int
 	ID          string
 	Protocol    string
 	ClientID    string
@@ -31,6 +32,7 @@ const ProtocolOIDC = "oidc"
 const ProtocolSAML = "saml"
 
 type AuthCode struct {
+	Generation   int
 	Code         string
 	ClientID     string
 	RedirectURI  string
@@ -44,6 +46,7 @@ type AuthCode struct {
 }
 
 type Refresh struct {
+	Generation   int
 	Token        string
 	ClientID     string
 	UserID       string
@@ -54,6 +57,7 @@ type Refresh struct {
 }
 
 type LoginSession struct {
+	Generation   int
 	ID           string
 	UserID       string
 	Username     string
@@ -62,17 +66,19 @@ type LoginSession struct {
 }
 
 type Runtime struct {
-	mu           sync.Mutex
-	pending      map[string]Pending
-	codes        map[string]AuthCode
-	refresh      map[string]Refresh
-	sessions     map[string]LoginSession
-	totpOverlay  map[string][]byte
-	totpLastStep map[string]int64
-	paused       bool
-	forceFail    bool
-	forceConsent bool
-	inject       string
+	mu                sync.Mutex
+	minimumGeneration int
+	reject            func(string)
+	pending           map[string]Pending
+	codes             map[string]AuthCode
+	refresh           map[string]Refresh
+	sessions          map[string]LoginSession
+	totpOverlay       map[string][]byte
+	totpLastStep      map[string]int64
+	paused            bool
+	forceFail         bool
+	forceConsent      bool
+	inject            string
 }
 
 func NewRuntime() *Runtime {
@@ -87,8 +93,18 @@ func NewRuntime() *Runtime {
 }
 
 func (r *Runtime) PutPending(p Pending) Pending {
+	if !PendingBounded(p) {
+		return Pending{}
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if p.Generation != 0 && p.Generation < r.minimumGeneration {
+		return Pending{}
+	}
+	r.cleanupLocked(time.Now())
+	if _, exists := r.pending[p.ID]; !exists && len(r.pending) >= 4096 {
+		return Pending{}
+	}
 	if p.ID == "" {
 		p.ID = randomID()
 	}
@@ -129,10 +145,18 @@ func (r *Runtime) TakePending(id string) (Pending, bool) {
 	return p, ok
 }
 
-func (r *Runtime) PutCode(c AuthCode) {
+func (r *Runtime) PutCode(c AuthCode) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if c.Generation != 0 && c.Generation < r.minimumGeneration {
+		return false
+	}
+	r.cleanupLocked(time.Now())
+	if _, exists := r.codes[c.Code]; !exists && len(r.codes) >= 4096 {
+		return false
+	}
 	r.codes[c.Code] = c
+	return true
 }
 
 func (r *Runtime) TakeCode(code string) (AuthCode, bool) {
@@ -145,10 +169,18 @@ func (r *Runtime) TakeCode(code string) (AuthCode, bool) {
 	return c, ok
 }
 
-func (r *Runtime) PutRefresh(t Refresh) {
+func (r *Runtime) PutRefresh(t Refresh) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if t.Generation != 0 && t.Generation < r.minimumGeneration {
+		return false
+	}
+	r.cleanupLocked(time.Now())
+	if _, exists := r.refresh[t.Token]; !exists && len(r.refresh) >= 4096 {
+		return false
+	}
 	r.refresh[t.Token] = t
+	return true
 }
 
 func (r *Runtime) GetRefresh(token string) (Refresh, bool) {
@@ -171,6 +203,13 @@ func (r *Runtime) TakeRefresh(token string) (Refresh, bool) {
 func (r *Runtime) PutSession(s LoginSession) LoginSession {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if s.Generation != 0 && s.Generation < r.minimumGeneration {
+		return LoginSession{}
+	}
+	r.cleanupLocked(time.Now())
+	if _, exists := r.sessions[s.ID]; !exists && len(r.sessions) >= 4096 {
+		return LoginSession{}
+	}
 	if s.ID == "" {
 		s.ID = randomID()
 	}
@@ -300,13 +339,22 @@ func (r *Runtime) HasTOTPOverlay(userID string) bool {
 }
 
 func (r *Runtime) VerifyAndRecordTOTP(userID string, secret []byte, code string, now time.Time) bool {
+	return r.VerifyAndRecordTOTPGeneration(userID, secret, code, now, 0)
+}
+
+// VerifyAndRecordTOTPGeneration rejects delayed requests before changing the replay ledger.
+// Verification runs outside the runtime mutex; admission and replay recording are atomic.
+func (r *Runtime) VerifyAndRecordTOTPGeneration(userID string, secret []byte, code string, now time.Time, generation int) bool {
 	step, ok := totp.Verify(secret, code, now)
 	if !ok {
 		return false
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if last, seen := r.totpLastStep[userID]; seen && last == step {
+	if generation != 0 && generation < r.minimumGeneration {
+		return false
+	}
+	if last, seen := r.totpLastStep[userID]; seen && step <= last {
 		return false
 	}
 	r.totpLastStep[userID] = step
@@ -334,7 +382,7 @@ func (r *Runtime) ExpireIncompleteMFA() {
 }
 
 func SessionUsable(sess LoginSession, mode string) bool {
-	if mode == "always" && !sess.MFACompleted {
+	if mode == "force-fail" || (mode == "always" && !sess.MFACompleted) {
 		return false
 	}
 	return true
@@ -368,4 +416,57 @@ func snapshotOf(store *snapshot.Store) *snapshot.Snapshot {
 		return nil
 	}
 	return store.Load()
+}
+
+// cleanupLocked bounds abandoned authentication state without a management dependency.
+func (r *Runtime) cleanupLocked(now time.Time) {
+	for id, p := range r.pending {
+		if now.After(p.Created.Add(pendingTTL)) {
+			delete(r.pending, id)
+		}
+	}
+	for id, c := range r.codes {
+		if now.After(c.Expires) {
+			delete(r.codes, id)
+		}
+	}
+	for id, t := range r.refresh {
+		if now.After(t.Expires) {
+			delete(r.refresh, id)
+		}
+	}
+	for id, s := range r.sessions {
+		if !s.Expires.IsZero() && now.After(s.Expires) {
+			delete(r.sessions, id)
+		}
+	}
+}
+
+// InvalidateBefore revokes protocol state and prevents delayed requests from restoring it.
+func (r *Runtime) InvalidateBefore(generation int) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.minimumGeneration = generation
+	r.purgeProtocolLocked()
+}
+func (r *Runtime) GenerationUsable(generation int) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return generation == 0 || generation >= r.minimumGeneration
+}
+
+// PendingBounded limits attacker-controlled flow context before retaining it in memory.
+// These are byte limits; opaque browser context is never truncated.
+func PendingBounded(p Pending) bool {
+	if len(p.Nonce) > 1024 || len(p.Scope) > 1024 || len(p.RequestID) > 1024 {
+		return false
+	}
+	total := 0
+	for _, field := range []string{p.ID, p.Protocol, p.ClientID, p.RedirectURI, p.Scope, p.State, p.Nonce, p.Challenge, p.Method, p.ACSURL, p.RequestID, p.SPEntityID, p.RelayState} {
+		if len(field) > 4096 {
+			return false
+		}
+		total += len(field)
+	}
+	return total <= 16<<10
 }

@@ -2,6 +2,7 @@ package oidc
 
 import (
 	"crypto/subtle"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -81,14 +82,15 @@ func (p *Provider) Handler() http.Handler {
 		"/idp/profile/oidc/logout",
 	} {
 		mux.HandleFunc("GET "+path, p.requirePath(func(c snapshot.Clothes) string { return c.LogoutPath }, p.logout))
+		mux.HandleFunc("POST "+path, p.requirePath(func(c snapshot.Clothes) string { return c.LogoutPath }, p.logout))
 	}
 	mux.HandleFunc("POST /v1.0/users/{oid}/getMemberGroups", p.graphMemberGroups)
-	return mux
+	return snapshot.Capture(p.store, p.rt.AuditRejected("oidc_request_rejected", mux))
 }
 
 func (p *Provider) requirePath(sel func(snapshot.Clothes) string, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		snap := p.snapOIDC(w)
+		snap := p.snapOIDC(w, r)
 		if snap == nil {
 			return
 		}
@@ -131,8 +133,8 @@ func CookieName(snap *snapshot.Snapshot) string {
 	return CookieLogin
 }
 
-func (p *Provider) snapOIDC(w http.ResponseWriter) *snapshot.Snapshot {
-	snap := p.store.Load()
+func (p *Provider) snapOIDC(w http.ResponseWriter, r *http.Request) *snapshot.Snapshot {
+	snap := snapshot.FromRequest(r, p.store)
 	if snap == nil {
 		http.Error(w, "not ready", http.StatusServiceUnavailable)
 		return nil
@@ -145,7 +147,7 @@ func (p *Provider) snapOIDC(w http.ResponseWriter) *snapshot.Snapshot {
 }
 
 func (p *Provider) discovery(w http.ResponseWriter, r *http.Request) {
-	snap := p.snapOIDC(w)
+	snap := p.snapOIDC(w, r)
 	if snap == nil {
 		return
 	}
@@ -153,7 +155,7 @@ func (p *Provider) discovery(w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *Provider) twoSegmentDiscovery(w http.ResponseWriter, r *http.Request) {
-	snap := p.snapOIDC(w)
+	snap := p.snapOIDC(w, r)
 	if snap == nil {
 		return
 	}
@@ -169,7 +171,7 @@ func (p *Provider) twoSegmentDiscovery(w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *Provider) siteminderDiscovery(w http.ResponseWriter, r *http.Request) {
-	snap := p.snapOIDC(w)
+	snap := p.snapOIDC(w, r)
 	if snap == nil {
 		return
 	}
@@ -194,14 +196,14 @@ func (p *Provider) writeDiscovery(w http.ResponseWriter, snap *snapshot.Snapshot
 		"response_types_supported":              []string{"code"},
 		"grant_types_supported":                 []string{"authorization_code", "refresh_token"},
 		"code_challenge_methods_supported":      []string{"S256"},
-		"id_token_signing_alg_values_supported": []string{"RS256"},
+		"id_token_signing_alg_values_supported": signingAlgorithms(snap),
 		"scopes_supported":                      []string{"openid", "profile", "email", "groups", "offline_access"},
 		"subject_types_supported":               []string{"public"},
 	})
 }
 
 func (p *Provider) jwks(w http.ResponseWriter, r *http.Request) {
-	snap := p.snapOIDC(w)
+	snap := p.snapOIDC(w, r)
 	if snap == nil {
 		return
 	}
@@ -221,7 +223,7 @@ func (p *Provider) jwks(w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *Provider) authorize(w http.ResponseWriter, r *http.Request) {
-	snap := p.snapOIDC(w)
+	snap := p.snapOIDC(w, r)
 	if snap == nil {
 		return
 	}
@@ -245,21 +247,33 @@ func (p *Provider) authorize(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid_request", http.StatusBadRequest)
 		return
 	}
+	if !scopesAllowed(cl, q.Get("scope")) {
+		p.rt.Reject("oidc_authorization_rejected")
+		oauthErrorRedirect(w, r, redirect, q.Get("state"), "invalid_scope", "")
+		return
+	}
+	if !PendingBounded(Pending{State: q.Get("state"), Nonce: q.Get("nonce"), Scope: q.Get("scope")}) {
+		http.Error(w, "invalid_request", http.StatusBadRequest)
+		return
+	}
 	if inj := p.rt.TakeInject(); inj != "" {
+		p.rt.Reject("oidc_authorization_rejected")
 		oauthErrorRedirect(w, r, redirect, q.Get("state"), inj, "injected")
 		return
 	}
 	method := q.Get("code_challenge_method")
 	challenge := q.Get("code_challenge")
-	if method == "plain" || method != "S256" || challenge == "" {
+	if method == "plain" || method != "S256" || !validChallenge(challenge) {
 		desc := "PKCE S256 required"
 		if method == "plain" {
 			desc = "PKCE plain is rejected"
 		}
+		p.rt.Reject("oidc_authorization_rejected")
 		oauthErrorRedirect(w, r, redirect, q.Get("state"), "invalid_request", desc)
 		return
 	}
 	if q.Get("response_type") != "code" {
+		p.rt.Reject("oidc_authorization_rejected")
 		oauthErrorRedirect(w, r, redirect, q.Get("state"), "unsupported_response_type", "only code")
 		return
 	}
@@ -268,20 +282,24 @@ func (p *Provider) authorize(w http.ResponseWriter, r *http.Request) {
 		mfa = snap.Canonical.Spec.Auth.MFA.Mode
 	}
 	if p.rt.ForceFail() || mfa == "force-fail" {
+		p.rt.Reject("oidc_authorization_rejected")
 		oauthErrorRedirect(w, r, redirect, q.Get("state"), "access_denied", "force-fail")
 		return
 	}
 	iss := strings.TrimRight(snap.Issuer, "/")
 	if sid, err := r.Cookie(CookieName(snap)); err == nil && sid.Value != "" {
-		if sess, ok := p.rt.GetSession(sid.Value); ok && SessionUsable(sess, mfa) {
+		if sess, ok := p.rt.GetSession(sid.Value); ok && SessionUsable(sess, mfa) && UserUsable(snap, sess.UserID) {
 			if cl.PreConsent && !p.rt.ForceConsent() {
 				code := randomID()
-				p.rt.PutCode(AuthCode{
+				if !p.rt.PutCode(AuthCode{Generation: snap.Generation,
 					Code: code, ClientID: clientID, RedirectURI: redirect,
 					UserID: sess.UserID, Username: sess.Username, Scope: q.Get("scope"),
 					Nonce: q.Get("nonce"), Challenge: challenge, Expires: time.Now().Add(5 * time.Minute),
 					MFACompleted: sess.MFACompleted,
-				})
+				}) {
+					http.Error(w, "temporarily_unavailable", http.StatusServiceUnavailable)
+					return
+				}
 				u, err := url.Parse(redirect)
 				if err != nil {
 					http.Error(w, "invalid_request", http.StatusBadRequest)
@@ -296,25 +314,35 @@ func (p *Provider) authorize(w http.ResponseWriter, r *http.Request) {
 				http.Redirect(w, r, u.String(), http.StatusFound)
 				return
 			}
-			pend := p.rt.PutPending(Pending{
+			pend := p.rt.PutPending(Pending{Generation: snap.Generation,
 				Protocol: ProtocolOIDC,
 				ClientID: clientID, RedirectURI: redirect, Scope: q.Get("scope"),
 				State: q.Get("state"), Nonce: q.Get("nonce"), Challenge: challenge, Method: method,
 			})
+			if pend.ID == "" {
+				http.Error(w, "invalid_request", http.StatusBadRequest)
+				return
+			}
 			http.Redirect(w, r, iss+"/consent?pending="+url.QueryEscape(pend.ID), http.StatusFound)
 			return
 		}
 	}
-	pend := p.rt.PutPending(Pending{
+	pend := p.rt.PutPending(Pending{Generation: snap.Generation,
 		Protocol: ProtocolOIDC,
 		ClientID: clientID, RedirectURI: redirect, Scope: q.Get("scope"),
 		State: q.Get("state"), Nonce: q.Get("nonce"), Challenge: challenge, Method: method,
 	})
+	if pend.ID == "" {
+		http.Error(w, "invalid_request", http.StatusBadRequest)
+		return
+	}
 	http.Redirect(w, r, iss+"/login?pending="+url.QueryEscape(pend.ID), http.StatusFound)
 }
 
 func (p *Provider) token(w http.ResponseWriter, r *http.Request) {
-	snap := p.snapOIDC(w)
+	noStore(w)
+	r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
+	snap := p.snapOIDC(w, r)
 	if snap == nil {
 		return
 	}
@@ -355,7 +383,7 @@ func (p *Provider) tokenCode(w http.ResponseWriter, r *http.Request, snap *snaps
 	verifier := r.FormValue("code_verifier")
 	redirect := r.FormValue("redirect_uri")
 	c, ok := p.rt.TakeCode(code)
-	if !ok || time.Now().After(c.Expires) || c.RedirectURI != redirect || c.ClientID != clientID {
+	if !ok || time.Now().After(c.Expires) || c.RedirectURI != redirect || c.ClientID != clientID || !exactRedirect(snap.ClientsByClientID[clientID].RedirectURIs, redirect) {
 		writeTokenError(w, snap, http.StatusBadRequest, "invalid_grant", "")
 		return
 	}
@@ -373,16 +401,42 @@ func (p *Provider) tokenRefresh(w http.ResponseWriter, r *http.Request, snap *sn
 		return
 	}
 	tok := r.FormValue("refresh_token")
-	ref, ok := p.rt.TakeRefresh(tok)
+	ref, ok := p.rt.GetRefresh(tok)
 	if !ok || time.Now().After(ref.Expires) || ref.ClientID != clientID {
 		writeTokenError(w, snap, http.StatusBadRequest, "invalid_grant", "")
 		return
 	}
-	p.writeTokens(w, snap, ref.ClientID, ref.UserID, ref.Username, ref.Scope, "", ref.MFACompleted)
+	scope := ref.Scope
+	if requested := r.FormValue("scope"); requested != "" {
+		if !scopeSubset(requested, ref.Scope) {
+			writeTokenError(w, snap, http.StatusBadRequest, "invalid_scope", "")
+			return
+		}
+		scope = requested
+	}
+	// Validate without consuming the grant so invalid scope requests can retry.
+	// Taking it afterwards remains atomic: concurrent redemption or revocation
+	// must win over this request, and a rejected request never restores state.
+	if _, ok := p.rt.TakeRefresh(tok); !ok {
+		writeTokenError(w, snap, http.StatusBadRequest, "invalid_grant", "")
+		return
+	}
+	p.writeTokens(w, snap, ref.ClientID, ref.UserID, ref.Username, scope, "", ref.MFACompleted)
 }
 
 func (p *Provider) clientFromRequest(r *http.Request, snap *snapshot.Snapshot) (model.Client, string, error) {
 	id, secret, ok := r.BasicAuth()
+	if ok {
+		var err error
+		id, err = url.QueryUnescape(id)
+		if err != nil {
+			return model.Client{}, "", fmt.Errorf("invalid_client")
+		}
+		secret, err = url.QueryUnescape(secret)
+		if err != nil {
+			return model.Client{}, "", fmt.Errorf("invalid_client")
+		}
+	}
 	if !ok || id == "" {
 		id = r.FormValue("client_id")
 		secret = r.FormValue("client_secret")
@@ -408,6 +462,13 @@ func (p *Provider) clientFromRequest(r *http.Request, snap *snapshot.Snapshot) (
 }
 
 func (p *Provider) writeTokens(w http.ResponseWriter, snap *snapshot.Snapshot, clientID, userID, username, scope, nonce string, mfa bool) {
+	noStore(w)
+	cl, ok := snap.ClientsByClientID[clientID]
+	if !ok || !UserUsable(snap, userID) || !scopesAllowed(cl, scope) || !SessionUsable(LoginSession{MFACompleted: mfa}, snap.Canonical.Spec.Auth.MFA.Mode) || p.rt.ForceFail() || !p.rt.GenerationUsable(snap.Generation) {
+		writeTokenError(w, snap, http.StatusBadRequest, "invalid_grant", "")
+		return
+	}
+
 	sig, err := newSigner(snap.SigningKey)
 	if err != nil {
 		writeTokenError(w, snap, http.StatusInternalServerError, "server_error", "")
@@ -417,7 +478,7 @@ func (p *Provider) writeTokens(w http.ResponseWriter, snap *snapshot.Snapshot, c
 	if username != "" {
 		extra["preferred_username"] = username
 	}
-	accessExtra := map[string]any{"token_use": "access", "scope": scope}
+	accessExtra := map[string]any{"token_use": "access", "scope": scope, "generation": snap.Generation}
 	if user, ok := snap.UsersByID[userID]; ok {
 		if hasScope(scope, "email") && user.Email != "" {
 			extra["email"] = user.Email
@@ -452,7 +513,10 @@ func (p *Provider) writeTokens(w http.ResponseWriter, snap *snapshot.Snapshot, c
 		return
 	}
 	ref := randomID()
-	p.rt.PutRefresh(Refresh{Token: ref, ClientID: clientID, UserID: userID, Username: username, Scope: scope, Expires: time.Now().Add(24 * time.Hour), MFACompleted: mfa})
+	if !p.rt.PutRefresh(Refresh{Generation: snap.Generation, Token: ref, ClientID: clientID, UserID: userID, Username: username, Scope: scope, Expires: time.Now().Add(24 * time.Hour), MFACompleted: mfa}) {
+		writeTokenError(w, snap, http.StatusServiceUnavailable, "temporarily_unavailable", "runtime capacity")
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"access_token":  access,
 		"id_token":      idTok,
@@ -463,7 +527,8 @@ func (p *Provider) writeTokens(w http.ResponseWriter, snap *snapshot.Snapshot, c
 }
 
 func (p *Provider) userinfo(w http.ResponseWriter, r *http.Request) {
-	snap := p.snapOIDC(w)
+	noStore(w)
+	snap := p.snapOIDC(w, r)
 	if snap == nil {
 		return
 	}
@@ -478,7 +543,7 @@ func (p *Provider) userinfo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	c, extra, err := parseAndVerifyExtra(raw, sig.jwk, snap.Issuer, true)
-	if err != nil {
+	if err != nil || !p.accessUsable(snap, c.Subject, []string(c.Audience), extra) {
 		http.Error(w, "invalid_token", http.StatusUnauthorized)
 		return
 	}
@@ -505,26 +570,31 @@ func (p *Provider) userinfo(w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *Provider) CompleteLogin(pendingID, userID, username string, mfa bool) (string, error) {
+	return p.CompleteLoginSnapshot(p.store.Load(), pendingID, userID, username, mfa)
+}
+func (p *Provider) CompleteLoginSnapshot(snap *snapshot.Snapshot, pendingID, userID, username string, mfa bool) (string, error) {
 	if p.rt.ForceFail() {
 		return "", fmt.Errorf("access_denied")
 	}
-	if snap := p.store.Load(); snap != nil && snap.Canonical != nil && snap.Canonical.Spec.Auth.MFA.Mode == "force-fail" {
+	if snap == nil || !UserUsable(snap, userID) || !SessionUsable(LoginSession{MFACompleted: mfa}, snap.Canonical.Spec.Auth.MFA.Mode) || !p.rt.GenerationUsable(snap.Generation) {
 		return "", fmt.Errorf("access_denied")
 	}
 	pend, ok := p.rt.GetPending(pendingID)
-	if !ok || (pend.Protocol != "" && pend.Protocol != ProtocolOIDC) {
+	if !ok || !PendingUsable(snap, pend) || (pend.Protocol != "" && pend.Protocol != ProtocolOIDC) {
 		return "", fmt.Errorf("pending request not found")
 	}
 	if _, ok := p.rt.TakePending(pendingID); !ok {
 		return "", fmt.Errorf("pending request not found")
 	}
 	code := randomID()
-	p.rt.PutCode(AuthCode{
+	if !p.rt.PutCode(AuthCode{Generation: snap.Generation,
 		Code: code, ClientID: pend.ClientID, RedirectURI: pend.RedirectURI,
 		UserID: userID, Username: username, Scope: pend.Scope,
 		Nonce: pend.Nonce, Challenge: pend.Challenge, Expires: time.Now().Add(5 * time.Minute),
 		MFACompleted: mfa,
-	})
+	}) {
+		return "", fmt.Errorf("runtime capacity")
+	}
 	u, err := url.Parse(pend.RedirectURI)
 	if err != nil {
 		return "", err
@@ -539,8 +609,11 @@ func (p *Provider) CompleteLogin(pendingID, userID, username string, mfa bool) (
 }
 
 func (p *Provider) DenyConsent(pendingID string) (string, error) {
+	return p.DenyConsentSnapshot(p.store.Load(), pendingID)
+}
+func (p *Provider) DenyConsentSnapshot(snap *snapshot.Snapshot, pendingID string) (string, error) {
 	pend, ok := p.rt.GetPending(pendingID)
-	if !ok || (pend.Protocol != "" && pend.Protocol != ProtocolOIDC) {
+	if !ok || !PendingUsable(snap, pend) || (pend.Protocol != "" && pend.Protocol != ProtocolOIDC) {
 		return "", fmt.Errorf("pending request not found")
 	}
 	if _, ok := p.rt.TakePending(pendingID); !ok {
@@ -550,37 +623,82 @@ func (p *Provider) DenyConsent(pendingID string) (string, error) {
 }
 
 func (p *Provider) logout(w http.ResponseWriter, r *http.Request) {
-	snap := p.snapOIDC(w)
+	noStore(w)
+	snap := p.snapOIDC(w, r)
 	if snap == nil {
 		return
 	}
-	name := CookieName(snap)
-	if c, err := r.Cookie(name); err == nil && c.Value != "" {
-		p.rt.ExpireSession(c.Value)
-	}
-	secure := r.TLS != nil
-	http.SetCookie(w, &http.Cookie{
-		Name: name, Value: "", Path: "/", MaxAge: -1,
-		HttpOnly: true, SameSite: http.SameSiteLaxMode, Secure: secure,
-	})
-	post := r.URL.Query().Get("post_logout_redirect_uri")
-	if post != "" {
-		snap := p.store.Load()
-		if snap == nil || !logoutRedirectOK(snap, post) {
-			http.Error(w, "invalid_request", http.StatusBadRequest)
+	if r.Method == http.MethodPost {
+		if err := http.NewCrossOriginProtection().Check(r); err != nil {
+			http.Error(w, "forbidden", http.StatusForbidden)
 			return
 		}
-		u, err := url.Parse(post)
+		r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "invalid_request", http.StatusBadRequest)
+		return
+	}
+	params := r.Form
+	if r.Method == http.MethodPost {
+		params = r.PostForm
+	}
+	post, state := params.Get("post_logout_redirect_uri"), params.Get("state")
+	if r.Method == http.MethodPost {
+		decoded, err := base64.RawURLEncoding.DecodeString(params.Get("logout_state"))
 		if err != nil {
 			http.Error(w, "invalid_request", http.StatusBadRequest)
 			return
 		}
-		if st := r.URL.Query().Get("state"); st != "" {
-			q := u.Query()
-			q.Set("state", st)
-			u.RawQuery = q.Encode()
+		state = string(decoded)
+	}
+	if len(state) > 4096 {
+		http.Error(w, "invalid_request", http.StatusBadRequest)
+		return
+	}
+	var redirect *url.URL
+	if post != "" {
+		if !logoutRedirectOK(snap, post) {
+			http.Error(w, "invalid_request", http.StatusBadRequest)
+			return
 		}
-		http.Redirect(w, r, u.String(), http.StatusFound)
+		var err error
+		redirect, err = url.Parse(post)
+		if err != nil {
+			http.Error(w, "invalid_request", http.StatusBadRequest)
+			return
+		}
+		if state != "" {
+			q := redirect.Query()
+			q.Set("state", state)
+			redirect.RawQuery = q.Encode()
+		}
+	}
+	name := CookieName(snap)
+	var sess LoginSession
+	if cookie, err := r.Cookie(name); err == nil && cookie.Value != "" {
+		sess, _ = p.rt.GetSession(cookie.Value)
+	}
+	// A GET carrying an ID token this provider issued to the session's user logs
+	// out directly; anything else with a live session must confirm by POST.
+	hinted := r.Method == http.MethodGet && sess.ID != "" && logoutHintMatches(snap, params.Get("id_token_hint"), sess.UserID)
+	if r.Method != http.MethodPost && sess.ID != "" && !hinted {
+		writeLogoutConfirmation(w, r.URL.Path, post, state, logoutCSRF(sess.ID, r.URL.Path, post, state))
+		return
+	}
+	if r.Method == http.MethodPost && (sess.ID == "" || subtle.ConstantTimeCompare([]byte(params.Get("csrf")), []byte(logoutCSRF(sess.ID, r.URL.Path, post, state))) != 1) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	if r.Method == http.MethodPost || hinted {
+		p.rt.ExpireSession(sess.ID)
+		http.SetCookie(w, &http.Cookie{
+			Name: name, Value: "", Path: "/", MaxAge: -1,
+			HttpOnly: true, SameSite: http.SameSiteLaxMode, Secure: r.TLS != nil,
+		})
+	}
+	if redirect != nil {
+		http.Redirect(w, r, redirect.String(), http.StatusFound)
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -589,7 +707,8 @@ func (p *Provider) logout(w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *Provider) graphMemberGroups(w http.ResponseWriter, r *http.Request) {
-	snap := p.snapOIDC(w)
+	noStore(w)
+	snap := p.snapOIDC(w, r)
 	if snap == nil {
 		return
 	}
@@ -608,8 +727,8 @@ func (p *Provider) graphMemberGroups(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "server_error", http.StatusInternalServerError)
 		return
 	}
-	c, _, err := parseAndVerifyExtra(raw, sig.jwk, snap.Issuer, true)
-	if err != nil || c.Subject != oid {
+	c, extra, err := parseAndVerifyExtra(raw, sig.jwk, snap.Issuer, true)
+	if err != nil || c.Subject != oid || !p.accessUsable(snap, c.Subject, []string(c.Audience), extra) || !hasScope(fmt.Sprint(extra["scope"]), "groups") {
 		http.Error(w, "invalid_token", http.StatusUnauthorized)
 		return
 	}
@@ -634,7 +753,7 @@ func (p *Provider) Mint(clientID, userID, username, scope string) (access, idTok
 	if username != "" {
 		extra["preferred_username"] = username
 	}
-	accessExtra := map[string]any{"token_use": "access", "scope": scope}
+	accessExtra := map[string]any{"token_use": "access", "scope": scope, "generation": snap.Generation}
 	if user, ok := snap.UsersByID[userID]; ok {
 		if hasScope(scope, "email") && user.Email != "" {
 			extra["email"] = user.Email
@@ -771,4 +890,87 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)
+}
+
+func noStore(w http.ResponseWriter) {
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Pragma", "no-cache")
+}
+func signingAlgorithms(snap *snapshot.Snapshot) []string {
+	sig, err := newSigner(snap.SigningKey)
+	if err != nil {
+		return []string{}
+	}
+	return []string{string(sig.alg)}
+}
+func UserUsable(snap *snapshot.Snapshot, id string) bool {
+	if snap == nil {
+		return false
+	}
+	u, ok := snap.UsersByID[id]
+	return ok && model.BoolVal(u.Enabled, true)
+}
+func scopesAllowed(cl model.Client, scope string) bool {
+	for _, s := range strings.Fields(scope) {
+		if !hasScope("openid profile email groups offline_access", s) {
+			return false
+		}
+		if len(cl.Scopes) > 0 && !exactRedirect(cl.Scopes, s) {
+			return false
+		}
+	}
+	return true
+}
+func scopeSubset(scope, original string) bool {
+	for _, s := range strings.Fields(scope) {
+		if !hasScope(original, s) {
+			return false
+		}
+	}
+	return true
+}
+func PendingUsable(snap *snapshot.Snapshot, p Pending) bool {
+	if snap == nil || snap.Canonical == nil {
+		return false
+	}
+	cl, ok := snap.ClientsByClientID[p.ClientID]
+	if !ok {
+		cl, ok = snap.ClientsByID[p.ClientID]
+	}
+	if !ok {
+		return false
+	}
+	switch p.Protocol {
+	case "", ProtocolOIDC:
+		return snap.Canonical.Spec.Protocols.OIDC.IsEnabled(true) && exactRedirect(cl.RedirectURIs, p.RedirectURI) && scopesAllowed(cl, p.Scope)
+	case ProtocolSAML, "wsfed":
+		enabled := snap.Canonical.Spec.Protocols.SAML.IsEnabled(false)
+		if p.Protocol == "wsfed" {
+			enabled = snap.Canonical.Spec.Protocols.WSFed.IsEnabled(false)
+		}
+		urls := cl.SAML.ACSURLs
+		if len(urls) == 0 {
+			urls = cl.RedirectURIs
+		}
+		realm := cl.SAML.EntityID == p.SPEntityID || (p.Protocol == "wsfed" && cl.ClientID == p.SPEntityID)
+		return enabled && realm && exactRedirect(urls, p.ACSURL)
+	}
+	return false
+}
+
+func (p *Provider) accessUsable(snap *snapshot.Snapshot, userID string, audiences []string, extra map[string]any) bool {
+	if !UserUsable(snap, userID) || p.rt.ForceFail() || snap.Canonical.Spec.Auth.MFA.Mode == "force-fail" {
+		return false
+	}
+	generation, _ := extra["generation"].(float64)
+	if generation < 1 || !p.rt.GenerationUsable(int(generation)) {
+		return false
+	}
+	scope, _ := extra["scope"].(string)
+	for _, id := range audiences {
+		if cl, ok := snap.ClientsByClientID[id]; ok && scopesAllowed(cl, scope) {
+			return true
+		}
+	}
+	return false
 }

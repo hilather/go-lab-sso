@@ -1,6 +1,8 @@
 package wsfed
 
 import (
+	"encoding/base64"
+	"encoding/pem"
 	"fmt"
 	"html"
 	"net/http"
@@ -32,8 +34,8 @@ func (p *Provider) Mount(mux *http.ServeMux) {
 }
 
 func (p *Provider) require(sel func(snapshot.Clothes) string, next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		snap := p.snap(w)
+	return p.rt.AuditRejected("federation_request_rejected", snapshot.Capture(p.store, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		snap := p.snap(w, r)
 		if snap == nil {
 			return
 		}
@@ -43,11 +45,11 @@ func (p *Provider) require(sel func(snapshot.Clothes) string, next http.HandlerF
 			return
 		}
 		next(w, r)
-	}
+	}))).ServeHTTP
 }
 
-func (p *Provider) snap(w http.ResponseWriter) *snapshot.Snapshot {
-	snap := p.store.Load()
+func (p *Provider) snap(w http.ResponseWriter, r *http.Request) *snapshot.Snapshot {
+	snap := snapshot.FromRequest(r, p.store)
 	if snap == nil {
 		http.Error(w, "not ready", http.StatusServiceUnavailable)
 		return nil
@@ -60,14 +62,25 @@ func (p *Provider) snap(w http.ResponseWriter) *snapshot.Snapshot {
 }
 
 func (p *Provider) metadata(w http.ResponseWriter, r *http.Request) {
-	snap := p.snap(w)
+	snap := p.snap(w, r)
 	if snap == nil {
 		return
 	}
 	iss := strings.TrimRight(snap.Issuer, "/")
+	cert := snap.SigningCert
+	if len(cert) == 0 {
+		cert = snap.TLSCert
+	}
+	block, _ := pem.Decode(cert)
+	if block == nil {
+		http.Error(w, "signing certificate", http.StatusInternalServerError)
+		return
+	}
+	certText := base64.StdEncoding.EncodeToString(block.Bytes)
 	body := `<?xml version="1.0"?>` +
 		`<EntityDescriptor xmlns="urn:oasis:names:tc:SAML:2.0:metadata" entityID="` + html.EscapeString(iss) + `">` +
-		`<RoleDescriptor xsi:type="fed:SecurityTokenServiceType" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:fed="http://docs.oasis-open.org/wsfed/federation/200706">` +
+		`<RoleDescriptor protocolSupportEnumeration="http://docs.oasis-open.org/wsfed/federation/200706" xsi:type="fed:SecurityTokenServiceType" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:fed="http://docs.oasis-open.org/wsfed/federation/200706">` +
+		`<KeyDescriptor use="signing"><ds:KeyInfo xmlns:ds="http://www.w3.org/2000/09/xmldsig#"><ds:X509Data><ds:X509Certificate>` + certText + `</ds:X509Certificate></ds:X509Data></ds:KeyInfo></KeyDescriptor>` +
 		`<fed:PassiveRequestorEndpoint><EndpointReference xmlns="http://www.w3.org/2005/08/addressing"><Address>` +
 		html.EscapeString(iss+snap.Clothes.WSFedPassivePath) + `</Address></EndpointReference></fed:PassiveRequestorEndpoint>` +
 		`</RoleDescriptor></EntityDescriptor>`
@@ -76,7 +89,7 @@ func (p *Provider) metadata(w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *Provider) passive(w http.ResponseWriter, r *http.Request) {
-	snap := p.snap(w)
+	snap := p.snap(w, r)
 	if snap == nil {
 		return
 	}
@@ -86,6 +99,10 @@ func (p *Provider) passive(w http.ResponseWriter, r *http.Request) {
 	}
 	if p.rt.ForceFail() || (snap.Canonical != nil && snap.Canonical.Spec.Auth.MFA.Mode == "force-fail") {
 		http.Error(w, "access_denied", http.StatusForbidden)
+		return
+	}
+	if !oidc.PendingBounded(oidc.Pending{RelayState: r.URL.Query().Get("wctx")}) {
+		http.Error(w, "invalid_request", http.StatusBadRequest)
 		return
 	}
 	realm := r.URL.Query().Get("wtrealm")
@@ -109,23 +126,28 @@ func (p *Provider) passive(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid wreply", http.StatusBadRequest)
 		return
 	}
-	pend := p.rt.PutPending(oidc.Pending{
+	pend := p.rt.PutPending(oidc.Pending{Generation: snap.Generation,
 		Protocol: Protocol, ClientID: clientKey(cl), ACSURL: reply,
 		SPEntityID: realm, RelayState: r.URL.Query().Get("wctx"), RedirectURI: reply,
 	})
+	if pend.ID == "" {
+		http.Error(w, "invalid_request", http.StatusBadRequest)
+		return
+	}
 	iss := strings.TrimRight(snap.Issuer, "/")
 	mode := ""
 	if snap.Canonical != nil {
 		mode = snap.Canonical.Spec.Auth.MFA.Mode
 	}
 	if sid, err := r.Cookie(oidc.CookieName(snap)); err == nil && sid.Value != "" {
-		if sess, ok := p.rt.GetSession(sid.Value); ok && oidc.SessionUsable(sess, mode) {
+		if sess, ok := p.rt.GetSession(sid.Value); ok && oidc.SessionUsable(sess, mode) && oidc.UserUsable(snap, sess.UserID) {
 			if cl.PreConsent && !p.rt.ForceConsent() {
-				htmlForm, err := p.Complete(pend.ID, sess.UserID, sess.Username, sess.MFACompleted)
+				htmlForm, err := p.CompleteSnapshot(snap, pend.ID, sess.UserID, sess.Username, sess.MFACompleted)
 				if err != nil {
 					http.Error(w, err.Error(), http.StatusBadRequest)
 					return
 				}
+				w.Header().Set("Cache-Control", "no-store")
 				w.Header().Set("Content-Type", "text/html; charset=utf-8")
 				_, _ = w.Write([]byte(htmlForm))
 				return
@@ -138,25 +160,24 @@ func (p *Provider) passive(w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *Provider) Complete(pendingID, userID, username string, mfa bool) (string, error) {
-	return p.finish(pendingID, userID, username, true, mfa)
+	return p.finish(p.store.Load(), pendingID, userID, username, true, mfa)
 }
 
 func (p *Provider) Deny(pendingID string) (string, error) {
-	return p.finish(pendingID, "", "", false, false)
+	return p.finish(p.store.Load(), pendingID, "", "", false, false)
 }
 
-func (p *Provider) finish(pendingID, userID, username string, success, mfa bool) (string, error) {
+func (p *Provider) finish(snap *snapshot.Snapshot, pendingID, userID, username string, success, mfa bool) (string, error) {
 	pend, ok := p.rt.GetPending(pendingID)
-	if !ok || pend.Protocol != Protocol {
+	if !ok || !oidc.PendingUsable(snap, pend) || pend.Protocol != Protocol {
 		return "", fmt.Errorf("pending request not found")
 	}
-	snap := p.store.Load()
 	if snap == nil {
 		return "", fmt.Errorf("not ready")
 	}
 	user, ok := snap.UsersByID[userID]
-	if !ok {
-		user = model.User{ID: userID, Username: username}
+	if success && (!ok || !oidc.UserUsable(snap, userID) || !oidc.SessionUsable(oidc.LoginSession{MFACompleted: mfa}, snap.Canonical.Spec.Auth.MFA.Mode) || p.rt.ForceFail() || !p.rt.GenerationUsable(snap.Generation)) {
+		return "", fmt.Errorf("access_denied")
 	}
 	b64, err := saml.SignedResponseB64(snap, user, pend.ACSURL, pend.RequestID, pend.SPEntityID, success, mfa)
 	if err != nil {
@@ -196,4 +217,12 @@ func contains(list []string, got string) bool {
 		}
 	}
 	return false
+}
+
+func (p *Provider) CompleteSnapshot(snap *snapshot.Snapshot, pendingID, userID, username string, mfa bool) (string, error) {
+	return p.finish(snap, pendingID, userID, username, true, mfa)
+}
+
+func (p *Provider) DenySnapshot(snap *snapshot.Snapshot, pendingID string) (string, error) {
+	return p.finish(snap, pendingID, "", "", false, false)
 }

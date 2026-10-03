@@ -43,6 +43,14 @@ security-scan:
 test-changelog:
 	bash scripts/checkchangelog.sh
 
-generate verify-generated test-fuzz-smoke test-integration:
-	@echo "make $@: not implemented yet" >&2
-	@false
+generate:
+	$(GO) run ./cmd/generate -out docs/generated
+
+verify-generated:
+	@task_tmp=$$(mktemp -d); trap 'rm -rf "$$task_tmp"' EXIT; $(GO) run ./cmd/generate -out "$$task_tmp" && diff -ru docs/generated "$$task_tmp"
+
+test-fuzz-smoke:
+	GO=$(GO) bash scripts/fuzz-smoke.sh
+
+test-integration:
+	$(GO) test ./cmd/labsso -run '^TestIntegration' -count=1

@@ -1,0 +1,412 @@
+{
+  "$id": "https://labsso.dev/schema/v1alpha1/config",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "apiVersion": {
+      "const": "labsso.dev/v1alpha1",
+      "type": "string"
+    },
+    "kind": {
+      "const": "LabSSO",
+      "type": "string"
+    },
+    "metadata": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "spec": {
+      "additionalProperties": false,
+      "properties": {
+        "access": {
+          "additionalProperties": false,
+          "properties": {
+            "tokenRef": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "tokenRef"
+          ],
+          "type": "object"
+        },
+        "auth": {
+          "additionalProperties": false,
+          "properties": {
+            "mfa": {
+              "additionalProperties": false,
+              "properties": {
+                "mode": {
+                  "default": "never",
+                  "enum": [
+                    "",
+                    "never",
+                    "always",
+                    "force-fail"
+                  ],
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "sessionTTL": {
+              "description": "Go duration string. Compiler enforces nonnegative duration and default semantics.",
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "clients": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "clientId": {
+                "type": "string"
+              },
+              "id": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "preConsent": {
+                "type": "boolean"
+              },
+              "public": {
+                "type": "boolean"
+              },
+              "redirectURIs": {
+                "items": {
+                  "type": "string"
+                },
+                "type": [
+                  "array",
+                  "null"
+                ]
+              },
+              "saml": {
+                "additionalProperties": false,
+                "properties": {
+                  "acsURLs": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": [
+                      "array",
+                      "null"
+                    ]
+                  },
+                  "entityID": {
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              },
+              "scopes": {
+                "items": {
+                  "type": "string"
+                },
+                "type": [
+                  "array",
+                  "null"
+                ]
+              },
+              "secretRef": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "groupOverage": {
+          "additionalProperties": false,
+          "properties": {
+            "entraGraphStub": {
+              "type": "boolean"
+            },
+            "genericCap": {
+              "type": "integer"
+            },
+            "oktaFailAt": {
+              "type": "integer"
+            }
+          },
+          "type": "object"
+        },
+        "groups": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "issuer": {
+          "type": "string"
+        },
+        "listeners": {
+          "additionalProperties": false,
+          "properties": {
+            "https": {
+              "additionalProperties": false,
+              "properties": {
+                "address": {
+                  "type": "string"
+                },
+                "certRef": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "keyRef": {
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "certRef",
+                "keyRef"
+              ],
+              "type": "object"
+            },
+            "management": {
+              "additionalProperties": false,
+              "properties": {
+                "address": {
+                  "type": "string"
+                },
+                "mcp": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "allowLegacyClients": {
+                      "type": "boolean"
+                    }
+                  },
+                  "type": "object"
+                },
+                "mcpPath": {
+                  "type": "string"
+                },
+                "restPath": {
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            }
+          },
+          "required": [
+            "https"
+          ],
+          "type": "object"
+        },
+        "profile": {
+          "additionalProperties": false,
+          "properties": {
+            "tenantId": {
+              "type": "string"
+            },
+            "vendor": {
+              "default": "generic",
+              "enum": [
+                "",
+                "adfs",
+                "duo",
+                "entra",
+                "generic",
+                "google",
+                "iam-identity-center",
+                "keycloak",
+                "okta",
+                "ping",
+                "shibboleth",
+                "siteminder"
+              ],
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "protocols": {
+          "additionalProperties": false,
+          "properties": {
+            "oidc": {
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "anyOf": [
+                    {
+                      "type": "boolean"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "type": "object"
+            },
+            "saml": {
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "anyOf": [
+                    {
+                      "type": "boolean"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "type": "object"
+            },
+            "wsfed": {
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "anyOf": [
+                    {
+                      "type": "boolean"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "type": "object"
+            }
+          },
+          "type": "object"
+        },
+        "signing": {
+          "additionalProperties": false,
+          "properties": {
+            "keyRef": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "keyRef"
+          ],
+          "type": "object"
+        },
+        "ui": {
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "type": "object"
+        },
+        "users": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "email": {
+                "type": "string"
+              },
+              "enabled": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "groupIds": {
+                "items": {
+                  "type": "string"
+                },
+                "type": [
+                  "array",
+                  "null"
+                ]
+              },
+              "id": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "passwordHashRef": {
+                "type": "string"
+              },
+              "passwordRef": {
+                "type": "string"
+              },
+              "totpSecretRef": {
+                "type": "string"
+              },
+              "username": {
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "username"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "listeners",
+        "signing",
+        "access"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "apiVersion",
+    "kind",
+    "metadata",
+    "spec"
+  ],
+  "title": "LabSSO configuration",
+  "type": "object"
+}

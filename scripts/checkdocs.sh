@@ -18,4 +18,7 @@ if ! grep -q '443:10443' "${ROOT}/examples/compose.yaml"; then
 	echo "compose must publish 443:10443" >&2
 	exit 1
 fi
+python3 "${ROOT}/scripts/check-markdown-links.py"
+cd "${ROOT}"
+"${GO:-go}" test ./cmd/labsso -run '^TestDocumentationExamples$' -count=1
 echo "docs ok"

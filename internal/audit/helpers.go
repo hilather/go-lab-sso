@@ -8,6 +8,7 @@ import (
 func (r *Ring) EmitDenied(actor auth.Actor, capability string, err error) {
 	r.Emit(Event{
 		ActorID:    actor.ID,
+		Transport:  actor.Transport,
 		ActorClass: actor.Class,
 		Capability: capability,
 		Result:     ResultDenied,
@@ -18,6 +19,7 @@ func (r *Ring) EmitDenied(actor auth.Actor, capability string, err error) {
 func (r *Ring) EmitOK(actor auth.Actor, capability, reason, revision, previous string) string {
 	return r.Emit(Event{
 		ActorID:    actor.ID,
+		Transport:  actor.Transport,
 		ActorClass: actor.Class,
 		Capability: capability,
 		Reason:     reason,

@@ -2,7 +2,7 @@
 
 Status: IMP-001 implemented (allow-list rewriter + redirect:rewrite)
 Owners: Configuration, Application, Security
-Last reviewed: 2026-08-30
+Last reviewed: 2026-10-03
 Related ADRs: 0008
 
 ## Problem statement
@@ -54,7 +54,7 @@ Each input kind has an explicit map. Keys not on the list never become `spec` fi
 
 | Source | Target |
 |---|---|
-| SPSSODescriptor ACS URLs | `spec.clients[].saml.acsURLs` (exists after SAML-001); empty ACS → `redirectURIs` |
+| Single SPSSODescriptor HTTP-POST ACS URLs | `spec.clients[].saml.acsURLs` (exists after SAML-001); empty ACS → `redirectURIs` |
 | EntityID | `spec.clients[].saml.entityID` |
 | Keys | file-ref suggestion only; do not copy PEMs into the fragment. A source blob that contains a cert is still imported (entityID + ACS). |
 | Entity descriptors with DTD / XXE | **reject** |
@@ -147,3 +147,11 @@ Allow-list additions are additive. Removing a mapped key is breaking for importe
 ## Open questions
 
 - Whether `imported.unmapped` is persisted on canonical (annotation) or response-only. Implemented default: response-only.
+
+### Strict recipients and credential removal
+
+Import accepts only parsed HTTPS recipients with a valid DNS/IP host and port, without userinfo, fragments, or wildcards. Malformed and non-HTTPS recipients are dropped with warnings that contain no recipient value; an empty valid recipient set rejects. Native OIDC custom schemes remain available in canonical configuration but are never copied from customer imports.
+
+SAML metadata must be one namespace-qualified `EntityDescriptor` containing exactly one SAML2 `SPSSODescriptor`, unique ACS indices, and at least one valid HTTPS HTTP-POST ACS. Aggregate metadata, wrong namespaces, trailing XML documents, duplicate POST locations, and missing protocol declarations reject; other bindings are not imported. No ACS from a different entity or descriptor is combined with the selected SP.
+
+Recursive secret scrubbing includes Entra `passwordCredentials`/`keyCredentials` containers, `secretText`, password/private-key fields, and token/access/refresh/ID-token variants inside nested maps and arrays. Credential values never appear in imported fragments, unmapped data, or warnings.

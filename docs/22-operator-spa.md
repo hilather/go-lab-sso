@@ -2,11 +2,13 @@
 
 Status: first SPA implemented; Mira afters landed (sessions / users / data-plane login chrome)
 Owners: UI, Application
-Last reviewed: 2026-09-02
+Last reviewed: 2026-10-03
 Related ADRs: 0004
 
 ## Surface
 
+- User/session lists follow `nextCursor` until all pages are loaded, preserving access to collections larger than the default API page.
+- REST calls use the configured management `restPath`, safely JSON-serialized into `/app.js`; the default remains `/v1`. Changing mounted management paths requires restart.
 - `GET /` and `GET /app.js` from `internal/web`. The package must not import `internal/app`.
 - `spec.ui.enabled: false` 404s the SPA only (`GET /`). Login HTML and REST stay up. `/app.js` is not separately gated.
 - Cookie `labsso_session` (HttpOnly, SameSite=Lax). CSRF token in session JSON + header `X-LabSSO-CSRF`.

@@ -2,7 +2,7 @@
 
 Status: FND MCP adapter implemented (`internal/control/mcp`, protocol 2026-07-28, SDK v1.7.0)
 Owners: MCP, Application
-Last reviewed: 2026-09-01
+Last reviewed: 2026-10-03
 Target protocol baseline: 2026-07-28
 Related ADRs: 0004
 Implementation (later): `internal/control/mcp` wrapping `github.com/modelcontextprotocol/go-sdk v1.7.0`
@@ -122,7 +122,7 @@ labsso://audit/recent
 
 Registered now: `labsso://state`, `labsso://capabilities`, `labsso://status`, `labsso://schema/config`, `labsso://audit/recent`, and templates `labsso://clients/{id}`, `labsso://users/{id}`, `labsso://groups/{id}`.
 
-A resource mirrors a REST representation. Authorization matches the equivalent GET capability. Secret values never appear. Tool errors include a structured `code` matching the REST domain code.
+A resource mirrors a REST representation. Authorization matches the equivalent GET capability. Secret values never appear. Tool errors include a structured `code` matching the REST domain code. Resource read failures use JSON-RPC error data `{ "code": <domain code> }`, preserving not-found/authorization/validation distinctions.
 
 ## Prompts
 
@@ -206,3 +206,15 @@ MCP protocol versions, tool names, schemas, resource URIs, and result/error stru
 ## Open questions
 
 - Whether a read-only `sso_oidc_discover` tool should exist so agents need not speak HTTPS to dest-443 from the MCP host. Default: no; labinfo connection block covers that after integrator last.
+
+## Validation, reset and retries
+
+`sso_state_validate` accepts optional `document` and `operations` without an expected revision. `document` must be complete; omission validates against the current snapshot. Legacy optional revision/reason/key fields remain accepted and do not turn validation into a mutation.
+
+`sso_state_reset` requires `expectedRevision` and nonblank `reason`; optional `dryRun` returns a bootstrap reset plan without activation, and `idempotencyKey` enables applied replay, including retries through REST. Mutation fingerprints are canonical and scoped by actor/capability. Runtime changes to listener addresses, management paths or `allowLegacyClients` fail with restart-required validation instead of silently changing only canonical state. Ephemeral expiry/pause/resume/force/injection tools accept optional `reason` while preserving older omitted inputs.
+
+## Generated contracts and list/export inputs
+
+`sso_schema_get` and `labsso://schema/config` expose the same generated draft 2020-12 configuration schema as REST. Validation tool schema uses the domain document shape and duration string encoding; exact original JSON bytes are decoded after SDK schema checks to preserve large integer values and operation fingerprints.
+
+Client/user/group/session/audit list tools accept optional `cursor` and `limit` (1–1000; default 100), returning `items` and optional `nextCursor`. Ordering and stale-cursor validation are shared with REST. `labsso://audit/recent` mirrors the default audit page. Filtering remains unimplemented. `sso_state_export` accepts optional `format` (`yaml` default or `json`); YAML results contain `yaml`, JSON results contain the canonical `json` document, both with revision. The registry-derived `docs/generated/mcp-bindings.json` is a verified binding manifest; it is not a claim of complete generated MCP tool schemas or OpenAPI.

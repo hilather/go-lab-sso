@@ -175,7 +175,7 @@ func TestResetDropsOverlay(t *testing.T) {
 	if _, err := a.EnrollTOTP(admin(), "u1", "e"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := a.Reset(admin(), app.ResetIn{Reason: "wipe"}); err != nil {
+	if _, err := a.Reset(admin(), app.ResetIn{ExpectedRevision: a.Status().RuntimeRevision, Reason: "wipe"}); err != nil {
 		t.Fatal(err)
 	}
 	if a.OIDC().Runtime().HasTOTPOverlay("u1") {
@@ -227,12 +227,12 @@ func TestSchemaConfigTOTP(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	user, _ := out["user"].(map[string]any)
-	if user == nil || !strings.Contains(user["totpSecretRef"].(string), "totpSecretRef") && user["totpSecretRef"] == nil {
-		t.Fatalf("schema user %v", out["user"])
-	}
+	props := out["properties"].(map[string]any)
+	spec := props["spec"].(map[string]any)["properties"].(map[string]any)
+	user := spec["users"].(map[string]any)["items"].(map[string]any)["properties"].(map[string]any)
 	if _, ok := user["totpSecretRef"]; !ok {
 		t.Fatal("schema missing totpSecretRef")
 	}
+
 	_ = totp.Digits
 }
