@@ -62,7 +62,7 @@ First implementation implements:
 | Discovery (`/.well-known/openid-configuration` plus vendor path clothes) | Required |
 | JWKS | Required |
 | UserInfo | Required |
-| RP-initiated logout | Required (active clothes path). `post_logout_redirect_uri` must match a registered client redirect URI; otherwise 400. Missing URI returns a logged-out HTML page. |
+| RP-initiated logout | Required (active clothes path). GET/HEAD displays confirmation without changing the session; a protected POST confirms logout. `post_logout_redirect_uri` must match a registered client redirect URI; otherwise 400 without clearing the session. Missing URI returns logged-out HTML after confirmation. |
 | Client credentials | Out of first OIDC slice |
 | Device code | Out of first OIDC slice |
 | Implicit / hybrid | Reject |
@@ -89,6 +89,7 @@ POST {issuer}/oauth2/token
 GET  {issuer}/oauth2/jwks
 GET  {issuer}/oauth2/userinfo
 GET  {issuer}/oauth2/logout
+POST {issuer}/oauth2/logout  (confirmed logout)
 GET  {issuer}/login          (HTML)
 POST {issuer}/login
 GET  {issuer}/consent        (HTML)
@@ -233,6 +234,10 @@ Enabling a protocol, renaming a generic path, or changing `iss` derivation is a 
 ## Protocol hardening
 
 OIDC accepts RFC 7636 S256 challenges and 43–128 character unreserved verifiers. Registered scopes, when nonempty, restrict requests to that list; an omitted list permits the implemented `openid profile email groups offline_access` scopes. Refresh requests may narrow their original scope and cannot widen it. Current user, client, redirect, protocol, and MFA policy are checked before issuance. Token responses, including errors, and userinfo use `Cache-Control: no-store` and `Pragma: no-cache`.
+
+A refresh request rejected with `invalid_scope` leaves its original grant available for a corrected request. Successful refresh still consumes the old handle exactly once and returns a rotated handle; concurrent redemptions cannot both succeed.
+
+Logout GET/HEAD shows confirmation for a live session, including when reached from another site. Without a live session it may return logged-out HTML or a validated redirect, without clearing cookies. Confirmation POST requires a session-bound hidden token and passes cross-origin protection before expiring the login session and cookie. The redirect is validated before any logout side effect and checked again on confirmation; `state` is returned only with the validated redirect. Confirmation responses are not cached or frameable. Automated clients that previously relied on GET ending a session must now submit the confirmation form. This follows the user-confirmation model in [RP-Initiated Logout](https://openid.net/specs/openid-connect-rpinitiated-1_0.html#RPLogout); LabSSO does not implement hint-based silent logout or RP logout notifications.
 
 Discovery reflects the loaded signing key: RSA uses RS256; P-256, P-384, and P-521 use ES256, ES384, and ES512. JWKS and JWT key IDs are stable SHA-256 public-key thumbprints and change when the key changes.
 

@@ -288,7 +288,12 @@ func TestClothesOktaAuthorizeAndLogout(t *testing.T) {
 		t.Fatalf("okta authorize %d %s", rec.Code, rec.Header().Get("Location"))
 	}
 	rec = httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest("GET", "/oauth2/default/v1/logout", nil))
+	cookie := &http.Cookie{Name: "labsso_okta", Value: sess.ID}
+	form := logoutForm(t, h, "/oauth2/default/v1/logout", cookie)
+	req = httptest.NewRequest("POST", "/oauth2/default/v1/logout", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(cookie)
+	h.ServeHTTP(rec, req)
 	if rec.Code != 200 || !strings.Contains(rec.Header().Get("Set-Cookie"), "labsso_okta") {
 		t.Fatalf("okta logout %d %s", rec.Code, rec.Header().Get("Set-Cookie"))
 	}

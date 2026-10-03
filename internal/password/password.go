@@ -10,11 +10,29 @@ import (
 	"strings"
 )
 
+const (
+	argonTime        = 3
+	argonMemory      = 65536
+	argonParallelism = 4
+	argonKeyLen      = 32
+)
+
 type Credential struct {
 	plain  [32]byte
 	salt   string
 	digest string
 	hashed bool
+	dummy  bool
+}
+
+// Dummy returns a credential that never accepts a password and uses the same
+// verification cost as parsed credentials of the requested kind. Its salt and
+// digest are public padding material, not an account secret.
+func Dummy(hashed bool) Credential {
+	if !hashed {
+		return Credential{dummy: true}
+	}
+	return Credential{hashed: true, dummy: true, salt: "labsso-dummy-salt", digest: strings.Repeat("\x00", argonKeyLen)}
 }
 
 func Parse(raw []byte, hashed bool) (Credential, error) {
@@ -51,16 +69,20 @@ func Parse(raw []byte, hashed bool) (Credential, error) {
 	return Credential{salt: string(salt), digest: string(digest), hashed: true}, nil
 }
 func (c Credential) Verify(provided []byte) error {
+	return c.verify(provided, argon2.IDKey)
+}
+
+func (c Credential) verify(provided []byte, derive func([]byte, []byte, uint32, uint32, uint8, uint32) []byte) error {
+	var match int
 	if c.hashed {
-		got := argon2.IDKey(provided, []byte(c.salt), 3, 65536, 4, 32)
-		if subtle.ConstantTimeCompare(got, []byte(c.digest)) == 1 {
-			return nil
-		}
+		got := derive(provided, []byte(c.salt), argonTime, argonMemory, argonParallelism, argonKeyLen)
+		match = subtle.ConstantTimeCompare(got, []byte(c.digest))
 	} else {
 		got := sha256.Sum256(provided)
-		if subtle.ConstantTimeCompare(got[:], c.plain[:]) == 1 {
-			return nil
-		}
+		match = subtle.ConstantTimeCompare(got[:], c.plain[:])
+	}
+	if match == 1 && !c.dummy {
+		return nil
 	}
 	return fmt.Errorf("mismatch")
 }

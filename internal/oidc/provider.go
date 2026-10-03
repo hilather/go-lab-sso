@@ -2,6 +2,7 @@ package oidc
 
 import (
 	"crypto/subtle"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -81,6 +82,7 @@ func (p *Provider) Handler() http.Handler {
 		"/idp/profile/oidc/logout",
 	} {
 		mux.HandleFunc("GET "+path, p.requirePath(func(c snapshot.Clothes) string { return c.LogoutPath }, p.logout))
+		mux.HandleFunc("POST "+path, p.requirePath(func(c snapshot.Clothes) string { return c.LogoutPath }, p.logout))
 	}
 	mux.HandleFunc("POST /v1.0/users/{oid}/getMemberGroups", p.graphMemberGroups)
 	return snapshot.Capture(p.store, p.rt.AuditRejected("oidc_request_rejected", mux))
@@ -399,7 +401,7 @@ func (p *Provider) tokenRefresh(w http.ResponseWriter, r *http.Request, snap *sn
 		return
 	}
 	tok := r.FormValue("refresh_token")
-	ref, ok := p.rt.TakeRefresh(tok)
+	ref, ok := p.rt.GetRefresh(tok)
 	if !ok || time.Now().After(ref.Expires) || ref.ClientID != clientID {
 		writeTokenError(w, snap, http.StatusBadRequest, "invalid_grant", "")
 		return
@@ -411,6 +413,13 @@ func (p *Provider) tokenRefresh(w http.ResponseWriter, r *http.Request, snap *sn
 			return
 		}
 		scope = requested
+	}
+	// Validate without consuming the grant so invalid scope requests can retry.
+	// Taking it afterwards remains atomic: concurrent redemption or revocation
+	// must win over this request, and a rejected request never restores state.
+	if _, ok := p.rt.TakeRefresh(tok); !ok {
+		writeTokenError(w, snap, http.StatusBadRequest, "invalid_grant", "")
+		return
 	}
 	p.writeTokens(w, snap, ref.ClientID, ref.UserID, ref.Username, scope, "", ref.MFACompleted)
 }
@@ -614,36 +623,79 @@ func (p *Provider) DenyConsentSnapshot(snap *snapshot.Snapshot, pendingID string
 }
 
 func (p *Provider) logout(w http.ResponseWriter, r *http.Request) {
+	noStore(w)
 	snap := p.snapOIDC(w, r)
 	if snap == nil {
 		return
 	}
-	name := CookieName(snap)
-	if c, err := r.Cookie(name); err == nil && c.Value != "" {
-		p.rt.ExpireSession(c.Value)
-	}
-	secure := r.TLS != nil
-	http.SetCookie(w, &http.Cookie{
-		Name: name, Value: "", Path: "/", MaxAge: -1,
-		HttpOnly: true, SameSite: http.SameSiteLaxMode, Secure: secure,
-	})
-	post := r.URL.Query().Get("post_logout_redirect_uri")
-	if post != "" {
-		if snap == nil || !logoutRedirectOK(snap, post) {
-			http.Error(w, "invalid_request", http.StatusBadRequest)
+	if r.Method == http.MethodPost {
+		if err := http.NewCrossOriginProtection().Check(r); err != nil {
+			http.Error(w, "forbidden", http.StatusForbidden)
 			return
 		}
-		u, err := url.Parse(post)
+		r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "invalid_request", http.StatusBadRequest)
+		return
+	}
+	params := r.Form
+	if r.Method == http.MethodPost {
+		params = r.PostForm
+	}
+	post, state := params.Get("post_logout_redirect_uri"), params.Get("state")
+	if r.Method == http.MethodPost {
+		decoded, err := base64.RawURLEncoding.DecodeString(params.Get("logout_state"))
 		if err != nil {
 			http.Error(w, "invalid_request", http.StatusBadRequest)
 			return
 		}
-		if st := r.URL.Query().Get("state"); st != "" {
-			q := u.Query()
-			q.Set("state", st)
-			u.RawQuery = q.Encode()
+		state = string(decoded)
+	}
+	if len(state) > 4096 {
+		http.Error(w, "invalid_request", http.StatusBadRequest)
+		return
+	}
+	var redirect *url.URL
+	if post != "" {
+		if !logoutRedirectOK(snap, post) {
+			http.Error(w, "invalid_request", http.StatusBadRequest)
+			return
 		}
-		http.Redirect(w, r, u.String(), http.StatusFound)
+		var err error
+		redirect, err = url.Parse(post)
+		if err != nil {
+			http.Error(w, "invalid_request", http.StatusBadRequest)
+			return
+		}
+		if state != "" {
+			q := redirect.Query()
+			q.Set("state", state)
+			redirect.RawQuery = q.Encode()
+		}
+	}
+	name := CookieName(snap)
+	var sess LoginSession
+	if cookie, err := r.Cookie(name); err == nil && cookie.Value != "" {
+		sess, _ = p.rt.GetSession(cookie.Value)
+	}
+	if r.Method != http.MethodPost && sess.ID != "" {
+		writeLogoutConfirmation(w, r.URL.Path, post, state, logoutCSRF(sess.ID, r.URL.Path, post, state))
+		return
+	}
+	if r.Method == http.MethodPost {
+		if sess.ID == "" || subtle.ConstantTimeCompare([]byte(params.Get("csrf")), []byte(logoutCSRF(sess.ID, r.URL.Path, post, state))) != 1 {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+		p.rt.ExpireSession(sess.ID)
+		http.SetCookie(w, &http.Cookie{
+			Name: name, Value: "", Path: "/", MaxAge: -1,
+			HttpOnly: true, SameSite: http.SameSiteLaxMode, Secure: r.TLS != nil,
+		})
+	}
+	if redirect != nil {
+		http.Redirect(w, r, redirect.String(), http.StatusFound)
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")

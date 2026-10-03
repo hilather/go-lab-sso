@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -183,17 +184,28 @@ func TestHardeningUnsupportedECCurveAccepted(t *testing.T) {
 }
 
 func TestHardeningRefreshScopeNarrowing(t *testing.T) {
-	for _, scope := range []string{"openid", "openid email groups"} {
-		t.Run(scope, func(t *testing.T) {
+	for _, tc := range []struct {
+		name, requested, retry, want string
+	}{
+		{name: "narrow", requested: "openid", want: "openid"},
+		{name: "widen then default", requested: "openid email groups", want: "openid email"},
+		{name: "widen then original", requested: "openid email groups", retry: "openid email", want: "openid email"},
+		{name: "widen then narrow", requested: "openid email groups", retry: "openid", want: "openid"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
 			a, h := bootOIDC(t)
 			reviewUser(t, a, "")
 			a.OIDC().Runtime().PutRefresh(oidc.Refresh{Token: "refresh", ClientID: "app-1", UserID: "u1", Scope: "openid email", Expires: time.Now().Add(time.Hour)})
-			rec := reviewPost(h, "/oauth2/token", url.Values{"grant_type": {"refresh_token"}, "client_id": {"app-1"}, "refresh_token": {"refresh"}, "scope": {scope}}, "")
-			if scope != "openid" {
-				if rec.Code != 400 {
+			rec := reviewPost(h, "/oauth2/token", url.Values{"grant_type": {"refresh_token"}, "client_id": {"app-1"}, "refresh_token": {"refresh"}, "scope": {tc.requested}}, "")
+			if tc.requested != "openid" {
+				if rec.Code != 400 || !strings.Contains(rec.Body.String(), `"error":"invalid_scope"`) {
 					t.Fatal("scope widening accepted")
 				}
-				return
+				form := url.Values{"grant_type": {"refresh_token"}, "client_id": {"app-1"}, "refresh_token": {"refresh"}}
+				if tc.retry != "" {
+					form.Set("scope", tc.retry)
+				}
+				rec = reviewPost(h, "/oauth2/token", form, "")
 			}
 			if rec.Code != 200 {
 				t.Fatal(rec.Body.String())
@@ -208,10 +220,47 @@ func TestHardeningRefreshScopeNarrowing(t *testing.T) {
 			if err := json.Unmarshal(payload, &claims); err != nil {
 				t.Fatal(err)
 			}
-			if claims["scope"] != "openid" {
-				t.Fatal("scope not narrowed")
+			if claims["scope"] != tc.want {
+				t.Fatalf("scope = %v, want %q", claims["scope"], tc.want)
+			}
+			if tokens["refresh_token"] == "refresh" || tokens["refresh_token"] == "" || tokens["refresh_token"] == nil {
+				t.Fatal("refresh token was not rotated")
+			}
+			replay := reviewPost(h, "/oauth2/token", url.Values{"grant_type": {"refresh_token"}, "client_id": {"app-1"}, "refresh_token": {"refresh"}}, "")
+			if replay.Code != 400 || !strings.Contains(replay.Body.String(), `"error":"invalid_grant"`) {
+				t.Fatal("consumed refresh token accepted")
 			}
 		})
+	}
+}
+
+func TestHardeningRefreshConcurrentRedemption(t *testing.T) {
+	a, h := bootOIDC(t)
+	reviewUser(t, a, "")
+	a.OIDC().Runtime().PutRefresh(oidc.Refresh{Token: "refresh", ClientID: "app-1", UserID: "u1", Scope: "openid email", Expires: time.Now().Add(time.Hour)})
+	const requests = 8
+	results := make(chan *httptest.ResponseRecorder, requests)
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	for range requests {
+		wg.Go(func() {
+			<-start
+			results <- reviewPost(h, "/oauth2/token", url.Values{"grant_type": {"refresh_token"}, "client_id": {"app-1"}, "refresh_token": {"refresh"}, "scope": {"openid"}}, "")
+		})
+	}
+	close(start)
+	wg.Wait()
+	close(results)
+	succeeded := 0
+	for rec := range results {
+		if rec.Code == http.StatusOK {
+			succeeded++
+		} else if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), `"error":"invalid_grant"`) {
+			t.Fatalf("unexpected refresh response: %d %s", rec.Code, rec.Body.String())
+		}
+	}
+	if succeeded != 1 {
+		t.Fatalf("successful concurrent redemptions = %d, want 1", succeeded)
 	}
 }
 func TestHardeningPendingRequiredBeforeLogin(t *testing.T) {

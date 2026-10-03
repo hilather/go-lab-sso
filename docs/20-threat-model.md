@@ -81,3 +81,5 @@ Out of scope: nation-state targeting of a lab VM, physical theft of a lab disk, 
 ## Authentication-state hardening
 
 Cross-site login and consent POSTs reject before authentication. Missing, expired, or revoked pending handles cannot create cookies. Alternating TOTP window steps cannot replay a consumed code. Security-sensitive configuration changes revoke protocol state and reject insertion from an older request generation, including delayed password verification. Signed tokens remain offline-verifiable until expiry; local userinfo and issuance also honor current user/client/policy and runtime generation. Authentication state and password concurrency are bounded to limit abandoned-flow and Argon2 resource exhaustion.
+
+Unknown and disabled usernames do the same password KDF work as configured users, including mixed plaintext/Argon2id deployments, to remove a fast-path username enumeration signal. Logout requires a protected confirmation POST; cross-site navigation and invalid redirect requests cannot clear the IdP session. Confirmation pages prohibit framing to prevent clickjacking.

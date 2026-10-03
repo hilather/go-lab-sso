@@ -10,23 +10,25 @@ import (
 
 	"github.com/hilather/go-lab-sso/internal/model"
 	"github.com/hilather/go-lab-sso/internal/oidc"
+	"github.com/hilather/go-lab-sso/internal/password"
 	"github.com/hilather/go-lab-sso/internal/saml"
 	"github.com/hilather/go-lab-sso/internal/snapshot"
 	"github.com/hilather/go-lab-sso/internal/wsfed"
 )
 
 type UI struct {
-	store    *snapshot.Store
-	oidc     *oidc.Provider
-	saml     *saml.Provider
-	wsfed    *wsfed.Provider
-	baseDir  string
-	limit    *limiter
-	verifies chan struct{}
+	store          *snapshot.Store
+	oidc           *oidc.Provider
+	saml           *saml.Provider
+	wsfed          *wsfed.Provider
+	baseDir        string
+	limit          *limiter
+	verifies       chan struct{}
+	verifyPassword func(password.Credential, []byte) error
 }
 
 func New(store *snapshot.Store, p *oidc.Provider, s *saml.Provider, w *wsfed.Provider, baseDir string) *UI {
-	return &UI{store: store, oidc: p, saml: s, wsfed: w, baseDir: baseDir, limit: newLimiter(10, time.Minute), verifies: make(chan struct{}, 4)}
+	return &UI{store: store, oidc: p, saml: s, wsfed: w, baseDir: baseDir, limit: newLimiter(10, time.Minute), verifies: make(chan struct{}, 4), verifyPassword: password.Credential.Verify}
 }
 
 func (u *UI) Mount(mux *http.ServeMux) {
@@ -78,12 +80,7 @@ func (u *UI) postLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rec, ok := findUser(snap, user)
-	if !ok {
-		u.oidc.Runtime().Reject("login_credentials_rejected")
-		writeHTML(w, loginPage(snap, pending, "invalid credentials", user, false))
-		return
-	}
-	if err := u.checkPassword(snap, rec, []byte(pass)); err != nil {
+	if err := u.checkPassword(snap, rec, []byte(pass)); err != nil || !ok {
 		u.oidc.Runtime().Reject("login_credentials_rejected")
 		writeHTML(w, loginPage(snap, pending, "invalid credentials", user, false))
 		return
@@ -226,11 +223,27 @@ func (u *UI) deny(w http.ResponseWriter, r *http.Request, pending string) {
 }
 
 func (u *UI) checkPassword(snap *snapshot.Snapshot, user model.User, provided []byte) error {
+	// Match the most expensive configured credential, including disabled users.
+	// Plaintext credentials need the same padding in a mixed snapshot; otherwise
+	// they remain distinguishable from unknown usernames and Argon2id users.
+	usesArgon2 := false
+	for _, candidate := range snap.Canonical.Spec.Users {
+		if candidate.PasswordHashRef != "" {
+			usesArgon2 = true
+			break
+		}
+	}
 	credential, ok := snap.Password(user.ID)
+	if !ok {
+		credential = password.Dummy(usesArgon2)
+	} else if usesArgon2 && user.PasswordHashRef == "" {
+		_ = u.verifyPassword(password.Dummy(true), provided)
+	}
+	err := u.verifyPassword(credential, provided)
 	if !ok {
 		return fmt.Errorf("no credential")
 	}
-	return credential.Verify(provided)
+	return err
 }
 func (u *UI) totpSecret(snap *snapshot.Snapshot, user model.User) ([]byte, bool) {
 	if secret, ok := u.oidc.Runtime().GetTOTPOverlay(user.ID); ok {

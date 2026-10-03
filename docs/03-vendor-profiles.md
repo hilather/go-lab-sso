@@ -78,6 +78,8 @@ Paths are relative to the exact lab issuer. Hosts are **never** vendor-cloud hos
 
 Login and consent stay `/login` and `/consent` for all clothes.
 
+Every active logout path in the table also accepts POST for confirmation. GET/HEAD shows the confirmation form without clearing cookies; POST validates the session-bound form token and request origin before logout. Inactive vendor paths remain 404 for both methods.
+
 ## `spec.profile.tenantId`
 
 Optional. `yaml:"tenantId,omitempty"`. Empty stays empty in Canonical, export, and `GET /v1/state`. The compiler fills `snapshot.Clothes.TenantID` with `00000000-0000-0000-0000-000000000001` when omitted. Entra `tid` and the Entra discovery alias use that compiled value. Do not Normalize the default into Canonical.

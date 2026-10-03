@@ -407,6 +407,8 @@ With the sample config and `serve` running:
 
 Trust the lab TLS leaf in `testdata/secrets/tls/tls.crt` for local browsers and curl (`curl -k` only in a throwaway lab).
 
+To sign out of the IdP, visit the discovery document's `end_session_endpoint` and submit its confirmation form. Opening the logout URL alone leaves the session active. A registered `post_logout_redirect_uri` is followed after confirmation; an invalid redirect leaves the session intact. Operator-console sign-out remains separate from IdP logout.
+
 ## Day-to-day recipes
 
 **Add a user live, then put it in Git**
