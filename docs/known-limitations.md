@@ -25,6 +25,7 @@ Current limits of the implemented lab appliance. LabSSO does not claim productio
 - Logout `post_logout_redirect_uri` may match any registered client's redirect URI; it is not bound to the `id_token_hint` audience, and expired hints fall back to the confirmation page.
 - Group overage Graph stub is minimal, not Microsoft Graph.
 - Okta overage **fails** the token rather than truncating. Its error body (`400 invalid_grant`, `okta overage`) is a lab choice not verified against live Okta.
+- `error:inject` on the token endpoint always answers HTTP 400, even for `temporarily_unavailable`; use `token:pause` to simulate a 503.
 - Entra stub-off overage fails the token (`400 invalid_grant`, `entra stub disabled`); real Entra has no equivalent and always uses the overage claim.
 - No LabNTP time bus; skew repros belong on the SUT.
 - `LABSSO_HTTPS_PORT` escape breaks SUTs that cannot set dest port.

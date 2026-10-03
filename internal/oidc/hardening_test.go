@@ -345,7 +345,7 @@ func TestHardeningRefreshSurvivesIssueFailure(t *testing.T) {
 			recover: func(_ *testing.T, a *app.App) { a.OIDC().Runtime().SetForceFail(false) },
 		},
 		{
-			name: "okta overage", vendor: "okta", path: "/oauth2/default/v1/token", scope: "openid groups", groups: 100, wantCode: http.StatusBadRequest, wantError: "okta overage",
+			name: "okta overage", vendor: "okta", path: "/oauth2/default/v1/token", scope: "openid groups", groups: 100, wantCode: http.StatusBadRequest, wantError: `"error":"invalid_grant","error_description":"okta overage"`,
 			fail: func(*testing.T, *app.App) {},
 			recover: func(t *testing.T, a *app.App) {
 				failAt := 200
@@ -357,7 +357,7 @@ func TestHardeningRefreshSurvivesIssueFailure(t *testing.T) {
 		{
 			// Overage settings do not purge grants, so the stored row survives
 			// the tunable change and the failed refresh.
-			name: "entra stub off", vendor: "entra", path: "/oauth2/v2.0/token", scope: "openid groups", groups: 3, wantCode: http.StatusBadRequest, wantError: "entra stub disabled",
+			name: "entra stub off", vendor: "entra", path: "/oauth2/v2.0/token", scope: "openid groups", groups: 3, wantCode: http.StatusBadRequest, wantError: `"error":"invalid_grant","error_codes":[70008],"error_description":"entra stub disabled"`,
 			fail: func(t *testing.T, a *app.App) {
 				off, limit := false, 2
 				if _, err := a.SetOverage(auth.AdminActor(), app.SetOverageIn{EntraGraphStub: &off, GenericCap: &limit, ExpectedRevision: a.Status().RuntimeRevision, Reason: "stub off"}); err != nil {
@@ -453,6 +453,28 @@ func TestHardeningCodeForceFailDescription(t *testing.T) {
 				t.Fatalf("force-fail code exchange = %d %s", rec.Code, rec.Body)
 			}
 		})
+	}
+}
+
+// TestHardeningRefreshRevokedUnderForceFail checks that revocation wins over
+// force-fail: the grant is consumed and the error does not claim force-fail.
+func TestHardeningRefreshRevokedUnderForceFail(t *testing.T) {
+	a, h := bootOIDC(t)
+	reviewUser(t, a, "")
+	a.OIDC().Runtime().PutRefresh(oidc.Refresh{Generation: a.Store().Load().Generation, Token: "refresh", ClientID: "app-1", UserID: "u1", Username: "alice", Scope: "openid", Expires: time.Now().Add(time.Hour)})
+	old := swapSnapshot(a, func(s *snapshot.Snapshot) {
+		u := s.UsersByID["u1"]
+		u.Enabled = model.Ptr(false)
+		s.UsersByID["u1"] = u
+	})
+	a.OIDC().Runtime().SetForceFail(true)
+	if rec := refreshWith(h, "/oauth2/token", "refresh", ""); rec.Code != http.StatusBadRequest || rec.Body.String() != `{"error":"invalid_grant"}`+"\n" {
+		t.Fatalf("revoked refresh under force-fail = %d %q", rec.Code, rec.Body)
+	}
+	a.Store().Swap(old)
+	a.OIDC().Runtime().SetForceFail(false)
+	if rec := refreshWith(h, "/oauth2/token", "refresh", ""); rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), `"error":"invalid_grant"`) {
+		t.Fatalf("revoked grant survived force-fail: %d %s", rec.Code, rec.Body)
 	}
 }
 
