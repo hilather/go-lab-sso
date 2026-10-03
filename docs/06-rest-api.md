@@ -126,7 +126,7 @@ POST /v1/tunables/vendor:swap
 POST /v1/tunables/client/redirect:rewrite
 ```
 
-`vendor:swap` and `redirect:rewrite` and `overage:set` **are** desired-state changes and require `expectedRevision`. Pause/resume, force-fail, inject-error, expire-session, and one-shot mint are runtime overlays: they die on restart/reset unless an ADR persists them (none does). Clothes swap purges pending codes/sessions/refresh and does not clear those overlays.
+`vendor:swap` and `redirect:rewrite` and `overage:set` **are** desired-state changes and require `expectedRevision`. Pause/resume, force-fail, inject-error, expire-session, and one-shot mint are runtime overlays: they die on restart/reset unless an ADR persists them (none does). Clothes swap purges pending codes/sessions/refresh and does not clear those overlays. On the wire, force-fail is a denial (token: `400 invalid_grant`, `error_description: "force-fail"`) and pause is the transient case (token: `503 temporarily_unavailable`); neither consumes a refresh grant.
 
 `POST /v1/tunables/vendor:swap` body: `vendor` (required), `tenantId` (optional), `expectedRevision`, `reason`, `idempotencyKey`. Capability `sso.tunable.vendor.swap`, scope `sso.tunables`. Omit `tenantId` to keep the current Canonical value; `tenantId: ""` clears it. Not a full `TargetProfile` replace and not `sso.change.apply`.
 

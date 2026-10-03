@@ -340,7 +340,7 @@ func TestHardeningRefreshSurvivesIssueFailure(t *testing.T) {
 		fail, recover                        func(*testing.T, *app.App)
 	}{
 		{
-			name: "force-fail tunable", path: "/oauth2/token", scope: "openid", wantCode: http.StatusBadRequest, wantError: `"error":"invalid_grant"`,
+			name: "force-fail tunable", path: "/oauth2/token", scope: "openid", wantCode: http.StatusBadRequest, wantError: `"error":"invalid_grant","error_description":"force-fail"`,
 			fail:    func(_ *testing.T, a *app.App) { a.OIDC().Runtime().SetForceFail(true) },
 			recover: func(_ *testing.T, a *app.App) { a.OIDC().Runtime().SetForceFail(false) },
 		},
@@ -350,6 +350,38 @@ func TestHardeningRefreshSurvivesIssueFailure(t *testing.T) {
 			recover: func(t *testing.T, a *app.App) {
 				failAt := 200
 				if _, err := a.SetOverage(auth.AdminActor(), app.SetOverageIn{OktaFailAt: &failAt, ExpectedRevision: a.Status().RuntimeRevision, Reason: "raise okta limit"}); err != nil {
+					t.Fatal(err)
+				}
+			},
+		},
+		{
+			// Overage settings do not purge grants, so the stored row survives
+			// the tunable change and the failed refresh.
+			name: "entra stub off", vendor: "entra", path: "/oauth2/v2.0/token", scope: "openid groups", groups: 3, wantCode: http.StatusBadRequest, wantError: "entra stub disabled",
+			fail: func(t *testing.T, a *app.App) {
+				off, limit := false, 2
+				if _, err := a.SetOverage(auth.AdminActor(), app.SetOverageIn{EntraGraphStub: &off, GenericCap: &limit, ExpectedRevision: a.Status().RuntimeRevision, Reason: "stub off"}); err != nil {
+					t.Fatal(err)
+				}
+			},
+			recover: func(t *testing.T, a *app.App) {
+				on := true
+				if _, err := a.SetOverage(auth.AdminActor(), app.SetOverageIn{EntraGraphStub: &on, ExpectedRevision: a.Status().RuntimeRevision, Reason: "stub on"}); err != nil {
+					t.Fatal(err)
+				}
+			},
+		},
+		{
+			// token:pause is the transient-failure simulation: 503 before any
+			// grant handling.
+			name: "token paused", path: "/oauth2/token", scope: "openid", wantCode: http.StatusServiceUnavailable, wantError: `"error":"temporarily_unavailable"`,
+			fail: func(t *testing.T, a *app.App) {
+				if err := a.PauseToken(auth.AdminActor(), "pause"); err != nil {
+					t.Fatal(err)
+				}
+			},
+			recover: func(t *testing.T, a *app.App) {
+				if err := a.ResumeToken(auth.AdminActor(), "resume"); err != nil {
 					t.Fatal(err)
 				}
 			},
@@ -390,6 +422,35 @@ func TestHardeningRefreshSurvivesIssueFailure(t *testing.T) {
 			}
 			if replay := refreshWith(h, tc.path, "refresh", ""); replay.Code != http.StatusBadRequest || !strings.Contains(replay.Body.String(), `"error":"invalid_grant"`) {
 				t.Fatalf("rotated refresh token replayed: %d %s", replay.Code, replay.Body)
+			}
+		})
+	}
+}
+
+// TestHardeningCodeForceFailDescription covers both force-fail sources on the
+// code grant: the runtime tunable and the YAML MFA mode. Changing auth purges
+// refresh grants, so the MFA mode is exercised through a code planted after
+// the change.
+func TestHardeningCodeForceFailDescription(t *testing.T) {
+	verifier := "a-valid-verifier-abcdefghijklmnopqrstuvwxyz-0123456789"
+	for _, tc := range []struct {
+		name string
+		fail func(*testing.T, *app.App)
+	}{
+		{name: "tunable", fail: func(_ *testing.T, a *app.App) { a.OIDC().Runtime().SetForceFail(true) }},
+		{name: "yaml mfa mode", fail: func(t *testing.T, a *app.App) {
+			val, _ := json.Marshal(model.Auth{MFA: model.MFA{Mode: "force-fail"}})
+			reviewApply(t, a, model.Operation{Op: model.OpUpdate, Target: model.Target{Kind: model.TargetAuth}, Value: val})
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			a, h := bootOIDC(t)
+			reviewUser(t, a, "")
+			tc.fail(t, a)
+			a.OIDC().Runtime().PutCode(oidc.AuthCode{Generation: a.Store().Load().Generation, Code: "code", ClientID: "app-1", RedirectURI: "https://sut.example.net/cb", UserID: "u1", Username: "alice", Challenge: s256(verifier), Scope: "openid", Expires: time.Now().Add(time.Hour)})
+			rec := reviewPost(h, "/oauth2/token", url.Values{"grant_type": {"authorization_code"}, "client_id": {"app-1"}, "code": {"code"}, "code_verifier": {verifier}, "redirect_uri": {"https://sut.example.net/cb"}}, "")
+			if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), `"error":"invalid_grant","error_description":"force-fail"`) {
+				t.Fatalf("force-fail code exchange = %d %s", rec.Code, rec.Body)
 			}
 		})
 	}

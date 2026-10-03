@@ -463,12 +463,20 @@ func (p *Provider) writeTokens(w http.ResponseWriter, snap *snapshot.Snapshot, c
 	noStore(w)
 	cl, ok := snap.ClientsByClientID[clientID]
 	revoked := !ok || !UserUsable(snap, userID) || !scopesAllowed(cl, scope)
-	if revoked || !SessionUsable(LoginSession{MFACompleted: mfa}, snap.Canonical.Spec.Auth.MFA.Mode) || p.rt.ForceFail() || !p.rt.GenerationUsable(snap.Generation) {
+	mode := snap.Canonical.Spec.Auth.MFA.Mode
+	// Both force-fail sources (runtime tunable and MFA mode) are denial
+	// simulations that keep the refresh grant; name them as authorize does.
+	forced := p.rt.ForceFail() || mode == "force-fail"
+	if revoked || !SessionUsable(LoginSession{MFACompleted: mfa}, mode) || forced || !p.rt.GenerationUsable(snap.Generation) {
 		// A stale snapshot must not burn a grant issued under a newer generation.
 		if revoked && spent != "" && p.rt.GenerationUsable(snap.Generation) {
 			p.rt.TakeRefresh(spent)
 		}
-		writeTokenError(w, snap, http.StatusBadRequest, "invalid_grant", "")
+		desc := ""
+		if forced && !revoked {
+			desc = "force-fail"
+		}
+		writeTokenError(w, snap, http.StatusBadRequest, "invalid_grant", desc)
 		return
 	}
 

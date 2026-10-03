@@ -360,9 +360,9 @@ These change runtime behavior and die on reset unless noted:
 | `POST /v1/auth/mfa` | Set `mfa.mode` (merge; keeps `sessionTTL`) |
 | `POST /v1/users/{id}/totp:enroll` | Overlay TOTP seed (shown once) |
 | `POST /v1/users/{id}/totp:clear` | Drop overlay; file ref remains |
-| `POST /v1/tunables/auth:force-fail` | Next login fails |
+| `POST /v1/tunables/auth:force-fail` | Login and authorize (`access_denied`) fail; token answers `400 invalid_grant` with `error_description: "force-fail"` and keeps the refresh grant |
 | `POST /v1/tunables/consent:force` | Ignore pre-consent shortcuts |
-| `POST /v1/tunables/token:pause` | Token endpoint pauses; authorize, JWKS, discovery, login stay up |
+| `POST /v1/tunables/token:pause` | Token endpoint answers `503 temporarily_unavailable` (grants untouched); authorize, JWKS, discovery, login stay up |
 | `POST /v1/tunables/token:resume` | Clear the pause |
 | `POST /v1/tunables/token:mint` | Issue tokens for a user/client without a browser |
 | `POST /v1/tunables/error:inject` | Inject the next protocol error |

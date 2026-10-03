@@ -35,6 +35,10 @@ This project will use [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Wave 6: generic OIDC authorization-code + PKCE S256, discovery, JWKS, token, refresh, userinfo, logout. Authorize without a login session 302s to `{issuer}/login` and persists the pending request. `go-jose/v4`. Ephemeral tunables (pause token, expire session, force-fail) have no `expectedRevision`.
 - Wave 7: data-plane login/consent HTML, cookie `labsso_login`, MFA knobs, Argon2id PHC allow-list, login POST rate limit. Default ship (M2) is generic OIDC + login HTML.
 
+### Changed
+
+- Token errors caused by force-fail (the `auth:force-fail` tunable or `mfa.mode: force-fail`) now carry `error_description: "force-fail"`, matching authorize, so a grant-keeping denial is distinguishable from a consumed grant. Status and `error` stay `400 invalid_grant`; `token:pause` remains the `503 temporarily_unavailable` simulation.
+
 ### Fixed
 
 - Refresh grants are consumed only atomically with storing the rotated replacement, so a failure while issuing tokens (force-fail tunable, overage limit, signing error) no longer leaves the client with a dead refresh token; revoked users and clients still lose the grant.
