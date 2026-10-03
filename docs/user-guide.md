@@ -407,7 +407,7 @@ With the sample config and `serve` running:
 
 Trust the lab TLS leaf in `testdata/secrets/tls/tls.crt` for local browsers and curl (`curl -k` only in a throwaway lab).
 
-To sign out of the IdP, send the browser to the discovery document's `end_session_endpoint` with `id_token_hint` set to the ID token issued for the signed-in user; the session ends immediately. Without a valid hint (missing, expired, or for another user) the endpoint shows a confirmation form, and the session stays active until it is submitted. A registered `post_logout_redirect_uri` is followed after confirmation; an invalid redirect leaves the session intact. Operator-console sign-out remains separate from IdP logout.
+To sign out of the IdP, send the browser to the discovery document's `end_session_endpoint` with `id_token_hint` set to the ID token issued for the signed-in user; the session ends immediately. Without a valid hint (missing, expired, or for another user) the endpoint shows a confirmation form, and the session stays active until it is submitted. ID tokens last one hour, so a later logout normally gets the form. A registered `post_logout_redirect_uri` is followed after logout, direct or confirmed; an invalid redirect leaves the session intact. Operator-console sign-out remains separate from IdP logout.
 
 ## Day-to-day recipes
 

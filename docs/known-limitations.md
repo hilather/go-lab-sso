@@ -22,6 +22,7 @@ Current limits of the implemented lab appliance. LabSSO does not claim productio
 - No client-credentials or device-code grant in the first OIDC slice.
 - Implicit / hybrid rejected.
 - Redirect URIs are exact match; no wildcards.
+- Logout `post_logout_redirect_uri` may match any registered client's redirect URI; it is not bound to the `id_token_hint` audience, and expired hints fall back to the confirmation page.
 - Group overage Graph stub is minimal, not Microsoft Graph.
 - Okta overage **fails** the token rather than truncating.
 - No LabNTP time bus; skew repros belong on the SUT.
