@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -23,6 +24,7 @@ import (
 	"github.com/hilather/go-lab-sso/internal/compiler"
 	"github.com/hilather/go-lab-sso/internal/model"
 	"github.com/hilather/go-lab-sso/internal/oidc"
+	"github.com/hilather/go-lab-sso/internal/snapshot"
 )
 
 func reviewApply(t *testing.T, a *app.App, op model.Operation) {
@@ -306,5 +308,166 @@ func TestHardeningRejectCallbackRedactsCredentials(t *testing.T) {
 				t.Fatal("audit leaked credential")
 			}
 		}
+	}
+}
+
+// swapSnapshot installs an edited copy of the active snapshot without the
+// Apply-path purge and returns the original so the test can restore it.
+func swapSnapshot(a *app.App, edit func(*snapshot.Snapshot)) *snapshot.Snapshot {
+	old := a.Store().Load()
+	next := *old
+	doc := *old.Canonical
+	next.Canonical = &doc
+	next.UsersByID = maps.Clone(old.UsersByID)
+	next.ClientsByClientID = maps.Clone(old.ClientsByClientID)
+	edit(&next)
+	a.Store().Swap(&next)
+	return old
+}
+
+func refreshWith(h http.Handler, path, token, scope string) *httptest.ResponseRecorder {
+	form := url.Values{"grant_type": {"refresh_token"}, "client_id": {"app-1"}, "refresh_token": {token}}
+	if scope != "" {
+		form.Set("scope", scope)
+	}
+	return reviewPost(h, path, form, "")
+}
+
+func TestHardeningRefreshSurvivesIssueFailure(t *testing.T) {
+	for _, tc := range []struct {
+		name, vendor, path, scope, wantError string
+		groups, wantCode                     int
+		fail, recover                        func(*testing.T, *app.App)
+	}{
+		{
+			name: "force-fail tunable", path: "/oauth2/token", scope: "openid", wantCode: http.StatusBadRequest, wantError: `"error":"invalid_grant"`,
+			fail:    func(_ *testing.T, a *app.App) { a.OIDC().Runtime().SetForceFail(true) },
+			recover: func(_ *testing.T, a *app.App) { a.OIDC().Runtime().SetForceFail(false) },
+		},
+		{
+			name: "okta overage", vendor: "okta", path: "/oauth2/default/v1/token", scope: "openid groups", groups: 100, wantCode: http.StatusBadRequest, wantError: "okta overage",
+			fail: func(*testing.T, *app.App) {},
+			recover: func(t *testing.T, a *app.App) {
+				failAt := 200
+				if _, err := a.SetOverage(auth.AdminActor(), app.SetOverageIn{OktaFailAt: &failAt, ExpectedRevision: a.Status().RuntimeRevision, Reason: "raise okta limit"}); err != nil {
+					t.Fatal(err)
+				}
+			},
+		},
+		{
+			// Signing-key changes purge grants through Apply; the swap only
+			// exercises the signer error path after validation.
+			name: "signer error", path: "/oauth2/token", scope: "openid", wantCode: http.StatusInternalServerError, wantError: `"error":"server_error"`,
+			fail: func(_ *testing.T, a *app.App) {
+				swapSnapshot(a, func(s *snapshot.Snapshot) { s.SigningKey = []byte("not a key") })
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			a, h := bootOIDC(t)
+			if tc.vendor != "" {
+				swapVendor(t, a, tc.vendor)
+			}
+			if tc.groups > 0 {
+				seedGroups(t, a, tc.groups)
+			} else {
+				reviewUser(t, a, "")
+			}
+			good := a.Store().Load()
+			a.OIDC().Runtime().PutRefresh(oidc.Refresh{Generation: good.Generation, Token: "refresh", ClientID: "app-1", UserID: "u1", Username: "alice", Scope: tc.scope, Expires: time.Now().Add(time.Hour)})
+			tc.fail(t, a)
+			if rec := refreshWith(h, tc.path, "refresh", ""); rec.Code != tc.wantCode || !strings.Contains(rec.Body.String(), tc.wantError) {
+				t.Fatalf("failing refresh = %d %s", rec.Code, rec.Body)
+			}
+			if tc.recover != nil {
+				tc.recover(t, a)
+			} else {
+				a.Store().Swap(good)
+			}
+			rec := refreshWith(h, tc.path, "refresh", "")
+			if rec.Code != http.StatusOK {
+				t.Fatalf("refresh after transient failure = %d %s", rec.Code, rec.Body)
+			}
+			if replay := refreshWith(h, tc.path, "refresh", ""); replay.Code != http.StatusBadRequest || !strings.Contains(replay.Body.String(), `"error":"invalid_grant"`) {
+				t.Fatalf("rotated refresh token replayed: %d %s", replay.Code, replay.Body)
+			}
+		})
+	}
+}
+
+func TestHardeningRefreshRevokedLosesGrant(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		revoke func(*testing.T, *app.App) (restore func())
+	}{
+		{name: "user disabled without purge", revoke: func(_ *testing.T, a *app.App) func() {
+			old := swapSnapshot(a, func(s *snapshot.Snapshot) {
+				u := s.UsersByID["u1"]
+				u.Enabled = model.Ptr(false)
+				s.UsersByID["u1"] = u
+			})
+			return func() { a.Store().Swap(old) }
+		}},
+		{name: "client scope withdrawn without purge", revoke: func(_ *testing.T, a *app.App) func() {
+			old := swapSnapshot(a, func(s *snapshot.Snapshot) {
+				cl := s.ClientsByClientID["app-1"]
+				cl.Scopes = []string{"profile"}
+				s.ClientsByClientID["app-1"] = cl
+			})
+			return func() { a.Store().Swap(old) }
+		}},
+		// The Apply cases are end-to-end regressions: Apply purges every refresh
+		// row before the request reaches writeTokens.
+		{name: "user disabled by apply", revoke: func(t *testing.T, a *app.App) func() {
+			b, _ := json.Marshal(model.User{ID: "u1", Username: "alice", PasswordRef: "testdata/secrets/users/alice.password", Enabled: model.Ptr(false)})
+			reviewApply(t, a, model.Operation{Op: model.OpUpdate, Target: model.Target{Kind: model.TargetUser, ID: "u1"}, Value: b})
+			return func() {
+				b, _ := json.Marshal(model.User{ID: "u1", Username: "alice", PasswordRef: "testdata/secrets/users/alice.password"})
+				reviewApply(t, a, model.Operation{Op: model.OpUpdate, Target: model.Target{Kind: model.TargetUser, ID: "u1"}, Value: b})
+			}
+		}},
+		{name: "client removed by apply", revoke: func(t *testing.T, a *app.App) func() {
+			reviewApply(t, a, model.Operation{Op: model.OpRemove, Target: model.Target{Kind: model.TargetClient, ID: "app-1"}})
+			return func() {
+				b, _ := json.Marshal(model.Client{ID: "app-1", ClientID: "app-1", Public: true, RedirectURIs: []string{"https://sut.example.net/cb"}})
+				reviewApply(t, a, model.Operation{Op: model.OpAdd, Target: model.Target{Kind: model.TargetClient, ID: "app-1"}, Value: b})
+			}
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			a, h := bootOIDC(t)
+			reviewUser(t, a, "")
+			a.OIDC().Runtime().PutRefresh(oidc.Refresh{Generation: a.Store().Load().Generation, Token: "refresh", ClientID: "app-1", UserID: "u1", Username: "alice", Scope: "openid", Expires: time.Now().Add(time.Hour)})
+			restore := tc.revoke(t, a)
+			if rec := refreshWith(h, "/oauth2/token", "refresh", ""); rec.Code == http.StatusOK {
+				t.Fatal("refresh issued tokens after revocation")
+			}
+			restore()
+			if rec := refreshWith(h, "/oauth2/token", "refresh", ""); rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), `"error":"invalid_grant"`) {
+				t.Fatalf("revoked refresh grant survived: %d %s", rec.Code, rec.Body)
+			}
+		})
+	}
+}
+
+func TestHardeningRefreshStaleSnapshotKeepsNewerGrant(t *testing.T) {
+	a, h := bootOIDC(t)
+	reviewUser(t, a, "")
+	stale := a.Store().Load().Generation
+	swapSnapshot(a, func(s *snapshot.Snapshot) {
+		u := s.UsersByID["u1"]
+		u.Enabled = model.Ptr(false)
+		s.UsersByID["u1"] = u
+	})
+	// A newer generation re-enabled the user and issued this grant; a request
+	// still holding the older revoked snapshot must not consume it.
+	rt := a.OIDC().Runtime()
+	rt.InvalidateBefore(stale + 1)
+	rt.PutRefresh(oidc.Refresh{Generation: stale + 1, Token: "refresh", ClientID: "app-1", UserID: "u1", Username: "alice", Scope: "openid", Expires: time.Now().Add(time.Hour)})
+	if rec := refreshWith(h, "/oauth2/token", "refresh", ""); rec.Code != http.StatusBadRequest {
+		t.Fatalf("stale snapshot refresh = %d %s", rec.Code, rec.Body)
+	}
+	if _, ok := rt.GetRefresh("refresh"); !ok {
+		t.Fatal("stale snapshot consumed a newer grant")
 	}
 }

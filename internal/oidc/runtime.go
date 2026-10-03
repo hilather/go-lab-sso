@@ -200,6 +200,21 @@ func (r *Runtime) TakeRefresh(token string) (Refresh, bool) {
 	return t, ok
 }
 
+// RotateRefresh consumes old and stores next in one step, so a refresh grant is
+// spent only once its replacement exists and concurrent redemptions cannot
+// both succeed. Rotation keeps the row count, so it never hits the capacity bound.
+func (r *Runtime) RotateRefresh(old string, next Refresh) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	t, ok := r.refresh[old]
+	if !ok || time.Now().After(t.Expires) || (next.Generation != 0 && next.Generation < r.minimumGeneration) {
+		return false
+	}
+	delete(r.refresh, old)
+	r.refresh[next.Token] = next
+	return true
+}
+
 func (r *Runtime) PutSession(s LoginSession) LoginSession {
 	r.mu.Lock()
 	defer r.mu.Unlock()

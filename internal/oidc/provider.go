@@ -391,7 +391,7 @@ func (p *Provider) tokenCode(w http.ResponseWriter, r *http.Request, snap *snaps
 		writeTokenError(w, snap, http.StatusBadRequest, "invalid_grant", "PKCE verifier mismatch")
 		return
 	}
-	p.writeTokens(w, snap, c.ClientID, c.UserID, c.Username, c.Scope, c.Nonce, c.MFACompleted)
+	p.writeTokens(w, snap, c.ClientID, c.UserID, c.Username, c.Scope, c.Nonce, c.MFACompleted, "")
 }
 
 func (p *Provider) tokenRefresh(w http.ResponseWriter, r *http.Request, snap *snapshot.Snapshot) {
@@ -414,14 +414,10 @@ func (p *Provider) tokenRefresh(w http.ResponseWriter, r *http.Request, snap *sn
 		}
 		scope = requested
 	}
-	// Validate without consuming the grant so invalid scope requests can retry.
-	// Taking it afterwards remains atomic: concurrent redemption or revocation
-	// must win over this request, and a rejected request never restores state.
-	if _, ok := p.rt.TakeRefresh(tok); !ok {
-		writeTokenError(w, snap, http.StatusBadRequest, "invalid_grant", "")
-		return
-	}
-	p.writeTokens(w, snap, ref.ClientID, ref.UserID, ref.Username, scope, "", ref.MFACompleted)
+	// writeTokens consumes the grant only when its replacement is stored, or when
+	// the user is disabled or the client withdrew the scope, so failed issuance
+	// leaves it usable. Deleted clients fail clientFromRequest; Apply purges them.
+	p.writeTokens(w, snap, ref.ClientID, ref.UserID, ref.Username, scope, "", ref.MFACompleted, tok)
 }
 
 func (p *Provider) clientFromRequest(r *http.Request, snap *snapshot.Snapshot) (model.Client, string, error) {
@@ -461,10 +457,17 @@ func (p *Provider) clientFromRequest(r *http.Request, snap *snapshot.Snapshot) (
 	return cl, id, nil
 }
 
-func (p *Provider) writeTokens(w http.ResponseWriter, snap *snapshot.Snapshot, clientID, userID, username, scope, nonce string, mfa bool) {
+// writeTokens issues tokens and a new refresh handle. spent is the refresh
+// handle being redeemed, or "" for an authorization code.
+func (p *Provider) writeTokens(w http.ResponseWriter, snap *snapshot.Snapshot, clientID, userID, username, scope, nonce string, mfa bool, spent string) {
 	noStore(w)
 	cl, ok := snap.ClientsByClientID[clientID]
-	if !ok || !UserUsable(snap, userID) || !scopesAllowed(cl, scope) || !SessionUsable(LoginSession{MFACompleted: mfa}, snap.Canonical.Spec.Auth.MFA.Mode) || p.rt.ForceFail() || !p.rt.GenerationUsable(snap.Generation) {
+	revoked := !ok || !UserUsable(snap, userID) || !scopesAllowed(cl, scope)
+	if revoked || !SessionUsable(LoginSession{MFACompleted: mfa}, snap.Canonical.Spec.Auth.MFA.Mode) || p.rt.ForceFail() || !p.rt.GenerationUsable(snap.Generation) {
+		// A stale snapshot must not burn a grant issued under a newer generation.
+		if revoked && spent != "" && p.rt.GenerationUsable(snap.Generation) {
+			p.rt.TakeRefresh(spent)
+		}
 		writeTokenError(w, snap, http.StatusBadRequest, "invalid_grant", "")
 		return
 	}
@@ -513,7 +516,13 @@ func (p *Provider) writeTokens(w http.ResponseWriter, snap *snapshot.Snapshot, c
 		return
 	}
 	ref := randomID()
-	if !p.rt.PutRefresh(Refresh{Generation: snap.Generation, Token: ref, ClientID: clientID, UserID: userID, Username: username, Scope: scope, Expires: time.Now().Add(24 * time.Hour), MFACompleted: mfa}) {
+	row := Refresh{Generation: snap.Generation, Token: ref, ClientID: clientID, UserID: userID, Username: username, Scope: scope, Expires: time.Now().Add(24 * time.Hour), MFACompleted: mfa}
+	if spent != "" {
+		if !p.rt.RotateRefresh(spent, row) {
+			writeTokenError(w, snap, http.StatusBadRequest, "invalid_grant", "")
+			return
+		}
+	} else if !p.rt.PutRefresh(row) {
 		writeTokenError(w, snap, http.StatusServiceUnavailable, "temporarily_unavailable", "runtime capacity")
 		return
 	}

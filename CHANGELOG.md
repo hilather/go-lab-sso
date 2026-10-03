@@ -37,6 +37,7 @@ This project will use [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ### Fixed
 
+- Refresh grants are consumed only atomically with storing the rotated replacement, so a failure while issuing tokens (force-fail tunable, overage limit, signing error) no longer leaves the client with a dead refresh token; revoked users and clients still lose the grant.
 - QA follow-up: preserve refresh grants after rejected scope widening while retaining single-use rotation; perform dummy password verification for unknown/disabled usernames and equalize KDF work in mixed credential configurations; end logout GET sessions only with a valid `id_token_hint` for the session's user, otherwise require a protected confirmation POST, and validate redirects before clearing sessions or cookies.
 - Deep code/design review: prevent interleaved TOTP replay and cross-site login/consent, require a valid pending flow before authentication, and reject revoked users, clients, recipients, and protocol grants. Authentication requests retain one compiled snapshot; password and TOTP files are resolved during compilation. Strict Argon2id hash refs reject plaintext and unsalted hashes.
 - OIDC: enforce PKCE syntax and configured scopes, support refresh scope narrowing, advertise the actual RSA/ECDSA signing algorithm, derive key IDs from public keys, and prevent caching sensitive responses. Bound abandoned authentication state, rate-limit buckets, and concurrent password verification; audit rejections without credentials.
