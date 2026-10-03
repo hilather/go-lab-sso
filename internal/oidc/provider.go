@@ -679,15 +679,18 @@ func (p *Provider) logout(w http.ResponseWriter, r *http.Request) {
 	if cookie, err := r.Cookie(name); err == nil && cookie.Value != "" {
 		sess, _ = p.rt.GetSession(cookie.Value)
 	}
-	if r.Method != http.MethodPost && sess.ID != "" {
+	// A GET carrying an ID token this provider issued to the session's user logs
+	// out directly; anything else with a live session must confirm by POST.
+	hinted := r.Method == http.MethodGet && sess.ID != "" && logoutHintMatches(snap, params.Get("id_token_hint"), sess.UserID)
+	if r.Method != http.MethodPost && sess.ID != "" && !hinted {
 		writeLogoutConfirmation(w, r.URL.Path, post, state, logoutCSRF(sess.ID, r.URL.Path, post, state))
 		return
 	}
-	if r.Method == http.MethodPost {
-		if sess.ID == "" || subtle.ConstantTimeCompare([]byte(params.Get("csrf")), []byte(logoutCSRF(sess.ID, r.URL.Path, post, state))) != 1 {
-			http.Error(w, "forbidden", http.StatusForbidden)
-			return
-		}
+	if r.Method == http.MethodPost && (sess.ID == "" || subtle.ConstantTimeCompare([]byte(params.Get("csrf")), []byte(logoutCSRF(sess.ID, r.URL.Path, post, state))) != 1) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	if r.Method == http.MethodPost || hinted {
 		p.rt.ExpireSession(sess.ID)
 		http.SetCookie(w, &http.Cookie{
 			Name: name, Value: "", Path: "/", MaxAge: -1,

@@ -78,7 +78,7 @@ Paths are relative to the exact lab issuer. Hosts are **never** vendor-cloud hos
 
 Login and consent stay `/login` and `/consent` for all clothes.
 
-Every active logout path in the table also accepts POST for confirmation. GET/HEAD shows the confirmation form without clearing cookies; POST validates the session-bound form token and request origin before logout. Inactive vendor paths remain 404 for both methods.
+Every active logout path in the table also accepts POST for confirmation. GET with a valid `id_token_hint` for the session's user logs out directly. Without a valid hint, GET/HEAD shows the confirmation form without clearing cookies; POST validates the session-bound form token and request origin before logout. Inactive vendor paths remain 404 for both methods.
 
 ## `spec.profile.tenantId`
 

@@ -62,7 +62,7 @@ First implementation implements:
 | Discovery (`/.well-known/openid-configuration` plus vendor path clothes) | Required |
 | JWKS | Required |
 | UserInfo | Required |
-| RP-initiated logout | Required (active clothes path). GET/HEAD displays confirmation without changing the session; a protected POST confirms logout. `post_logout_redirect_uri` must match a registered client redirect URI; otherwise 400 without clearing the session. Missing URI returns logged-out HTML after confirmation. |
+| RP-initiated logout | Required (active clothes path). GET with a valid `id_token_hint` for the live session's user ends the session immediately. Without a valid hint, GET/HEAD displays confirmation without changing the session and a protected POST confirms logout. `post_logout_redirect_uri` must match a registered client redirect URI; otherwise 400 without clearing the session. Missing URI returns logged-out HTML. |
 | Client credentials | Out of first OIDC slice |
 | Device code | Out of first OIDC slice |
 | Implicit / hybrid | Reject |
@@ -89,7 +89,7 @@ POST {issuer}/oauth2/token
 GET  {issuer}/oauth2/jwks
 GET  {issuer}/oauth2/userinfo
 GET  {issuer}/oauth2/logout
-POST {issuer}/oauth2/logout  (confirmed logout)
+POST {issuer}/oauth2/logout  (confirmation fallback)
 GET  {issuer}/login          (HTML)
 POST {issuer}/login
 GET  {issuer}/consent        (HTML)
@@ -237,7 +237,7 @@ OIDC accepts RFC 7636 S256 challenges and 43–128 character unreserved verifier
 
 A refresh request rejected with `invalid_scope` leaves its original grant available for a corrected request. Successful refresh still consumes the old handle exactly once and returns a rotated handle; concurrent redemptions cannot both succeed.
 
-Logout GET/HEAD shows confirmation for a live session, including when reached from another site. Without a live session it may return logged-out HTML or a validated redirect, without clearing cookies. Confirmation POST requires a session-bound hidden token and passes cross-origin protection before expiring the login session and cookie. The redirect is validated before any logout side effect and checked again on confirmation; `state` is returned only with the validated redirect. Confirmation responses are not cached or frameable. Automated clients that previously relied on GET ending a session must now submit the confirmation form. This follows the user-confirmation model in [RP-Initiated Logout](https://openid.net/specs/openid-connect-rpinitiated-1_0.html#RPLogout); LabSSO does not implement hint-based silent logout or RP logout notifications.
+Logout GET with a valid `id_token_hint` ends the live session and expires its cookie immediately, then follows the validated redirect or returns logged-out HTML. A hint is valid when its signature and `iss` verify against this provider's signing key and exact issuer, it is not expired, it is an ID token (not an access token), its `aud` names a registered client, and its `sub` is the live session's user. Expired hints are not accepted: the shared JWT verifier enforces `exp`, so an expired hint falls back to confirmation rather than failing. GET without a hint, with an invalid or mismatched hint, or any HEAD, shows confirmation for a live session without changing it, including when reached from another site. Confirmation POST requires a session-bound hidden token and passes cross-origin protection before expiring the login session and cookie. Without a live session, GET returns logged-out HTML or a validated redirect, without clearing cookies. The redirect is validated before any logout side effect and checked again on confirmation; `state` is returned only with the validated redirect. Confirmation responses are not cached or frameable. This follows [RP-Initiated Logout](https://openid.net/specs/openid-connect-rpinitiated-1_0.html#RPLogout); LabSSO does not implement RP logout notifications.
 
 Discovery reflects the loaded signing key: RSA uses RS256; P-256, P-384, and P-521 use ES256, ES384, and ES512. JWKS and JWT key IDs are stable SHA-256 public-key thumbprints and change when the key changes.
 

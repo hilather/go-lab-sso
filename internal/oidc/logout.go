@@ -7,6 +7,8 @@ import (
 	"encoding/hex"
 	"html/template"
 	"net/http"
+
+	"github.com/hilather/go-lab-sso/internal/snapshot"
 )
 
 // logoutCSRF binds confirmation to the live session and the complete logout
@@ -15,6 +17,32 @@ func logoutCSRF(sessionID, path, redirect, state string) string {
 	mac := hmac.New(sha256.New, []byte(sessionID))
 	_, _ = mac.Write([]byte("labsso/logout/v1\x00" + path + "\x00" + redirect + "\x00" + state))
 	return hex.EncodeToString(mac.Sum(nil))
+}
+
+// logoutHintMatches reports whether hint is an unexpired ID token signed by this
+// provider for a registered client and issued to the session's user. Expired
+// hints fail parseAndVerifyExtra and fall back to confirmation.
+func logoutHintMatches(snap *snapshot.Snapshot, hint, userID string) bool {
+	if hint == "" || userID == "" {
+		return false
+	}
+	sig, err := newSigner(snap.SigningKey)
+	if err != nil {
+		return false
+	}
+	c, extra, err := parseAndVerifyExtra(hint, sig.jwk, snap.Issuer, false)
+	if err != nil || c.Subject != userID {
+		return false
+	}
+	if use, _ := extra["token_use"].(string); use != "" {
+		return false
+	}
+	for _, aud := range c.Audience {
+		if _, ok := snap.ClientsByClientID[aud]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 var logoutConfirmation = template.Must(template.New("logout").Parse(`<!doctype html>
