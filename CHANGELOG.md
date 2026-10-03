@@ -37,7 +37,7 @@ This project will use [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ### Changed
 
-- Token errors caused by force-fail (the `auth:force-fail` tunable or `mfa.mode: force-fail`) now carry `error_description: "force-fail"`, matching authorize, so a grant-keeping denial is distinguishable from a consumed grant. Status and `error` stay `400 invalid_grant`; `token:pause` remains the `503 temporarily_unavailable` simulation.
+- Token errors caused by force-fail (the `auth:force-fail` tunable or `mfa.mode: force-fail`) now carry `error_description: "force-fail"`, matching authorize, so a refresh denial that keeps the grant is distinguishable from a consumed grant (an authorization code is single-use and is spent either way). Status and `error` stay `400 invalid_grant`; `token:pause` remains the `503 temporarily_unavailable` simulation.
 
 ### Fixed
 
