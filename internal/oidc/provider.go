@@ -415,7 +415,8 @@ func (p *Provider) tokenRefresh(w http.ResponseWriter, r *http.Request, snap *sn
 		scope = requested
 	}
 	// writeTokens consumes the grant only when its replacement is stored, or when
-	// the user or client has revoked it, so failed issuance leaves it usable.
+	// the user is disabled or the client withdrew the scope, so failed issuance
+	// leaves it usable. Deleted clients fail clientFromRequest; Apply purges them.
 	p.writeTokens(w, snap, ref.ClientID, ref.UserID, ref.Username, scope, "", ref.MFACompleted, tok)
 }
 

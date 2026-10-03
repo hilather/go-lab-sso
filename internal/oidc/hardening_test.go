@@ -335,17 +335,17 @@ func refreshWith(h http.Handler, path, token, scope string) *httptest.ResponseRe
 
 func TestHardeningRefreshSurvivesIssueFailure(t *testing.T) {
 	for _, tc := range []struct {
-		name, vendor, path, scope string
-		groups, wantCode          int
-		fail, recover             func(*testing.T, *app.App)
+		name, vendor, path, scope, wantError string
+		groups, wantCode                     int
+		fail, recover                        func(*testing.T, *app.App)
 	}{
 		{
-			name: "force-fail tunable", path: "/oauth2/token", scope: "openid", wantCode: http.StatusBadRequest,
+			name: "force-fail tunable", path: "/oauth2/token", scope: "openid", wantCode: http.StatusBadRequest, wantError: `"error":"invalid_grant"`,
 			fail:    func(_ *testing.T, a *app.App) { a.OIDC().Runtime().SetForceFail(true) },
 			recover: func(_ *testing.T, a *app.App) { a.OIDC().Runtime().SetForceFail(false) },
 		},
 		{
-			name: "okta overage", vendor: "okta", path: "/oauth2/default/v1/token", scope: "openid groups", groups: 100, wantCode: http.StatusBadRequest,
+			name: "okta overage", vendor: "okta", path: "/oauth2/default/v1/token", scope: "openid groups", groups: 100, wantCode: http.StatusBadRequest, wantError: "okta overage",
 			fail: func(*testing.T, *app.App) {},
 			recover: func(t *testing.T, a *app.App) {
 				failAt := 200
@@ -357,7 +357,7 @@ func TestHardeningRefreshSurvivesIssueFailure(t *testing.T) {
 		{
 			// Signing-key changes purge grants through Apply; the swap only
 			// exercises the signer error path after validation.
-			name: "signer error", path: "/oauth2/token", scope: "openid", wantCode: http.StatusInternalServerError,
+			name: "signer error", path: "/oauth2/token", scope: "openid", wantCode: http.StatusInternalServerError, wantError: `"error":"server_error"`,
 			fail: func(_ *testing.T, a *app.App) {
 				swapSnapshot(a, func(s *snapshot.Snapshot) { s.SigningKey = []byte("not a key") })
 			},
@@ -376,7 +376,7 @@ func TestHardeningRefreshSurvivesIssueFailure(t *testing.T) {
 			good := a.Store().Load()
 			a.OIDC().Runtime().PutRefresh(oidc.Refresh{Generation: good.Generation, Token: "refresh", ClientID: "app-1", UserID: "u1", Username: "alice", Scope: tc.scope, Expires: time.Now().Add(time.Hour)})
 			tc.fail(t, a)
-			if rec := refreshWith(h, tc.path, "refresh", ""); rec.Code != tc.wantCode {
+			if rec := refreshWith(h, tc.path, "refresh", ""); rec.Code != tc.wantCode || !strings.Contains(rec.Body.String(), tc.wantError) {
 				t.Fatalf("failing refresh = %d %s", rec.Code, rec.Body)
 			}
 			if tc.recover != nil {
@@ -416,6 +416,8 @@ func TestHardeningRefreshRevokedLosesGrant(t *testing.T) {
 			})
 			return func() { a.Store().Swap(old) }
 		}},
+		// The Apply cases are end-to-end regressions: Apply purges every refresh
+		// row before the request reaches writeTokens.
 		{name: "user disabled by apply", revoke: func(t *testing.T, a *app.App) func() {
 			b, _ := json.Marshal(model.User{ID: "u1", Username: "alice", PasswordRef: "testdata/secrets/users/alice.password", Enabled: model.Ptr(false)})
 			reviewApply(t, a, model.Operation{Op: model.OpUpdate, Target: model.Target{Kind: model.TargetUser, ID: "u1"}, Value: b})
@@ -445,5 +447,27 @@ func TestHardeningRefreshRevokedLosesGrant(t *testing.T) {
 				t.Fatalf("revoked refresh grant survived: %d %s", rec.Code, rec.Body)
 			}
 		})
+	}
+}
+
+func TestHardeningRefreshStaleSnapshotKeepsNewerGrant(t *testing.T) {
+	a, h := bootOIDC(t)
+	reviewUser(t, a, "")
+	stale := a.Store().Load().Generation
+	swapSnapshot(a, func(s *snapshot.Snapshot) {
+		u := s.UsersByID["u1"]
+		u.Enabled = model.Ptr(false)
+		s.UsersByID["u1"] = u
+	})
+	// A newer generation re-enabled the user and issued this grant; a request
+	// still holding the older revoked snapshot must not consume it.
+	rt := a.OIDC().Runtime()
+	rt.InvalidateBefore(stale + 1)
+	rt.PutRefresh(oidc.Refresh{Generation: stale + 1, Token: "refresh", ClientID: "app-1", UserID: "u1", Username: "alice", Scope: "openid", Expires: time.Now().Add(time.Hour)})
+	if rec := refreshWith(h, "/oauth2/token", "refresh", ""); rec.Code != http.StatusBadRequest {
+		t.Fatalf("stale snapshot refresh = %d %s", rec.Code, rec.Body)
+	}
+	if _, ok := rt.GetRefresh("refresh"); !ok {
+		t.Fatal("stale snapshot consumed a newer grant")
 	}
 }
