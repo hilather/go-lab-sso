@@ -216,3 +216,30 @@ func TestStaleTOTPVerificationDoesNotPoisonFreshLedger(t *testing.T) {
 		t.Fatal("current generation replay admitted")
 	}
 }
+
+func TestRuntimeRotateRefresh(t *testing.T) {
+	r := NewRuntime()
+	live := time.Now().Add(time.Hour)
+	r.PutRefresh(Refresh{Token: "old", Expires: live})
+	if !r.RotateRefresh("old", Refresh{Token: "new", Expires: live}) {
+		t.Fatal("first rotation failed")
+	}
+	if r.RotateRefresh("old", Refresh{Token: "again", Expires: live}) {
+		t.Fatal("second rotation of the same grant succeeded")
+	}
+	if _, ok := r.GetRefresh("new"); !ok || len(r.refresh) != 1 {
+		t.Fatalf("rotation left %d rows", len(r.refresh))
+	}
+	r.refresh["expired"] = Refresh{Token: "expired", Expires: time.Now().Add(-time.Second)}
+	if r.RotateRefresh("expired", Refresh{Token: "x", Expires: live}) {
+		t.Fatal("expired grant rotated")
+	}
+	r.InvalidateBefore(3)
+	r.PutRefresh(Refresh{Generation: 3, Token: "current", Expires: live})
+	if r.RotateRefresh("current", Refresh{Generation: 2, Token: "stale", Expires: live}) {
+		t.Fatal("stale generation rotated")
+	}
+	if _, ok := r.GetRefresh("current"); !ok {
+		t.Fatal("rejected rotation consumed the grant")
+	}
+}
