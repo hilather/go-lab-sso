@@ -1,10 +1,13 @@
 package rest
 
 import (
+	"bytes"
+	"context"
 	"crypto/subtle"
 	"encoding/json"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/hilather/go-lab-sso/internal/app"
@@ -77,7 +80,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST "+p+"/import:apply", s.authed(s.importApply))
 	mux.HandleFunc("POST "+p+"/tunables/client/redirect:rewrite", s.authed(s.rewriteRedirect))
 	mux.Handle("GET /{$}", web.Handler(s.app.UIEnabled))
-	mux.Handle("GET /app.js", web.Script())
+	mux.Handle("GET /app.js", web.Script(s.restPath))
 	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !auth.LoopbackHostAllowed(r.RemoteAddr, r.Host) {
 			http.Error(w, "forbidden host", http.StatusForbidden)
@@ -131,9 +134,12 @@ func (s *Server) authed(fn func(http.ResponseWriter, *http.Request, auth.Actor))
 	return func(w http.ResponseWriter, r *http.Request) {
 		actor, err := s.authenticate(w, r)
 		if err != nil {
+			s.app.Audit().EmitDenied(auth.Actor{Class: "anonymous"}, "sso.management.authenticate", err)
 			writeError(w, err)
 			return
 		}
+		actor.Transport = "rest"
+		r = r.WithContext(context.WithValue(r.Context(), decodeRejectKey{}, func(err error) { s.app.RejectInput(actor, err) }))
 		fn(w, r, actor)
 	}
 }
@@ -196,24 +202,34 @@ func (s *Server) state(w http.ResponseWriter, _ *http.Request, actor auth.Actor)
 	writeJSON(w, http.StatusOK, out)
 }
 
-func (s *Server) export(w http.ResponseWriter, _ *http.Request, actor auth.Actor) {
-	out, err := s.app.Export(actor)
+func (s *Server) export(w http.ResponseWriter, r *http.Request, actor auth.Actor) {
+	out, err := s.app.Export(actor, r.URL.Query().Get("format"))
 	if err != nil {
 		writeError(w, err)
 		return
 	}
-	w.Header().Set("Content-Type", "application/yaml")
+	contentType := "application/yaml"
+	if out.Format == "json" {
+		contentType = "application/json"
+	}
+	w.Header().Set("Content-Type", contentType)
 	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(out.YAML)
+	_, _ = w.Write(out.Data)
 }
 
 func (s *Server) validate(w http.ResponseWriter, r *http.Request, actor auth.Actor) {
-	in, err := decodeChange(r)
-	if err != nil {
+	var in struct {
+		Document         *model.Document   `json:"document,omitempty"`
+		Operations       []model.Operation `json:"operations,omitempty"`
+		ExpectedRevision string            `json:"expectedRevision,omitempty"`
+		Reason           string            `json:"reason,omitempty"`
+		IdempotencyKey   string            `json:"idempotencyKey,omitempty"`
+	}
+	if err := decodeJSON(r, &in); err != nil {
 		writeError(w, err)
 		return
 	}
-	out, err := s.app.Validate(actor, app.ValidateIn{Operations: in.Operations})
+	out, err := s.app.Validate(actor, app.ValidateIn{Document: in.Document, Operations: in.Operations})
 	if err != nil {
 		writeError(w, err)
 		return
@@ -251,13 +267,26 @@ func (s *Server) apply(w http.ResponseWriter, r *http.Request, actor auth.Actor)
 
 func (s *Server) reset(w http.ResponseWriter, r *http.Request, actor auth.Actor) {
 	var body struct {
-		Reason string `json:"reason"`
+		Reason           string `json:"reason"`
+		ExpectedRevision string `json:"expectedRevision,omitempty"`
+		IdempotencyKey   string `json:"idempotencyKey,omitempty"`
+		DryRun           bool   `json:"dryRun,omitempty"`
 	}
 	if err := decodeJSON(r, &body); err != nil {
 		writeError(w, err)
 		return
 	}
-	out, err := s.app.Reset(actor, app.ResetIn{Reason: body.Reason})
+	expected, key := body.ExpectedRevision, body.IdempotencyKey
+	if expected == "" {
+		expected = strings.Trim(r.Header.Get(headerIfMatch), `"`)
+	}
+	if expected == "" {
+		expected = r.Header.Get(headerExpected)
+	}
+	if key == "" {
+		key = r.Header.Get(headerIdempotency)
+	}
+	out, err := s.app.Reset(actor, app.ResetIn{Reason: body.Reason, ExpectedRevision: expected, IdempotencyKey: key, DryRun: body.DryRun})
 	if err != nil {
 		writeError(w, err)
 		return
@@ -265,13 +294,18 @@ func (s *Server) reset(w http.ResponseWriter, r *http.Request, actor auth.Actor)
 	writeJSON(w, http.StatusOK, out)
 }
 
-func (s *Server) clients(w http.ResponseWriter, _ *http.Request, actor auth.Actor) {
-	out, err := s.app.ListClients(actor)
+func (s *Server) clients(w http.ResponseWriter, r *http.Request, actor auth.Actor) {
+	in, err := listInput(r)
 	if err != nil {
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": out})
+	out, err := s.app.PageClients(actor, in)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 func (s *Server) clientGet(w http.ResponseWriter, r *http.Request, actor auth.Actor) {
@@ -283,13 +317,18 @@ func (s *Server) clientGet(w http.ResponseWriter, r *http.Request, actor auth.Ac
 	writeJSON(w, http.StatusOK, out)
 }
 
-func (s *Server) users(w http.ResponseWriter, _ *http.Request, actor auth.Actor) {
-	out, err := s.app.ListUsers(actor)
+func (s *Server) users(w http.ResponseWriter, r *http.Request, actor auth.Actor) {
+	in, err := listInput(r)
 	if err != nil {
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": out})
+	out, err := s.app.PageUsers(actor, in)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 func (s *Server) userGet(w http.ResponseWriter, r *http.Request, actor auth.Actor) {
@@ -367,25 +406,42 @@ func (s *Server) totpClear(w http.ResponseWriter, r *http.Request, actor auth.Ac
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
-func (s *Server) groups(w http.ResponseWriter, _ *http.Request, actor auth.Actor) {
-	out, err := s.app.ListGroups(actor)
+func (s *Server) groups(w http.ResponseWriter, r *http.Request, actor auth.Actor) {
+	in, err := listInput(r)
 	if err != nil {
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": out})
+	out, err := s.app.PageGroups(actor, in)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
-func (s *Server) sessions(w http.ResponseWriter, _ *http.Request, actor auth.Actor) {
-	out, err := s.app.ListSessions(actor)
+func (s *Server) sessions(w http.ResponseWriter, r *http.Request, actor auth.Actor) {
+	in, err := listInput(r)
 	if err != nil {
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": out})
+	out, err := s.app.PageSessions(actor, in)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 func (s *Server) sessionExpire(w http.ResponseWriter, r *http.Request, actor auth.Actor) {
+	var body struct {
+		Reason string `json:"reason,omitempty"`
+	}
+	if err := decodeOptionalJSON(r, &body); err != nil {
+		writeError(w, err)
+		return
+	}
 	if !strings.HasSuffix(r.URL.Path, ":expire") {
 		writeError(w, domainerr.Validation("use POST /v1/sessions/{id}:expire"))
 		return
@@ -395,23 +451,37 @@ func (s *Server) sessionExpire(w http.ResponseWriter, r *http.Request, actor aut
 		writeError(w, domainerr.Validation("session id required"))
 		return
 	}
-	if err := s.app.ExpireSession(actor, id); err != nil {
+	if err := s.app.ExpireSession(actor, id, body.Reason); err != nil {
 		writeError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
-func (s *Server) pauseToken(w http.ResponseWriter, _ *http.Request, actor auth.Actor) {
-	if err := s.app.PauseToken(actor); err != nil {
+func (s *Server) pauseToken(w http.ResponseWriter, r *http.Request, actor auth.Actor) {
+	var body struct {
+		Reason string `json:"reason,omitempty"`
+	}
+	if err := decodeOptionalJSON(r, &body); err != nil {
+		writeError(w, err)
+		return
+	}
+	if err := s.app.PauseToken(actor, body.Reason); err != nil {
 		writeError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"paused": true})
 }
 
-func (s *Server) resumeToken(w http.ResponseWriter, _ *http.Request, actor auth.Actor) {
-	if err := s.app.ResumeToken(actor); err != nil {
+func (s *Server) resumeToken(w http.ResponseWriter, r *http.Request, actor auth.Actor) {
+	var body struct {
+		Reason string `json:"reason,omitempty"`
+	}
+	if err := decodeOptionalJSON(r, &body); err != nil {
+		writeError(w, err)
+		return
+	}
+	if err := s.app.ResumeToken(actor, body.Reason); err != nil {
 		writeError(w, err)
 		return
 	}
@@ -420,13 +490,14 @@ func (s *Server) resumeToken(w http.ResponseWriter, _ *http.Request, actor auth.
 
 func (s *Server) forceFail(w http.ResponseWriter, r *http.Request, actor auth.Actor) {
 	var body struct {
-		On bool `json:"on"`
+		Reason string `json:"reason,omitempty"`
+		On     bool   `json:"on"`
 	}
 	if err := decodeJSON(r, &body); err != nil {
 		writeError(w, err)
 		return
 	}
-	if err := s.app.ForceFail(actor, body.On); err != nil {
+	if err := s.app.ForceFail(actor, body.On, body.Reason); err != nil {
 		writeError(w, err)
 		return
 	}
@@ -507,13 +578,14 @@ func (s *Server) setOverage(w http.ResponseWriter, r *http.Request, actor auth.A
 
 func (s *Server) forceConsent(w http.ResponseWriter, r *http.Request, actor auth.Actor) {
 	var body struct {
-		On bool `json:"on"`
+		Reason string `json:"reason,omitempty"`
+		On     bool   `json:"on"`
 	}
 	if err := decodeJSON(r, &body); err != nil {
 		writeError(w, err)
 		return
 	}
-	if err := s.app.ForceConsent(actor, body.On); err != nil {
+	if err := s.app.ForceConsent(actor, body.On, body.Reason); err != nil {
 		writeError(w, err)
 		return
 	}
@@ -540,13 +612,14 @@ func (s *Server) mintToken(w http.ResponseWriter, r *http.Request, actor auth.Ac
 
 func (s *Server) injectError(w http.ResponseWriter, r *http.Request, actor auth.Actor) {
 	var body struct {
-		Code string `json:"code"`
+		Reason string `json:"reason,omitempty"`
+		Code   string `json:"code"`
 	}
 	if err := decodeJSON(r, &body); err != nil {
 		writeError(w, err)
 		return
 	}
-	if err := s.app.InjectError(actor, body.Code); err != nil {
+	if err := s.app.InjectError(actor, body.Code, body.Reason); err != nil {
 		writeError(w, err)
 		return
 	}
@@ -554,6 +627,10 @@ func (s *Server) injectError(w http.ResponseWriter, r *http.Request, actor auth.
 }
 
 func (s *Server) sessionCreate(w http.ResponseWriter, r *http.Request, actor auth.Actor) {
+	if err := decodeOptionalJSON(r, &struct{}{}); err != nil {
+		writeError(w, err)
+		return
+	}
 	sess, err := s.app.CreateOperatorSession(actor)
 	if err != nil {
 		writeError(w, err)
@@ -588,6 +665,10 @@ func (s *Server) sessionGet(w http.ResponseWriter, r *http.Request, actor auth.A
 }
 
 func (s *Server) sessionDelete(w http.ResponseWriter, r *http.Request, actor auth.Actor) {
+	if err := decodeOptionalJSON(r, &struct{}{}); err != nil {
+		writeError(w, err)
+		return
+	}
 	id := ""
 	if c, err := r.Cookie(auth.CookieSession); err == nil {
 		id = c.Value
@@ -601,7 +682,12 @@ func (s *Server) sessionDelete(w http.ResponseWriter, r *http.Request, actor aut
 }
 
 func (s *Server) auditList(w http.ResponseWriter, r *http.Request, actor auth.Actor) {
-	out, err := s.app.ListAudit(actor)
+	in, err := listInput(r)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	out, err := s.app.PageAudit(actor, in)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -706,7 +792,14 @@ func (s *Server) rewriteRedirect(w http.ResponseWriter, r *http.Request, actor a
 }
 
 func (s *Server) expireAll(w http.ResponseWriter, r *http.Request, actor auth.Actor) {
-	n, err := s.app.ExpireAllSessions(actor)
+	var body struct {
+		Reason string `json:"reason,omitempty"`
+	}
+	if err := decodeOptionalJSON(r, &body); err != nil {
+		writeError(w, err)
+		return
+	}
+	n, err := s.app.ExpireAllSessions(actor, body.Reason)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -754,16 +847,34 @@ func decodeChange(r *http.Request) (app.ChangeIn, error) {
 	}, nil
 }
 
-func decodeJSON(r *http.Request, dst any) error {
-	if r.Body == nil {
-		return nil
-	}
-	dec := json.NewDecoder(io.LimitReader(r.Body, MaxBodyBytes))
-	if err := dec.Decode(dst); err != nil && err != io.EOF {
-		if err.Error() == "http: request body too large" {
-			return domainerr.Validation("request body exceeds 1 MiB")
+type decodeRejectKey struct{}
+
+func decodeJSON(r *http.Request, dst any) (retErr error) {
+	defer func() {
+		if retErr != nil {
+			if reject, ok := r.Context().Value(decodeRejectKey{}).(func(error)); ok {
+				reject(retErr)
+			}
 		}
+	}()
+	if r.Body == nil {
+		return domainerr.Validation("JSON object body is required")
+	}
+	b, err := io.ReadAll(io.LimitReader(r.Body, MaxBodyBytes+1))
+	if err != nil || len(b) > MaxBodyBytes {
+		return domainerr.Validation("request body exceeds 1 MiB")
+	}
+	if len(bytes.TrimSpace(b)) == 0 || bytes.TrimSpace(b)[0] != '{' {
+		return domainerr.Validation("JSON object body is required")
+	}
+	dec := json.NewDecoder(bytes.NewReader(b))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(dst); err != nil {
 		return domainerr.Validation("invalid JSON: " + err.Error())
+	}
+	var trailing any
+	if err := dec.Decode(&trailing); err != io.EOF {
+		return domainerr.Validation("request must contain one JSON object")
 	}
 	return nil
 }
@@ -802,4 +913,31 @@ func writeError(w http.ResponseWriter, err error) {
 		"code":   dcode,
 		"detail": msg,
 	})
+}
+
+func decodeOptionalJSON(r *http.Request, dst any) error {
+	if r.Body == nil {
+		return nil
+	}
+	b, err := io.ReadAll(io.LimitReader(r.Body, MaxBodyBytes+1))
+	if err != nil || len(b) > MaxBodyBytes {
+		return domainerr.Validation("request body exceeds 1 MiB")
+	}
+	if len(bytes.TrimSpace(b)) == 0 {
+		return nil
+	}
+	r.Body = io.NopCloser(bytes.NewReader(b))
+	return decodeJSON(r, dst)
+}
+
+func listInput(r *http.Request) (app.ListIn, error) {
+	in := app.ListIn{Cursor: r.URL.Query().Get("cursor")}
+	if raw := r.URL.Query().Get("limit"); raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err != nil || n < 1 || n > 1000 {
+			return in, domainerr.Validation("limit must be between 1 and 1000")
+		}
+		in.Limit = n
+	}
+	return in, nil
 }

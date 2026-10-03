@@ -2,7 +2,7 @@
 
 Status: FND catalog + REST/MCP + UI-001 session/audit adapters; `make test-parity` is the cross-transport gate
 Owners: Application, REST, MCP, UI
-Last reviewed: 2026-09-01
+Last reviewed: 2026-10-03
 Related ADRs: 0004
 
 ## Problem statement
@@ -56,7 +56,7 @@ Disposition is **derived** from `RESTOnly`: `RESTOnly` → `REST_ONLY_PROTOCOL`,
 - Every MCP mutation tool has a REST operation.
 - REST GET representations may map to MCP resources or read tools.
 - Status codes and JSON-RPC codes differ by transport, but domain error codes and error data match.
-- Pagination, filtering, revisions, and authorization semantics match.
+- Pagination, revisions and authorization semantics match. Filtering is not implemented.
 - Default values are applied in the shared application layer.
 - Audit records identify the original transport but otherwise use the same event schema.
 - Data-plane login HTML is **not** a management capability and is not in this registry.
@@ -187,3 +187,15 @@ Capability names and schema versions are stable public surfaces. Renaming an MCP
 
 - Exact tunable URL spellings (`/v1/tunables/token:pause` vs operation list). Freeze in API-001.
 - Whether import is two capabilities or `changes:plan` with `op: import`.
+
+## Implemented retry and lifecycle behavior
+
+Apply replay keys are bounded LRU entries scoped by actor class/ID and capability. Fingerprints canonicalize JSON object ordering and include the original typed input (including omitted versus supplied pointer fields). Replay is checked before merging current state, revision validation or target lookup; unrelated changes and target removal cannot turn a valid retry into a new mutation. Plan caching remains revision-bound and separate from applied replay.
+
+Apply compiles one complete candidate and uses that same candidate for both plan and atomic swap. Security-sensitive client/user/auth/protocol/access/signing/issuer changes and changed compiled credentials (including same-ref file rotation) revoke protocol handles before activation; runtime/TOTP cleanup finishes before publication, with generation guards preventing stale requests from recreating them; vendor changes purge protocol handles, tenant metadata changes alone do not. Reset drops protocol runtime and TOTP overlays. TOTP enrollment/clear serialize with desired-state mutations. Readiness flags are atomic.
+
+Rejected apply/reset/import events, malformed REST/MCP inputs and denied management authentication expose only stable error codes and actor/category metadata, never rejected bodies, bearer values or imported documents. Adapter actors carry REST/MCP transport into success/denial audits. Ephemeral legacy bodyless calls retain deterministic audit reasons; supplied operator reasons are recorded. This compatibility exception remains distinct from required reasons/revisions on desired-state mutations.
+
+## Generated contract coverage
+
+The source-driven generator derives a real configuration JSON Schema from model types and produces catalog/binding artifacts from `capabilities.Catalog`. Generation verification fails on stale outputs. Configuration schema covers structure/default hints; full compiler semantics remain authoritative. Full OpenAPI and per-capability input/output schema generation remain unfinished and are not represented by the binding manifest. Shared paginated list methods and YAML/JSON export are exercised by REST/MCP parity tests.

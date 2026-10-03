@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/hilather/go-lab-sso/internal/audit"
+	"strings"
 
 	"github.com/hilather/go-lab-sso/internal/auth"
 	"github.com/hilather/go-lab-sso/internal/compiler"
@@ -19,6 +21,7 @@ func (a *App) Plan(actor auth.Actor, in ChangeIn) (*Plan, error) {
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	in.IdempotencyKey = scopedKey(actor, "sso.change.plan", in.IdempotencyKey)
 	return a.planLocked(in)
 }
 
@@ -31,39 +34,45 @@ func (a *App) Apply(actor auth.Actor, in ChangeIn) (*ApplyResult, error) {
 	return a.applyLocked(actor, "sso.change.apply", in)
 }
 
-func (a *App) applyLocked(actor auth.Actor, capID string, in ChangeIn) (*ApplyResult, error) {
+func (a *App) applyLocked(actor auth.Actor, capID string, in ChangeIn) (result *ApplyResult, retErr error) {
+	defer func() {
+		if retErr != nil {
+			a.audit.Emit(audit.Event{ActorID: actor.ID, ActorClass: actor.Class, Transport: actor.Transport, Capability: capID, Result: audit.ResultError, ErrorCode: domainerr.CodeOf(retErr)})
+		}
+	}()
+	if strings.TrimSpace(in.Reason) == "" {
+		return nil, domainerr.Validation("reason is required")
+	}
 	fp, err := fingerprintChange(in)
 	if err != nil {
 		return nil, err
 	}
-	if hit, err := a.idemp.lookup(in.IdempotencyKey, fp); err != nil {
+	if hit, err := a.idemp.lookup(scopedKey(actor, capID, in.IdempotencyKey), fp); err != nil {
 		return nil, err
 	} else if hit != nil && hit.res != nil {
 		out := *hit.res
 		return &out, nil
 	}
-	p, err := a.planLocked(in)
-	if err != nil {
-		return nil, err
-	}
 	cand, err := a.buildCandidate(in, true)
 	if err != nil {
 		return nil, err
 	}
-	prev := a.store.Swap(cand)
-	if vendorChanged(prev, cand) && a.oidc != nil {
-		a.oidc.Runtime().PurgeProtocol()
+	prev := a.store.Load()
+	p := planFrom(prev, cand, in.Operations)
+	if a.oidc != nil && securityChanged(prev, cand) {
+		a.oidc.Runtime().InvalidateBefore(cand.Generation)
 	}
 	if a.oidc != nil {
 		a.syncTOTPOverlay(prev, cand)
 	}
+	a.store.Swap(cand)
 	res := &ApplyResult{Plan: *p, Applied: true, Generation: cand.Generation}
 	prevRev := ""
 	if prev != nil {
 		prevRev = prev.Revision
 	}
 	res.AuditEventID = a.audit.EmitOK(actor, capID, in.Reason, cand.Revision, prevRev)
-	a.idemp.store(in.IdempotencyKey, fp, p, res)
+	a.idemp.store(scopedKey(actor, capID, in.IdempotencyKey), fp, p, res)
 	return res, nil
 }
 
@@ -174,7 +183,14 @@ func (a *App) buildCandidate(in ChangeIn, requireRev bool) (*snapshot.Snapshot, 
 	if err := applyOperations(&base, in.Operations); err != nil {
 		return nil, err
 	}
-	return compiler.Compile(base, a.compileOpts(prev.Generation+1, prev.BootstrapRevision))
+	next, err := compiler.Compile(base, a.compileOpts(prev.Generation+1, prev.BootstrapRevision))
+	if err != nil {
+		return nil, err
+	}
+	if err := a.validateLiveListeners(prev, next); err != nil {
+		return nil, err
+	}
+	return next, nil
 }
 
 func planFrom(prev, next *snapshot.Snapshot, ops []model.Operation) *Plan {
@@ -243,4 +259,24 @@ func (a *App) InstallBootstrapFile() (*snapshot.Snapshot, error) {
 		return nil, fmt.Errorf("install bootstrap failed")
 	}
 	return snap, nil
+}
+
+// Binding and route changes cannot be activated by a snapshot swap.
+func (a *App) validateLiveListeners(prev, next *snapshot.Snapshot) error {
+	if !a.requireHTTPS.Load() || prev == nil || next == nil || prev.Canonical == nil || next.Canonical == nil {
+		return nil
+	}
+	before, after := prev.Canonical.Spec.Listeners, next.Canonical.Spec.Listeners
+	if before.HTTPS.Address != after.HTTPS.Address || before.Management.Address != after.Management.Address || before.Management.RESTPath != after.Management.RESTPath || before.Management.MCPPath != after.Management.MCPPath || before.Management.MCP.AllowLegacyClients != after.Management.MCP.AllowLegacyClients {
+		return domainerr.Validation("listener addresses, management paths and MCP legacy policy require restart; active snapshot unchanged")
+	}
+	return nil
+}
+
+func securityChanged(prev, next *snapshot.Snapshot) bool {
+	if prev == nil || next == nil || prev.Canonical == nil || next.Canonical == nil {
+		return false
+	}
+	b, n := prev.Canonical.Spec, next.Canonical.Spec
+	return !prev.SecurityEqual(next) || vendorChanged(prev, next) || b.Issuer != n.Issuer || sliceChanged(b.Users, n.Users) || sliceChanged(b.Clients, n.Clients) || sliceChanged([]model.Auth{b.Auth}, []model.Auth{n.Auth}) || sliceChanged([]model.Protocols{b.Protocols}, []model.Protocols{n.Protocols}) || sliceChanged([]model.Access{b.Access}, []model.Access{n.Access}) || sliceChanged([]model.Signing{b.Signing}, []model.Signing{n.Signing})
 }

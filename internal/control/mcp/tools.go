@@ -3,25 +3,31 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"github.com/hilather/go-lab-sso/internal/contracts"
 	"strings"
 
 	"github.com/hilather/go-lab-sso/internal/app"
 	"github.com/hilather/go-lab-sso/internal/auth"
 	"github.com/hilather/go-lab-sso/internal/domainerr"
 	"github.com/hilather/go-lab-sso/internal/model"
+	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 type emptyIn struct{}
+
+type reasonIn struct {
+	Reason string `json:"reason,omitempty"`
+}
 
 type idIn struct {
 	ID string `json:"id"`
 }
 
 type mcpOp struct {
-	Op     model.OpKind `json:"op"`
-	Target model.Target `json:"target"`
-	Value  any          `json:"value,omitempty"`
+	Op     model.OpKind    `json:"op"`
+	Target model.Target    `json:"target"`
+	Value  json.RawMessage `json:"value,omitempty"`
 }
 
 type changeIn struct {
@@ -52,8 +58,19 @@ func (in changeIn) toApp() (app.ChangeIn, error) {
 	}, nil
 }
 
+type validateIn struct {
+	Document         *model.Document `json:"document,omitempty"`
+	ExpectedRevision string          `json:"expectedRevision,omitempty"`
+	Reason           string          `json:"reason,omitempty"`
+	IdempotencyKey   string          `json:"idempotencyKey,omitempty"`
+	Operations       []mcpOp         `json:"operations,omitempty"`
+}
+
 type resetIn struct {
-	Reason string `json:"reason,omitempty"`
+	ExpectedRevision string `json:"expectedRevision,omitempty"`
+	IdempotencyKey   string `json:"idempotencyKey,omitempty"`
+	DryRun           bool   `json:"dryRun,omitempty"`
+	Reason           string `json:"reason,omitempty"`
 }
 
 func (s *Server) registerTools() {
@@ -72,12 +89,12 @@ func (s *Server) registerTools() {
 	add(s, "sso_state_get", false, true, func(ctx context.Context, actor auth.Actor, _ emptyIn) (any, error) {
 		return s.app.GetState(actor)
 	})
-	add(s, "sso_state_validate", false, true, func(ctx context.Context, actor auth.Actor, in changeIn) (any, error) {
-		cin, err := in.toApp()
+	add(s, "sso_state_validate", false, true, func(ctx context.Context, actor auth.Actor, in validateIn) (any, error) {
+		cin, err := (changeIn{Operations: in.Operations}).toApp()
 		if err != nil {
 			return nil, err
 		}
-		return s.app.Validate(actor, app.ValidateIn{Operations: cin.Operations})
+		return s.app.Validate(actor, app.ValidateIn{Document: in.Document, Operations: cin.Operations})
 	})
 	add(s, "sso_change_plan", false, true, func(ctx context.Context, actor auth.Actor, in changeIn) (any, error) {
 		cin, err := in.toApp()
@@ -93,24 +110,29 @@ func (s *Server) registerTools() {
 		}
 		return s.app.Apply(actor, cin)
 	})
-	add(s, "sso_state_export", false, true, func(ctx context.Context, actor auth.Actor, _ emptyIn) (any, error) {
-		ex, err := s.app.Export(actor)
+	add(s, "sso_state_export", false, true, func(ctx context.Context, actor auth.Actor, in struct {
+		Format string `json:"format,omitempty"`
+	}) (any, error) {
+		ex, err := s.app.Export(actor, in.Format)
 		if err != nil {
 			return nil, err
 		}
-		return map[string]any{"format": ex.Format, "yaml": string(ex.YAML), "revision": ex.Revision}, nil
+		if ex.Format == "json" {
+			return map[string]any{"format": ex.Format, "json": json.RawMessage(ex.Data), "revision": ex.Revision}, nil
+		}
+		return map[string]any{"format": ex.Format, "yaml": string(ex.Data), "revision": ex.Revision}, nil
 	})
 	add(s, "sso_state_reset", true, false, func(ctx context.Context, actor auth.Actor, in resetIn) (any, error) {
-		return s.app.Reset(actor, app.ResetIn{Reason: in.Reason})
+		return s.app.Reset(actor, app.ResetIn{Reason: in.Reason, ExpectedRevision: in.ExpectedRevision, IdempotencyKey: in.IdempotencyKey, DryRun: in.DryRun})
 	})
-	add(s, "sso_clients_list", false, true, func(ctx context.Context, actor auth.Actor, _ emptyIn) (any, error) {
-		return s.app.ListClients(actor)
+	add(s, "sso_clients_list", false, true, func(ctx context.Context, actor auth.Actor, in app.ListIn) (any, error) {
+		return s.app.PageClients(actor, in)
 	})
 	add(s, "sso_client_get", false, true, func(ctx context.Context, actor auth.Actor, in idIn) (any, error) {
 		return s.app.GetClient(actor, in.ID)
 	})
-	add(s, "sso_users_list", false, true, func(ctx context.Context, actor auth.Actor, _ emptyIn) (any, error) {
-		return s.app.ListUsers(actor)
+	add(s, "sso_users_list", false, true, func(ctx context.Context, actor auth.Actor, in app.ListIn) (any, error) {
+		return s.app.PageUsers(actor, in)
 	})
 	add(s, "sso_user_get", false, true, func(ctx context.Context, actor auth.Actor, in idIn) (any, error) {
 		return s.app.GetUser(actor, in.ID)
@@ -138,33 +160,38 @@ func (s *Server) registerTools() {
 	}) (any, error) {
 		return map[string]any{"ok": true}, s.app.ClearTOTP(actor, in.ID, in.Reason)
 	})
-	add(s, "sso_groups_list", false, true, func(ctx context.Context, actor auth.Actor, _ emptyIn) (any, error) {
-		return s.app.ListGroups(actor)
+	add(s, "sso_groups_list", false, true, func(ctx context.Context, actor auth.Actor, in app.ListIn) (any, error) {
+		return s.app.PageGroups(actor, in)
 	})
 	add(s, "sso_group_get", false, true, func(ctx context.Context, actor auth.Actor, in idIn) (any, error) {
 		return s.app.GetGroup(actor, in.ID)
 	})
-	add(s, "sso_sessions_list", false, true, func(ctx context.Context, actor auth.Actor, _ emptyIn) (any, error) {
-		return s.app.ListSessions(actor)
+	add(s, "sso_sessions_list", false, true, func(ctx context.Context, actor auth.Actor, in app.ListIn) (any, error) {
+		return s.app.PageSessions(actor, in)
 	})
-	add(s, "sso_session_expire", true, true, func(ctx context.Context, actor auth.Actor, in idIn) (any, error) {
-		return map[string]any{"ok": true}, s.app.ExpireSession(actor, in.ID)
+	add(s, "sso_session_expire", true, true, func(ctx context.Context, actor auth.Actor, in struct {
+		ID     string `json:"id"`
+		Reason string `json:"reason,omitempty"`
+	}) (any, error) {
+		return map[string]any{"ok": true}, s.app.ExpireSession(actor, in.ID, in.Reason)
 	})
-	add(s, "sso_tunable_token_pause", true, true, func(ctx context.Context, actor auth.Actor, _ emptyIn) (any, error) {
-		return map[string]any{"paused": true}, s.app.PauseToken(actor)
+	add(s, "sso_tunable_token_pause", true, true, func(ctx context.Context, actor auth.Actor, in reasonIn) (any, error) {
+		return map[string]any{"paused": true}, s.app.PauseToken(actor, in.Reason)
 	})
-	add(s, "sso_tunable_token_resume", true, true, func(ctx context.Context, actor auth.Actor, _ emptyIn) (any, error) {
-		return map[string]any{"paused": false}, s.app.ResumeToken(actor)
+	add(s, "sso_tunable_token_resume", true, true, func(ctx context.Context, actor auth.Actor, in reasonIn) (any, error) {
+		return map[string]any{"paused": false}, s.app.ResumeToken(actor, in.Reason)
 	})
 	add(s, "sso_tunable_auth_force_fail", true, true, func(ctx context.Context, actor auth.Actor, in struct {
-		On bool `json:"on"`
+		Reason string `json:"reason,omitempty"`
+		On     bool   `json:"on"`
 	}) (any, error) {
-		return map[string]any{"on": in.On}, s.app.ForceFail(actor, in.On)
+		return map[string]any{"on": in.On}, s.app.ForceFail(actor, in.On, in.Reason)
 	})
 	add(s, "sso_tunable_error_inject", true, true, func(ctx context.Context, actor auth.Actor, in struct {
-		Code string `json:"code,omitempty"`
+		Reason string `json:"reason,omitempty"`
+		Code   string `json:"code,omitempty"`
 	}) (any, error) {
-		return map[string]any{"code": in.Code}, s.app.InjectError(actor, in.Code)
+		return map[string]any{"code": in.Code}, s.app.InjectError(actor, in.Code, in.Reason)
 	})
 	add(s, "sso_tunable_vendor_swap", true, true, func(ctx context.Context, actor auth.Actor, in struct {
 		Vendor           string  `json:"vendor"`
@@ -192,9 +219,10 @@ func (s *Server) registerTools() {
 		})
 	})
 	add(s, "sso_tunable_consent_force", true, true, func(ctx context.Context, actor auth.Actor, in struct {
-		On bool `json:"on"`
+		Reason string `json:"reason,omitempty"`
+		On     bool   `json:"on"`
 	}) (any, error) {
-		return map[string]any{"on": in.On}, s.app.ForceConsent(actor, in.On)
+		return map[string]any{"on": in.On}, s.app.ForceConsent(actor, in.On, in.Reason)
 	})
 	add(s, "sso_tunable_token_mint", true, true, func(ctx context.Context, actor auth.Actor, in struct {
 		UserID   string `json:"userId"`
@@ -203,8 +231,8 @@ func (s *Server) registerTools() {
 	}) (any, error) {
 		return s.app.MintToken(actor, app.MintTokenIn{UserID: in.UserID, ClientID: in.ClientID, Scope: in.Scope})
 	})
-	add(s, "sso_audit_query", false, true, func(ctx context.Context, actor auth.Actor, _ emptyIn) (any, error) {
-		return s.app.ListAudit(actor)
+	add(s, "sso_audit_query", false, true, func(ctx context.Context, actor auth.Actor, in app.ListIn) (any, error) {
+		return s.app.PageAudit(actor, in)
 	})
 	add(s, "sso_audit_get", false, true, func(ctx context.Context, actor auth.Actor, in idIn) (any, error) {
 		return s.app.GetAudit(actor, in.ID)
@@ -240,15 +268,25 @@ func (s *Server) registerTools() {
 			ExpectedRevision: in.ExpectedRevision, IdempotencyKey: in.IdempotencyKey, Reason: in.Reason,
 		})
 	})
-	add(s, "sso_sessions_expire_all", true, true, func(ctx context.Context, actor auth.Actor, _ emptyIn) (any, error) {
-		n, err := s.app.ExpireAllSessions(actor)
+	add(s, "sso_sessions_expire_all", true, true, func(ctx context.Context, actor auth.Actor, in reasonIn) (any, error) {
+		n, err := s.app.ExpireAllSessions(actor, in.Reason)
 		return map[string]any{"expired": n}, err
 	})
 }
 
 func add[In any](s *Server, name string, mutating, idempotent bool, h func(context.Context, auth.Actor, In) (any, error)) {
 	ro := !mutating
+	var inputSchema any
+	switch name {
+	case "sso_clients_list", "sso_users_list", "sso_groups_list", "sso_sessions_list", "sso_audit_query":
+		inputSchema = contracts.ListSchema()
+	case "sso_state_validate":
+		inputSchema = contracts.ChangeSchema(true)
+	case "sso_change_plan", "sso_change_apply":
+		inputSchema = contracts.ChangeSchema(false)
+	}
 	sdk.AddTool(s.sdk, &sdk.Tool{
+		InputSchema: inputSchema,
 		Name:        name,
 		Title:       name,
 		Description: name,
@@ -258,7 +296,14 @@ func add[In any](s *Server, name string, mutating, idempotent bool, h func(conte
 			IdempotentHint: idempotent,
 			OpenWorldHint:  boolPtr(false),
 		},
-	}, func(ctx context.Context, _ *sdk.CallToolRequest, in In) (*sdk.CallToolResult, any, error) {
+	}, func(ctx context.Context, req *sdk.CallToolRequest, in In) (*sdk.CallToolResult, any, error) {
+		// The SDK schema pass uses generic JSON numbers; decode the original bytes
+		// into domain inputs so integer and RawMessage values retain exact precision.
+		if req != nil && req.Params != nil && len(req.Params.Arguments) > 0 {
+			if err := json.Unmarshal(req.Params.Arguments, &in); err != nil {
+				return nil, nil, domainerr.Validation("invalid arguments: " + err.Error())
+			}
+		}
 		out, err := h(ctx, actorFrom(ctx), in)
 		if err != nil {
 			code := domainerr.CodeOf(err)
@@ -326,7 +371,7 @@ func (s *Server) readResource(ctx context.Context, req *sdk.ReadResourceRequest)
 	case uri == "labsso://schema/config":
 		out, err = s.app.SchemaConfig(actor)
 	case uri == "labsso://audit/recent":
-		out, err = s.app.ListAudit(actor)
+		out, err = s.app.PageAudit(actor, app.ListIn{})
 	case strings.HasPrefix(uri, "labsso://clients/"):
 		out, err = s.app.GetClient(actor, strings.TrimPrefix(uri, "labsso://clients/"))
 	case strings.HasPrefix(uri, "labsso://users/"):
@@ -334,18 +379,27 @@ func (s *Server) readResource(ctx context.Context, req *sdk.ReadResourceRequest)
 	case strings.HasPrefix(uri, "labsso://groups/"):
 		out, err = s.app.GetGroup(actor, strings.TrimPrefix(uri, "labsso://groups/"))
 	default:
-		return nil, domainerr.NotFound("resource " + uri)
+		return nil, resourceError(domainerr.NotFound("resource " + uri))
 	}
 	if err != nil {
-		return nil, err
+		return nil, resourceError(err)
 	}
 	b, err := json.Marshal(out)
 	if err != nil {
-		return nil, err
+		return nil, resourceError(err)
 	}
 	return &sdk.ReadResourceResult{
 		Contents: []*sdk.ResourceContents{{
 			URI: uri, MIMEType: "application/json", Text: string(b),
 		}},
 	}, nil
+}
+
+func resourceError(err error) error {
+	code := domainerr.CodeOf(err)
+	if code == "" {
+		code = "internal"
+	}
+	data, _ := json.Marshal(map[string]string{"code": code})
+	return &jsonrpc.Error{Code: jsonrpc.CodeInvalidParams, Message: err.Error(), Data: data}
 }

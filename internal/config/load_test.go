@@ -235,3 +235,39 @@ func TestTotpInvalidFixtures(t *testing.T) {
 	mustReject(t, "testdata/config/invalid/totp-newline-ref.yaml")
 	mustReject(t, "testdata/config/invalid/unknown-totp-field.yaml")
 }
+
+func TestEndpointValidationRoundTripCompatibility(t *testing.T) {
+	root := repoRoot(t)
+	doc, err := config.LoadFile(filepath.Join(root, "testdata/config/valid/minimal.yaml"), config.Options{BaseDir: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc.Spec.Listeners.Management.RESTPath = ""
+	doc.Spec.Listeners.Management.MCPPath = ""
+	doc.Spec.Auth.SessionTTL = 0
+	config.Normalize(&doc)
+	raw, err := config.CanonicalYAML(doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := config.Load(raw, config.Options{BaseDir: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.Spec.Listeners.Management.RESTPath != "/v1" || loaded.Spec.Listeners.Management.MCPPath != "/mcp" || loaded.Spec.Auth.SessionTTL != 0 {
+		t.Fatal("compatibility defaults changed")
+	}
+	for _, mutate := range []func(*model.Document){func(d *model.Document) { d.Metadata.Name = "../unsafe" }, func(d *model.Document) { d.Spec.Profile.TenantID = "a/b" }, func(d *model.Document) { d.Spec.Auth.SessionTTL = -1 }, func(d *model.Document) { d.Spec.Listeners.Management.Address = ":443" }, func(d *model.Document) { d.Spec.Listeners.Management.MCPPath = "/" }, func(d *model.Document) {
+		d.Spec.Users = []model.User{{ID: "u", Username: "u", PasswordRef: "a", PasswordHashRef: "b"}}
+	}} {
+		candidate := loaded
+		mutate(&candidate)
+		raw, err := config.CanonicalYAML(candidate)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := config.Load(raw, config.Options{BaseDir: root}); err == nil {
+			t.Fatal("invalid candidate accepted")
+		}
+	}
+}

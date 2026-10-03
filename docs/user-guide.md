@@ -1,5 +1,7 @@
 # LabSSO user guide
 
+Last reviewed: 2026-10-03
+
 How to run LabSSO, write the YAML file, and load or change state through the CLI, REST, and MCP. Design history and contributor rules live elsewhere.
 
 ## Contents
@@ -280,7 +282,7 @@ Typical fields: `bootstrapRevision`, `runtimeRevision`, `generation`, `drifted`,
 
 ### `POST /v1/state:validate`
 
-Send a document. LabSSO decodes and validates it. Live state does not change.
+Send a complete configuration in `document`, or `operations` to validate changes against the current snapshot. An empty `operations` array validates current state. Live state does not change and no expected revision is required.
 
 ### `GET /v1/state:export`
 
@@ -336,7 +338,7 @@ A conflict looks like:
 
 ### `POST /v1/state:reset`
 
-Re-reads the mounted bootstrap, compiles, and swaps only if that compile succeeds. A broken file leaves the live snapshot alone. The file on disk is never written.
+Re-reads the mounted bootstrap, compiles, and swaps only if that compile succeeds and `expectedRevision` matches the active revision. Send the revision in the body or a revision header, and include a reason. A broken file leaves the live snapshot alone. The file on disk is never written. `dryRun: true` returns the reset plan without changing state; an idempotency key makes retries return the original result.
 
 ### Import
 
@@ -417,7 +419,10 @@ Trust the lab TLS leaf in `testdata/secrets/tls/tls.crt` for local browsers and 
 **Throw away a messy lab**
 
 ```bash
-curl -sS -X POST http://127.0.0.1:8080/v1/state:reset
+REV=$(curl -sS http://127.0.0.1:8080/v1/state | python3 -c 'import json,sys; print(json.load(sys.stdin)["runtimeRevision"])')
+curl -sS -X POST http://127.0.0.1:8080/v1/state:reset \
+  -H 'Content-Type: application/json' -H "X-LabSSO-Expected-Revision: $REV" \
+  --data '{"reason":"restore bootstrap"}'
 ```
 
 Or restart the process.

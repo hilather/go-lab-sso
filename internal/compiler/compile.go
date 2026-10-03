@@ -3,6 +3,7 @@ package compiler
 import (
 	"bytes"
 	"crypto/sha256"
+	"crypto/tls"
 	"encoding/hex"
 	"fmt"
 	"os"
@@ -12,7 +13,9 @@ import (
 	"github.com/hilather/go-lab-sso/internal/config"
 	"github.com/hilather/go-lab-sso/internal/domainerr"
 	"github.com/hilather/go-lab-sso/internal/model"
+	"github.com/hilather/go-lab-sso/internal/password"
 	"github.com/hilather/go-lab-sso/internal/snapshot"
+	"github.com/hilather/go-lab-sso/internal/totp"
 	"github.com/hilather/go-lab-sso/internal/vendor"
 )
 
@@ -36,6 +39,7 @@ func Compile(doc model.Document, opt Options) (*snapshot.Snapshot, error) {
 }
 
 func compile(doc model.Document, opt Options) (*snapshot.Snapshot, error) {
+	doc = *cloneDoc(doc)
 	config.Normalize(&doc)
 	if err := doc.ValidateIDs(); err != nil {
 		return nil, err
@@ -57,6 +61,9 @@ func compile(doc model.Document, opt Options) (*snapshot.Snapshot, error) {
 	tlsKey, err := readRef(opt.BaseDir, doc.Spec.Listeners.HTTPS.KeyRef, "listeners.https.keyRef")
 	if err != nil {
 		return nil, err
+	}
+	if _, err := tls.X509KeyPair(tlsCert, tlsKey); err != nil {
+		return nil, fmt.Errorf("listeners.https: invalid TLS certificate/key pair: %w", err)
 	}
 	signing, err := readRef(opt.BaseDir, doc.Spec.Signing.KeyRef, "signing.keyRef")
 	if err != nil {
@@ -136,15 +143,42 @@ func compile(doc model.Document, opt Options) (*snapshot.Snapshot, error) {
 		}
 	}
 	usersByID := make(map[string]model.User, len(doc.Spec.Users))
+	passwords := map[string]password.Credential{}
+	seeds := map[string][]byte{}
 	for _, u := range doc.Spec.Users {
 		usersByID[u.ID] = u
+		ref := u.PasswordRef
+		hashed := u.PasswordHashRef != ""
+		if hashed {
+			ref = u.PasswordHashRef
+		}
+		raw, err := readRef(opt.BaseDir, ref, "users.passwordRef/passwordHashRef")
+		if err != nil {
+			return nil, err
+		}
+		cred, err := password.Parse(raw, hashed)
+		if err != nil {
+			return nil, fmt.Errorf("user %q: %w", u.ID, err)
+		}
+		passwords[u.ID] = cred
+		if u.TOTPSecretRef != "" {
+			raw, err := readRef(opt.BaseDir, u.TOTPSecretRef, "users.totpSecretRef")
+			if err != nil {
+				return nil, err
+			}
+			seed, err := totp.ParseSecret(raw)
+			if err != nil {
+				return nil, err
+			}
+			seeds[u.ID] = seed
+		}
 	}
 	groupsByID := make(map[string]model.Group, len(doc.Spec.Groups))
 	for _, g := range doc.Spec.Groups {
 		groupsByID[g.ID] = g
 	}
 
-	return &snapshot.Snapshot{
+	snap := &snapshot.Snapshot{
 		Canonical:           cloneDoc(doc),
 		Revision:            rev,
 		BootstrapRevision:   boot,
@@ -163,7 +197,9 @@ func compile(doc model.Document, opt Options) (*snapshot.Snapshot, error) {
 		UsersByID:           usersByID,
 		GroupsByID:          groupsByID,
 		Clothes:             clothes,
-	}, nil
+	}
+	snap.SetUserSecrets(passwords, seeds)
+	return snap, nil
 }
 
 func RevisionOf(doc model.Document) (string, error) {

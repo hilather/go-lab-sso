@@ -1,6 +1,7 @@
 package app
 
 import (
+	"bytes"
 	"encoding/json"
 
 	"github.com/hilather/go-lab-sso/internal/auth"
@@ -34,6 +35,13 @@ func (a *App) SetMFA(actor auth.Actor, in SetMFAIn) (*ApplyResult, error) {
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	replay, fp, err := a.replayTyped(actor, "sso.auth.mfa.set", in.IdempotencyKey, in)
+	if err != nil {
+		return nil, err
+	}
+	if replay != nil {
+		return replay, nil
+	}
 	prev := a.store.Load()
 	if prev == nil || prev.Canonical == nil {
 		return nil, domainerr.Validation("no active snapshot")
@@ -45,6 +53,7 @@ func (a *App) SetMFA(actor auth.Actor, in SetMFAIn) (*ApplyResult, error) {
 		return nil, err
 	}
 	return a.applyLocked(actor, "sso.auth.mfa.set", ChangeIn{
+		fingerprint:      fp,
 		ExpectedRevision: in.ExpectedRevision,
 		IdempotencyKey:   in.IdempotencyKey,
 		Reason:           in.Reason,
@@ -58,6 +67,8 @@ func (a *App) EnrollTOTP(actor auth.Actor, id, reason string) (*EnrollTOTPOut, e
 	if err := a.authorize(actor, "sso.user.totp.enroll"); err != nil {
 		return nil, err
 	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
 	if a.oidc == nil {
 		return nil, domainerr.Validation("oidc not started")
 	}
@@ -93,6 +104,8 @@ func (a *App) ClearTOTP(actor auth.Actor, id, reason string) error {
 	if err := a.authorize(actor, "sso.user.totp.clear"); err != nil {
 		return err
 	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
 	if a.oidc == nil {
 		return domainerr.Validation("oidc not started")
 	}
@@ -142,7 +155,9 @@ func (a *App) syncTOTPOverlay(prev, cand *snapshot.Snapshot) {
 	}
 	for id, ref := range prevRefs {
 		nextRef, still := nextRefs[id]
-		if !still || nextRef != ref {
+		before, _ := prev.TOTP(id)
+		after, _ := cand.TOTP(id)
+		if !still || nextRef != ref || !bytes.Equal(before, after) {
 			rt.ClearTOTPOverlay(id)
 		}
 	}

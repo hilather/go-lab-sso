@@ -2,16 +2,16 @@
 
 ## Status
 
-This repository has **opened implementation at FND-001**. Contributions may add Go under `internal/` and `cmd/labsso` for the current slice. Do not open a PR that adds OIDC, login HTML, SPA, import, or integrator wiring before those slices. Missing Make targets must `false`. Do not add CI until Wave 5.
+This repository has implemented the appliance through **VEN-003**, including OIDC, SAML, WS-Fed, login HTML, the operator SPA, and import. SCIM remains design-only. Integrator wiring belongs in `hilather/mcp-integration-lab`. Changes require regression tests, current documentation, and passing CI.
 
-When implementation is opened:
+Implementation conventions:
 
 - Toolchain: **Go 1.26** (`go1.26.x`). Module path `github.com/hilather/go-lab-sso`. Binary `labsso`.
 - MCP: protocol **2026-07-28**, official `github.com/modelcontextprotocol/go-sdk` **v1.7.0**.
-- Operator console (later slice): Node pin will be documented then. Mira reviews after the first UI implementation.
+- Operator console: embedded JavaScript and HTML; no Node build is required. The existing chrome has received its first UI review.
 - Missing Make targets must `false`, not no-op.
 
-## Development workflow (design)
+## Design changes
 
 1. Choose a tracked design edit or program-board row.
 2. Read the normative documents and relevant ADRs.
@@ -19,7 +19,7 @@ When implementation is opened:
 4. Keep YAML sketches and invalid fixtures consistent with `docs/04-state-and-configuration.md`.
 5. Do not “improve” the product decisions in the README and ADRs (dest-443, no LabNTP bus, clothes-not-hostnames, allow-list import, integrator last).
 
-## Development workflow (later implementation)
+## Implementation workflow
 
 1. Choose or create a tracked task whose dependencies are complete.
 2. Read the normative design documents and relevant ADRs.

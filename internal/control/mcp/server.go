@@ -78,9 +78,11 @@ func (s *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	actor, err := s.authenticate(r)
 	if err != nil {
+		s.app.Audit().EmitDenied(auth.Actor{Class: "anonymous"}, "sso.management.authenticate", err)
 		writeRPC(w, http.StatusUnauthorized, err)
 		return
 	}
+	actor.Transport = "mcp"
 	r = r.WithContext(context.WithValue(r.Context(), ctxActor{}, actor))
 	s.http.ServeHTTP(w, r)
 }
@@ -95,15 +97,20 @@ func (s *Server) authenticate(r *http.Request) (auth.Actor, error) {
 
 func (s *Server) pinProtocol(next sdk.MethodHandler) sdk.MethodHandler {
 	return func(ctx context.Context, method string, req sdk.Request) (sdk.Result, error) {
-		if s.allowLegacyClients {
-			return next(ctx, method, req)
-		}
-		if sr, ok := req.(interface{ ProtocolVersion() string }); ok {
-			if v := sr.ProtocolVersion(); v != "" && v != ProtocolVersion {
-				return nil, domainerr.Protocol("unsupported MCP protocol version " + v)
+		if !s.allowLegacyClients {
+			if sr, ok := req.(interface{ ProtocolVersion() string }); ok {
+				if v := sr.ProtocolVersion(); v != "" && v != ProtocolVersion {
+					return nil, domainerr.Protocol("unsupported MCP protocol version " + v)
+				}
 			}
 		}
-		return next(ctx, method, req)
+		result, err := next(ctx, method, req)
+		if method == "tools/call" {
+			if call, ok := result.(*sdk.CallToolResult); ok && call.IsError && call.StructuredContent == nil {
+				s.app.RejectInput(actorFrom(ctx), domainerr.Validation("MCP arguments rejected"))
+			}
+		}
+		return result, err
 	}
 }
 

@@ -2,6 +2,7 @@ package model
 
 import (
 	"fmt"
+	"sort"
 	"time"
 )
 
@@ -206,8 +207,29 @@ func (d Document) ValidateIDs() error {
 	if d.Kind != Kind {
 		return fmt.Errorf("kind must be %s", Kind)
 	}
-	if d.Metadata.Name == "" {
+	if !validSegment(d.Metadata.Name) {
 		return fmt.Errorf("metadata.name is required")
+	}
+	if d.Spec.Profile.TenantID != "" && !validSegment(d.Spec.Profile.TenantID) {
+		return fmt.Errorf("tenantId must be a safe path segment")
+	}
+	if d.Spec.Listeners.HTTPS.Address != "" {
+		if err := ValidateListenAddress(d.Spec.Listeners.HTTPS.Address, false); err != nil {
+			return err
+		}
+	}
+	if d.Spec.Listeners.Management.Address != "" {
+		if err := ValidateListenAddress(d.Spec.Listeners.Management.Address, true); err != nil {
+			return err
+		}
+	}
+	if d.Spec.Listeners.Management.RESTPath != "" && d.Spec.Listeners.Management.MCPPath != "" {
+		if err := ValidateManagementPaths(d.Spec.Listeners.Management.RESTPath, d.Spec.Listeners.Management.MCPPath); err != nil {
+			return err
+		}
+	}
+	if d.Spec.Auth.SessionTTL < 0 {
+		return fmt.Errorf("sessionTTL must not be negative")
 	}
 	groups := map[string]struct{}{}
 	for i, g := range d.Spec.Groups {
@@ -236,6 +258,9 @@ func (d Document) ValidateIDs() error {
 			return fmt.Errorf("spec.users: duplicate username %q", u.Username)
 		}
 		usernames[u.Username] = struct{}{}
+		if u.PasswordRef != "" && u.PasswordHashRef != "" {
+			return fmt.Errorf("choose passwordRef or passwordHashRef")
+		}
 		if u.PasswordRef == "" && u.PasswordHashRef == "" {
 			return fmt.Errorf("spec.users[%d]: passwordRef or passwordHashRef is required", i)
 		}
@@ -263,6 +288,23 @@ func (d Document) ValidateIDs() error {
 			return fmt.Errorf("spec.clients: duplicate clientId %q", cid)
 		}
 		clientIDs[cid] = struct{}{}
+		for _, uri := range c.RedirectURIs {
+			if err := ValidateURI(uri, false); err != nil {
+				return fmt.Errorf("client %q redirectURI: %w", c.ID, err)
+			}
+		}
+		if c.SAML.EntityID != "" && len(c.SAML.ACSURLs) == 0 {
+			for _, uri := range c.RedirectURIs {
+				if err := ValidateURI(uri, true); err != nil {
+					return fmt.Errorf("SAML fallback ACS requires HTTPS: %w", err)
+				}
+			}
+		}
+		for _, uri := range c.SAML.ACSURLs {
+			if err := ValidateURI(uri, true); err != nil {
+				return fmt.Errorf("client %q ACS URL: %w", c.ID, err)
+			}
+		}
 		if !c.Public && c.SecretRef == "" {
 			return fmt.Errorf("spec.clients[%d]: confidential client requires secretRef", i)
 		}
@@ -274,4 +316,14 @@ func (d Document) ValidateIDs() error {
 		return fmt.Errorf("spec.auth.mfa.mode %q is invalid", d.Spec.Auth.MFA.Mode)
 	}
 	return nil
+}
+
+// Vendors returns the stable known vendor names used by validation and contracts.
+func Vendors() []string {
+	names := make([]string, 0, len(vendors))
+	for name := range vendors {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }

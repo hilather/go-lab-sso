@@ -5,6 +5,7 @@ import (
 	"github.com/hilather/go-lab-sso/internal/buildinfo"
 	"github.com/hilather/go-lab-sso/internal/capabilities"
 	"github.com/hilather/go-lab-sso/internal/compiler"
+	"github.com/hilather/go-lab-sso/internal/contracts"
 	"github.com/hilather/go-lab-sso/internal/domainerr"
 	"github.com/hilather/go-lab-sso/internal/model"
 )
@@ -17,14 +18,14 @@ func (a *App) HealthReady() (map[string]string, bool) {
 	if a.store.Load() == nil {
 		return map[string]string{"status": "not_ready", "reason": "no snapshot"}, false
 	}
-	if a.requireHTTPS && !a.httpsBound {
+	if a.requireHTTPS.Load() && !a.httpsBound.Load() {
 		return map[string]string{"status": "not_ready", "reason": "https unbound"}, false
 	}
 	return map[string]string{"status": "ready"}, true
 }
 
-func (a *App) SetRequireHTTPS(v bool) { a.requireHTTPS = v }
-func (a *App) SetHTTPSBound(v bool)   { a.httpsBound = v }
+func (a *App) SetRequireHTTPS(v bool) { a.requireHTTPS.Store(v) }
+func (a *App) SetHTTPSBound(v bool)   { a.httpsBound.Store(v) }
 
 func (a *App) Version(actor auth.Actor) (buildinfo.Info, error) {
 	if err := a.authorize(actor, "sso.version.get"); err != nil {
@@ -51,20 +52,7 @@ func (a *App) SchemaConfig(actor auth.Actor) (map[string]any, error) {
 	if err := a.authorize(actor, "sso.schema.config.get"); err != nil {
 		return nil, err
 	}
-	return map[string]any{
-		"apiVersion": model.APIVersion,
-		"kind":       model.Kind,
-		"generated":  false,
-		"note":       "hand-described labsso.dev/v1alpha1 surface; not a generated OpenAPI document",
-		"membership": "user.groupIds",
-		"profile": map[string]any{
-			"vendor":   "generic|entra|okta|ping|adfs|google|keycloak|iam-identity-center|duo|siteminder|shibboleth implemented; unknown-to-Implemented compile-reject",
-			"tenantId": "optional; compile default 00000000-0000-0000-0000-000000000001 (not written into Canonical)",
-		},
-		"user": map[string]any{
-			"totpSecretRef": "optional file ref; RFC 4648 base32 seed; compile-parsed; apply values stay model.User (no totp view field)",
-		},
-	}, nil
+	return contracts.ConfigSchema(), nil
 }
 
 type StateView struct {

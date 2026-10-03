@@ -19,9 +19,10 @@ const (
 )
 
 type Actor struct {
-	ID     string
-	Class  string
-	Scopes []string
+	Transport string
+	ID        string
+	Class     string
+	Scopes    []string
 }
 
 func AdminActor() Actor {

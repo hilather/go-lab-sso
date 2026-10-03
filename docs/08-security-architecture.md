@@ -2,7 +2,7 @@
 
 Status: through VEN-003 implemented
 Owners: Security, Protocols, Control Plane
-Last reviewed: 2026-09-02
+Last reviewed: 2026-10-03
 Related ADRs: 0002, 0003, 0004, 0005, 0006, 0008, 0009, 0010, 0011
 
 ## Goals
@@ -129,3 +129,9 @@ Weakening a default or broadening access is a security-significant breaking chan
 
 - Remote management TLS (sweep 2): slice 1 is loopback HTTP; remote TLS is a later deployment choice.
 - PHC allow-list (sweep 2): unknown id fails closed; plaintext/unsalted reject; family precedent Argon2id; parameters in CFG at LOGIN-001.
+
+## Authentication admission and resource bounds
+
+Login and consent POSTs use Go's cross-origin protection. Login requires an existing, unexpired, still-admissible pending flow before credential verification, TOTP consumption, or session creation. Password credentials and decoded TOTP seeds come from the compiled snapshot; editing a referenced file affects authentication only after successful compilation and activation. TOTP records a monotonic accepted timestep, preventing reuse even after an intervening valid code. Generation admission and replay recording occur under the same runtime lock after cryptographic verification, so a delayed old request cannot consume a fresh credential’s timestep after revocation or reset.
+
+At most four password-verification requests run concurrently. Form bodies are limited to 64 KiB. Pending flows, codes, refresh rows, sessions, and source-address limiter buckets have a 4096-entry bound; insertions sweep expired state, reject new admission when their own target map is full, and never evict live entries from another map. Limiter admission removes inactive buckets. Pending flow context is limited to 16 KiB total, 4096 bytes per field (including OIDC state and SAML/WS-Fed relay context), with nonce, scope, and SAML request ID limited to 1024 bytes. Values reject rather than truncate. SAML POST forms are limited to 512 KiB, retaining overhead for a 64 KiB XML request after base64 and form encoding. Security-sensitive snapshot changes advance runtime admission generation so delayed requests cannot restore revoked sessions or grants. Rejection audit callbacks contain fixed categories only, never passwords, OTPs, pending IDs, or tokens.

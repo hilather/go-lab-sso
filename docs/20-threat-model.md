@@ -2,7 +2,7 @@
 
 Status: design (not implemented)
 Owners: Security
-Last reviewed: 2026-09-01
+Last reviewed: 2026-10-03
 Related ADRs: 0002, 0005, 0006, 0008, 0011
 
 ## Scope
@@ -77,3 +77,7 @@ Out of scope: nation-state targeting of a lab VM, physical theft of a lab disk, 
 - Any proposal to listen management on 443.
 - Any proposal to present a vendor-cloud hostname.
 - Integrator pin (new leaf, token mode 0o644, labinfo connection block).
+
+## Authentication-state hardening
+
+Cross-site login and consent POSTs reject before authentication. Missing, expired, or revoked pending handles cannot create cookies. Alternating TOTP window steps cannot replay a consumed code. Security-sensitive configuration changes revoke protocol state and reject insertion from an older request generation, including delayed password verification. Signed tokens remain offline-verifiable until expiry; local userinfo and issuance also honor current user/client/policy and runtime generation. Authentication state and password concurrency are bounded to limit abandoned-flow and Argon2 resource exhaustion.

@@ -2,7 +2,7 @@
 
 Status: FND-001 implemented (CLI, scratch image, runnable compose 443:10443)
 Owners: Deployment, Operations, Security
-Last reviewed: 2026-08-30
+Last reviewed: 2026-10-03
 Related ADRs: 0003, 0006, 0007
 
 ## Goals
@@ -123,14 +123,13 @@ Recipe (when that repo lands the pin):
 
 ## Startup and shutdown
 
-Startup validates and compiles before reporting ready. Graceful shutdown:
+Startup validates and compiles before binding or reporting ready. CLI overrides are validated too: management port 443 rejects before either bind, invalid addresses reject, and shutdown timeout must be positive. Port zero is supported for local ephemeral listeners; it is never a valid published issuer port.
 
-1. Mark unready.
-2. Stop accepting new management mutations.
-3. Stop accepting new HTTPS handshakes after the deadline policy.
-4. Complete or abandon requests within the shutdown deadline.
-5. Flush bounded telemetry.
-6. Exit. Sessions die. Bootstrap file untouched.
+Each new TLS handshake resolves the certificate from the current validated snapshot. Certificate/key changes apply atomically to subsequent handshakes; existing TLS connections retain their negotiated certificate. Invalid or mismatched pairs reject before activation. Listener addresses, REST/MCP mount paths, and MCP legacy policy are bound at startup; changing them through apply/reset while HTTPS is active rejects with a restart-required error and preserves the active snapshot.
+
+Both HTTP servers bound headers to 64 KiB and use a 10-second header timeout, 30-second request-read timeout, 60-second response-write timeout, and 60-second idle timeout. Protocol handlers additionally enforce their own body size limits.
+
+On cancellation or unexpected listener failure, readiness becomes false and both servers shut down concurrently. Active connections receive the configured grace period (`--shutdown-timeout`, default five seconds); connections still open when it expires are force-closed. Listeners close on every exit path. Sessions die on process exit; bootstrap is untouched.
 
 ## Time
 

@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -18,6 +19,7 @@ import (
 	"github.com/hilather/go-lab-sso/internal/compiler"
 	"github.com/hilather/go-lab-sso/internal/control/mcp"
 	"github.com/hilather/go-lab-sso/internal/control/rest"
+	"github.com/hilather/go-lab-sso/internal/model"
 )
 
 const dest443Help = `Host dest-443 occupancy (if this is a publish/listen failure, not container EACCES/EPERM) is fixed by:
@@ -68,6 +70,10 @@ func serveCmd(args []string, stdout, stderr io.Writer) int {
 		mgmtAddr = *mgmtListen
 	}
 
+	if err := validateRuntime(serveRuntime{HTTPSAddr: httpsAddr, MgmtAddr: mgmtAddr, Shutdown: *shutdown}); err != nil {
+		_, _ = fmt.Fprintf(stderr, "labsso serve: %v\n", err)
+		return 2
+	}
 	if *pidFile != "" {
 		if err := os.WriteFile(*pidFile, []byte(fmt.Sprintf("%d\n", os.Getpid())), 0o644); err != nil {
 			_, _ = fmt.Fprintf(stderr, "labsso serve: pid-file: %v\n", err)
@@ -94,6 +100,7 @@ type serveRuntime struct {
 	HTTPSAddr string
 	MgmtAddr  string
 	Shutdown  time.Duration
+	listen    func(string, string) (net.Listener, error)
 }
 
 func runServe(ctx context.Context, a *app.App, rt serveRuntime, stdout, stderr io.Writer) error {
@@ -101,19 +108,36 @@ func runServe(ctx context.Context, a *app.App, rt serveRuntime, stdout, stderr i
 	if snap == nil {
 		return fmt.Errorf("no snapshot")
 	}
-	cert, err := tls.X509KeyPair(snap.TLSCert, snap.TLSKey)
+	a.SetRequireHTTPS(true)
+	a.SetHTTPSBound(false)
+	if err := validateRuntime(rt); err != nil {
+		return err
+	}
+	_, err := tls.X509KeyPair(snap.TLSCert, snap.TLSKey)
 	if err != nil {
 		return fmt.Errorf("tls key pair: %w", err)
 	}
-	httpsLn, err := net.Listen("tcp", rt.HTTPSAddr)
+	listen := rt.listen
+	if listen == nil {
+		listen = net.Listen
+	}
+	httpsLn, err := listen("tcp", rt.HTTPSAddr)
 	if err != nil {
 		return wrapListenErr(rt.HTTPSAddr, err)
 	}
+	defer func() { _ = httpsLn.Close(); a.SetHTTPSBound(false) }()
 	tlsLn := tls.NewListener(httpsLn, &tls.Config{
-		Certificates: []tls.Certificate{cert},
-		MinVersion:   tls.VersionTLS12,
+		GetCertificate: func(*tls.ClientHelloInfo) (*tls.Certificate, error) {
+			active := a.Store().Load()
+			if active == nil {
+				return nil, fmt.Errorf("no active TLS snapshot")
+			}
+			cert, err := tls.X509KeyPair(active.TLSCert, active.TLSKey)
+			return &cert, err
+		},
+		MinVersion: tls.VersionTLS12,
 	})
-	httpsSrv := &http.Server{Handler: a.HTTPSHandler(), ReadHeaderTimeout: 10 * time.Second}
+	httpsSrv := boundedServer(a.HTTPSHandler())
 
 	var mgmtSrv *http.Server
 	var mgmtLn net.Listener
@@ -131,14 +155,31 @@ func runServe(ctx context.Context, a *app.App, rt serveRuntime, stdout, stderr i
 			mcpPath = "/mcp"
 		}
 		mux.Handle(mcpPath, ms.Handler())
-		mgmtLn, err = net.Listen("tcp", rt.MgmtAddr)
+		mgmtLn, err = listen("tcp", rt.MgmtAddr)
 		if err != nil {
 			_ = httpsLn.Close()
 			return fmt.Errorf("management listen %s: %w", rt.MgmtAddr, err)
 		}
-		mgmtSrv = &http.Server{Handler: http.NewCrossOriginProtection().Handler(mux), ReadHeaderTimeout: 10 * time.Second}
+		defer func() { _ = mgmtLn.Close() }()
+		mgmtSrv = boundedServer(http.NewCrossOriginProtection().Handler(mux))
 	}
 
+	defer func() {
+		a.SetHTTPSBound(false)
+		shutCtx, cancel := context.WithTimeout(context.Background(), rt.Shutdown)
+		defer cancel()
+		var wg sync.WaitGroup
+		for _, server := range []*http.Server{httpsSrv, mgmtSrv} {
+			if server != nil {
+				wg.Go(func() {
+					if err := server.Shutdown(shutCtx); err != nil {
+						_ = server.Close()
+					}
+				})
+			}
+		}
+		wg.Wait()
+	}()
 	a.SetRequireHTTPS(true)
 	a.SetHTTPSBound(true)
 	_, _ = fmt.Fprintf(stdout, "labsso serve https=%s management=%s issuer=%s\n", rt.HTTPSAddr, rt.MgmtAddr, snap.Issuer)
@@ -161,13 +202,6 @@ func runServe(ctx context.Context, a *app.App, rt serveRuntime, stdout, stderr i
 		}
 	}
 
-	a.SetHTTPSBound(false)
-	shutCtx, cancel := context.WithTimeout(context.Background(), rt.Shutdown)
-	defer cancel()
-	_ = httpsSrv.Shutdown(shutCtx)
-	if mgmtSrv != nil {
-		_ = mgmtSrv.Shutdown(shutCtx)
-	}
 	return nil
 }
 
@@ -183,4 +217,22 @@ func wrapListenErr(addr string, err error) error {
 
 func isPerm(err error) bool {
 	return errors.Is(err, syscall.EACCES) || errors.Is(err, syscall.EPERM)
+}
+
+func validateRuntime(rt serveRuntime) error {
+	if err := model.ValidateListenAddress(rt.HTTPSAddr, false); err != nil {
+		return fmt.Errorf("HTTPS address: %w", err)
+	}
+	if rt.MgmtAddr != "off" {
+		if err := model.ValidateListenAddress(rt.MgmtAddr, true); err != nil {
+			return fmt.Errorf("management address: %w", err)
+		}
+	}
+	if rt.Shutdown <= 0 {
+		return fmt.Errorf("shutdown timeout must be positive")
+	}
+	return nil
+}
+func boundedServer(handler http.Handler) *http.Server {
+	return &http.Server{Handler: handler, ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 60 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 64 << 10}
 }

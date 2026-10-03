@@ -3,6 +3,7 @@ package importrw
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/hilather/go-lab-sso/internal/model"
@@ -60,6 +61,7 @@ func finish(res Result) (Result, error) {
 		return Result{}, fmt.Errorf("inline PEM rejected; use file refs")
 	}
 	res.Unmapped, res.Warnings = scrubSecrets(res.Unmapped, res.Warnings)
+	sort.Strings(res.Warnings)
 	return res, nil
 }
 
@@ -128,7 +130,7 @@ func pemString(v any) bool {
 
 func secretKey(k string) bool {
 	switch strings.ToLower(k) {
-	case "client_secret", "clientsecret", "password", "private_key", "privatekey", "pem", "jwks":
+	case "client_secret", "clientsecret", "password", "private_key", "privatekey", "pem", "jwks", "passwordcredentials", "keycredentials", "secrettext", "token", "access_token", "accesstoken", "refresh_token", "refreshtoken", "id_token", "idtoken", "authorization", "apikey", "api_key":
 		return true
 	default:
 		return false
@@ -261,11 +263,11 @@ func rewriteSAML(raw string) (Result, error) {
 func onlyHTTPS(in []string) ([]string, []string) {
 	var out, warn []string
 	for _, u := range in {
-		if strings.HasPrefix(u, "https://") {
+		if model.ValidateURI(u, true) == nil {
 			out = append(out, u)
 			continue
 		}
-		warn = append(warn, "dropped non-https redirect "+u)
+		warn = append(warn, "dropped invalid or non-HTTPS redirect")
 	}
 	return out, warn
 }

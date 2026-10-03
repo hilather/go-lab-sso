@@ -2,13 +2,13 @@
 
 Status: FND REST adapter implemented (`internal/control/rest`)
 Owners: REST, Application
-Last reviewed: 2026-09-01
+Last reviewed: 2026-10-03
 Related ADRs: 0004, 0008
 
 ## Goals
 
 - A versioned, discoverable, machine-readable API at `/v1`.
-- OpenAPI generated or verified from the capability registry when code exists.
+- Config JSON Schema, capability catalog and REST/MCP binding manifest are generated and verified from domain types and the central registry. Full OpenAPI generation remains a documented gap.
 - Consistent pagination, filtering, errors, revisions, and idempotency.
 - No business logic in handlers.
 - Planned surface: state, changes:plan/apply, import, session knobs / tunables.
@@ -57,7 +57,17 @@ POST /v1/changes:plan
 POST /v1/changes:apply
 ```
 
-`GET /v1/state` returns `bootstrapRevision`, `runtimeRevision`, `generation`, `drifted`, and `canonical` (secrets as refs). Export YAML is the file the operator commits back to Git.
+`GET /v1/state` returns `bootstrapRevision`, `runtimeRevision`, `generation`, `drifted`, and `canonical` (secrets as refs). Export YAML is the file the operator commits back to Git. `?format=json` returns the same canonical document as JSON; omitted format defaults to YAML and other formats reject.
+
+Validation accepts `{ "document": <complete document>, "operations": [...] }`; either may be omitted to validate the current snapshot. It is read-only and does not require `expectedRevision`.
+
+Reset requires `expectedRevision` and nonblank `reason`, with optional `idempotencyKey` and `dryRun`. Revision precedence is JSON `expectedRevision`, then `If-Match`, then `X-LabSSO-Expected-Revision`; key precedence is JSON `idempotencyKey`, then `Idempotency-Key`, matching other desired-state mutations. A dry run rereads and compiles bootstrap without changing active state or runtime sessions. Retrying an applied reset with the same key/input returns its original result. Unguarded resets accepted by earlier builds now fail validation.
+
+Every accepted JSON body must be exactly one object, at most 1 MiB including trailing whitespace; unknown fields, null, trailing values and malformed data reject before side effects. Historically bodyless session creation/deletion, expiry and token pause/resume remain accepted; supplied bodies are validated just as strictly. Ephemeral expiry/pause/resume/force/injection inputs now accept an optional operator `reason`; omission preserves the legacy deterministic audit reason. Desired-state applies require a nonblank reason.
+
+List operations require nonempty `target.id`; add/update `value.id` must exactly match it. Singleton targets have no entity ID.
+
+Listener addresses, management REST/MCP paths and MCP legacy policy are startup settings. A running server rejects desired-state changes or resets that alter them; edit bootstrap and restart. TLS file refs may rotate through validated snapshots.
 
 ### Import
 
@@ -66,7 +76,7 @@ POST /v1/import:plan
 POST /v1/import:apply
 ```
 
-Body names the input kind (`entra-manifest` | `okta-app` | `saml-metadata` | `oidc-client`) and carries the blob or a file ref. Response is a `labsso.dev/v1alpha1` fragment plus `imported.unmapped`. Apply commits through the same snapshot swap as `changes:apply`. Not a silent live merge. See [docs/09-customer-config-import.md](09-customer-config-import.md).
+Body names the input kind (`entra-manifest` | `okta-app` | `saml-metadata` | `oidc-client`) and carries the blob or a file ref. Response is a `labsso.dev/v1alpha1` fragment plus `imported.unmapped`. Apply commits through the same snapshot swap as `changes:apply`. Import planning returns the sanitized mapped client, warnings and `blockers` even when the candidate is incomplete (for example, a confidential client lacking `secretRef`); `plan` is omitted in that case. Apply still rejects incomplete candidates. Not a silent live merge. See [docs/09-customer-config-import.md](09-customer-config-import.md).
 
 ### Directory and clients
 
@@ -193,7 +203,7 @@ Data-plane OIDC errors stay on the HTTPS listener and use the vendor clothes dia
 
 ## Pagination
 
-Opaque `cursor` + `limit` on clients, users, groups, sessions, and audit lists. Filters are explicit typed fields.
+Opaque `cursor` + `limit` on clients, users, groups, sessions, and audit lists. Responses contain `items` and optional `nextCursor`; default limit is 100, explicit range is 1–1000. Items sort by ID. Cursors bind to collection type and contents, so malformed, cross-collection and stale cursors reject; restart the list after a mutation or runtime collection change. Filters are not implemented. Audit lists now use the same page envelope as directory/session lists.
 
 ## Conditional and idempotent writes
 
@@ -228,3 +238,7 @@ Path, method, operation ID, field meaning, default, error code, and status behav
 - Exact tunable path freeze vs encoding tunables as operations.
 - Session-list authorization (does `sso.read` see usernames?).
 - Session-knob concurrency (sweep 2): ephemeral knobs do not require snapshot `expectedRevision`; desired-state tunables do. See [skeptic-notes.md](skeptic-notes.md).
+
+## Generated structural contracts
+
+`GET /v1/schema/config` returns draft 2020-12 JSON Schema derived from `model.Document`, including string durations, enums, required file refs and fail-closed unknown fields. Defaults are structural hints; compiler validation still enforces duration syntax/sign, references, file contents, IDs, relationships, listener policy and protocol semantics. `make generate` writes `docs/generated/config.schema.json`, `capabilities.json` and `mcp-bindings.json`; `make verify-generated` compares regenerated outputs. These are generated artifacts, not manually edited source. Full OpenAPI endpoint/input/output generation is still pending.

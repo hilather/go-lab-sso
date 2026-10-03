@@ -76,6 +76,9 @@ func applyOne(doc *model.Document, op model.Operation) error {
 
 func mutateList[T any](list *[]T, op model.Operation, idOf func(T) string, kind string) error {
 	id := op.Target.ID
+	if id == "" {
+		return domainerr.Validation(kind + " target.id is required")
+	}
 	idx := -1
 	for i, item := range *list {
 		if idOf(item) == id {
@@ -98,6 +101,9 @@ func mutateList[T any](list *[]T, op model.Operation, idOf func(T) string, kind 
 		if err := decodeValue(op.Value, &v); err != nil {
 			return domainerr.Validation(kind + " value: " + err.Error())
 		}
+		if idOf(v) != id {
+			return domainerr.Validation(kind + " value.id must match target.id")
+		}
 		*list = append(*list, v)
 		return nil
 	case model.OpUpdate:
@@ -107,6 +113,9 @@ func mutateList[T any](list *[]T, op model.Operation, idOf func(T) string, kind 
 		var v T
 		if err := decodeValue(op.Value, &v); err != nil {
 			return domainerr.Validation(kind + " value: " + err.Error())
+		}
+		if idOf(v) != id {
+			return domainerr.Validation(kind + " value.id must match target.id")
 		}
 		(*list)[idx] = v
 		return nil

@@ -2,6 +2,7 @@
 package web
 
 import (
+	"encoding/json"
 	"net/http"
 )
 
@@ -19,11 +20,16 @@ func Handler(uiEnabled func() bool) http.Handler {
 	})
 }
 
-func Script() http.Handler {
+func Script(base ...string) http.Handler {
+	restBase := "/v1"
+	if len(base) > 0 {
+		restBase = base[0]
+	}
+	encoded, _ := json.Marshal(restBase)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
 		w.Header().Set("Cache-Control", "no-store")
-		_, _ = w.Write([]byte(appJS))
+		_, _ = w.Write(append(append([]byte("var labssoRESTBase="), encoded...), []byte(";\n"+appJS)...))
 	})
 }
 
@@ -162,11 +168,26 @@ const appJS = `
     return String(s == null ? "" : s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/\"/g,"&quot;");
   }
   function api(method, path, body){
+    path = labssoRESTBase + path.slice(3);
     var h = {"Accept":"application/json"};
     if (method !== "GET" && csrf) h["X-LabSSO-CSRF"] = csrf;
     if (body) h["Content-Type"] = "application/json";
     return fetch(path, {method:method, headers:h, credentials:"same-origin", body: body ? JSON.stringify(body) : undefined})
       .then(function(r){ return r.text().then(function(t){ return {ok:r.ok, status:r.status, text:t}; }); });
+  }
+  function apiPages(path){
+    var items = [];
+    function load(cursor){
+      return api("GET", path + (cursor ? "?cursor=" + encodeURIComponent(cursor) : "")).then(function(r){
+        if (!r.ok) return r;
+        var page = JSON.parse(r.text);
+        items = items.concat(page.items || []);
+        if (page.nextCursor) return load(page.nextCursor);
+        r.text = JSON.stringify({items:items});
+        return r;
+      });
+    }
+    return load("");
   }
   function paintChrome(){
     $("issuer").textContent = issuer || "";
@@ -294,7 +315,7 @@ const appJS = `
     }
   }
   function loadSessions(){
-    return api("GET","/v1/sessions").then(function(r){
+    return apiPages("/v1/sessions").then(function(r){
       if (currentView !== "sessions") return;
       if (!r.ok) { showErr(r.status + " " + r.text); $("out").textContent = ""; return; }
       showErr("");
@@ -390,7 +411,7 @@ const appJS = `
     };
   }
   function loadUsers(){
-    return refreshMeta().then(function(){ return api("GET","/v1/users"); }).then(function(r){
+    return refreshMeta().then(function(){ return apiPages("/v1/users"); }).then(function(r){
       if (currentView !== "users") return;
       if (!r.ok) { showErr(r.status + " " + r.text); $("out").textContent = ""; return; }
       showErr("");

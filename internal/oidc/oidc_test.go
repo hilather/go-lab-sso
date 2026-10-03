@@ -125,7 +125,7 @@ func TestPKCEPlainRejected(t *testing.T) {
 
 func TestAuthorizeWithoutSessionRedirectsLogin(t *testing.T) {
 	a, h := bootOIDC(t)
-	u := "/oauth2/authorize?response_type=code&client_id=app-1&redirect_uri=" + url.QueryEscape("https://sut.example.net/cb") + "&code_challenge=abc&code_challenge_method=S256&state=st"
+	u := "/oauth2/authorize?response_type=code&client_id=app-1&redirect_uri=" + url.QueryEscape("https://sut.example.net/cb") + "&code_challenge=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&code_challenge_method=S256&state=st"
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest("GET", u, nil))
 	if rec.Code != 302 {
@@ -169,7 +169,8 @@ func s256(verifier string) string {
 
 func TestRefreshGrant(t *testing.T) {
 	a, h := bootOIDC(t)
-	verifier := "verifier-value-1234567890"
+	ensureOIDCUser(t, a)
+	verifier := "verifier-value-1234567890-abcdefghijklmnopqrstuvwxyz"
 	a.OIDC().Runtime().PutCode(oidc.AuthCode{
 		Code: "code1", ClientID: "app-1", RedirectURI: "https://sut.example.net/cb",
 		UserID: "u1", Username: "alice", Scope: "openid", Challenge: s256(verifier),
@@ -241,7 +242,7 @@ func TestRefreshGrant(t *testing.T) {
 
 func TestAuthorizeSnapshotRace(t *testing.T) {
 	a, h := bootOIDC(t)
-	u := "/oauth2/authorize?response_type=code&client_id=app-1&redirect_uri=" + url.QueryEscape("https://sut.example.net/cb") + "&code_challenge=abc&code_challenge_method=S256"
+	u := "/oauth2/authorize?response_type=code&client_id=app-1&redirect_uri=" + url.QueryEscape("https://sut.example.net/cb") + "&code_challenge=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&code_challenge_method=S256"
 	var wg sync.WaitGroup
 	wg.Add(2)
 	go func() {
@@ -302,7 +303,7 @@ func TestTokenBindsClientID(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	verifier := "verifier-value-1234567890"
+	verifier := "verifier-value-1234567890-abcdefghijklmnopqrstuvwxyz"
 	a.OIDC().Runtime().PutCode(oidc.AuthCode{
 		Code: "code2", ClientID: "app-1", RedirectURI: "https://sut.example.net/cb",
 		UserID: "u1", Username: "alice", Scope: "openid", Challenge: s256(verifier),
@@ -324,7 +325,8 @@ func TestTokenBindsClientID(t *testing.T) {
 
 func TestUserInfoRejectsIDToken(t *testing.T) {
 	a, h := bootOIDC(t)
-	verifier := "verifier-value-1234567890"
+	ensureOIDCUser(t, a)
+	verifier := "verifier-value-1234567890-abcdefghijklmnopqrstuvwxyz"
 	a.OIDC().Runtime().PutCode(oidc.AuthCode{
 		Code: "code3", ClientID: "app-1", RedirectURI: "https://sut.example.net/cb",
 		UserID: "u1", Username: "alice", Scope: "openid", Challenge: s256(verifier),
@@ -365,7 +367,7 @@ func TestInjectErrorHitsAuthorize(t *testing.T) {
 	if err := a.InjectError(auth.AdminActor(), "temporarily_unavailable"); err != nil {
 		t.Fatal(err)
 	}
-	u := "/oauth2/authorize?response_type=code&client_id=app-1&redirect_uri=" + url.QueryEscape("https://sut.example.net/cb") + "&code_challenge=abc&code_challenge_method=S256"
+	u := "/oauth2/authorize?response_type=code&client_id=app-1&redirect_uri=" + url.QueryEscape("https://sut.example.net/cb") + "&code_challenge=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&code_challenge_method=S256"
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest("GET", u, nil))
 	if rec.Code != 302 || !strings.Contains(rec.Header().Get("Location"), "temporarily_unavailable") {
@@ -433,7 +435,7 @@ func TestYAMLMFAForceFailBlocksAuthorize(t *testing.T) {
 		t.Fatal(err)
 	}
 	sess := a.OIDC().Runtime().PutSession(oidc.LoginSession{UserID: "u1", Username: "alice", Expires: time.Now().Add(time.Hour)})
-	u := "/oauth2/authorize?response_type=code&client_id=app-1&redirect_uri=" + url.QueryEscape("https://sut.example.net/cb") + "&code_challenge=abc&code_challenge_method=S256"
+	u := "/oauth2/authorize?response_type=code&client_id=app-1&redirect_uri=" + url.QueryEscape("https://sut.example.net/cb") + "&code_challenge=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&code_challenge_method=S256"
 	req := httptest.NewRequest("GET", u, nil)
 	req.AddCookie(&http.Cookie{Name: oidc.CookieLogin, Value: sess.ID})
 	rec := httptest.NewRecorder()
@@ -459,7 +461,7 @@ func TestUserInfoEmitsScopedClaims(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	verifier := "verifier-value-1234567890"
+	verifier := "verifier-value-1234567890-abcdefghijklmnopqrstuvwxyz"
 	a.OIDC().Runtime().PutCode(oidc.AuthCode{
 		Code: "code-claims", ClientID: "app-1", RedirectURI: "https://sut.example.net/cb",
 		UserID: "u1", Username: "alice", Scope: "openid email groups", Challenge: s256(verifier),
@@ -497,13 +499,23 @@ func TestUserInfoEmitsScopedClaims(t *testing.T) {
 
 func TestLoggedInAuthorizeWithoutPreConsentGoesToConsent(t *testing.T) {
 	a, h := bootOIDC(t)
+	ensureOIDCUser(t, a)
 	sess := a.OIDC().Runtime().PutSession(oidc.LoginSession{UserID: "u1", Username: "alice", Expires: time.Now().Add(time.Hour)})
-	u := "/oauth2/authorize?response_type=code&client_id=app-1&redirect_uri=" + url.QueryEscape("https://sut.example.net/cb") + "&code_challenge=abc&code_challenge_method=S256"
+	u := "/oauth2/authorize?response_type=code&client_id=app-1&redirect_uri=" + url.QueryEscape("https://sut.example.net/cb") + "&code_challenge=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&code_challenge_method=S256"
 	req := httptest.NewRequest("GET", u, nil)
 	req.AddCookie(&http.Cookie{Name: oidc.CookieLogin, Value: sess.ID})
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 	if rec.Code != 302 || !strings.Contains(rec.Header().Get("Location"), "/consent?pending=") {
 		t.Fatalf("want consent, got %d %s", rec.Code, rec.Header().Get("Location"))
+	}
+}
+
+func ensureOIDCUser(t *testing.T, a *app.App) {
+	t.Helper()
+	b, _ := json.Marshal(model.User{ID: "u1", Username: "alice", PasswordRef: "testdata/secrets/users/alice.password"})
+	_, err := a.Apply(auth.AdminActor(), app.ChangeIn{ExpectedRevision: a.Status().RuntimeRevision, Reason: "user fixture", Operations: []model.Operation{{Op: model.OpAdd, Target: model.Target{Kind: model.TargetUser, ID: "u1"}, Value: b}}})
+	if err != nil {
+		t.Fatal(err)
 	}
 }

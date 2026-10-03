@@ -1,17 +1,16 @@
 # Known Limitations
 
 Status: through VEN-003 implemented; SCIM design-only; integrator pin not in this repo
-Last reviewed: 2026-09-02
+Last reviewed: 2026-10-03
 
-Honest residuals for the design phase and the first implementation slices. This is not a promise that v1 is “done enough for production SSO.”
+Current limits of the implemented lab appliance. LabSSO does not claim production IdP certification.
 
-## Design phase
+## Historical design review
 
-- **No implementation.** There is no `labsso` binary, no image, and no CI.
 - **Sweep 2 recorded** 2026-08-30: review-plan **READY**, skeptic sweep 1 **ACCEPT**. See [skeptic-notes.md](skeptic-notes.md).
-- Implementation is **not scheduled**.
+- That review preceded implementation. The repository now includes the Go binary, container build, protocol tests, and CI.
 
-## First implementation (expected)
+## Implemented appliance
 
 - Single process, single replica. Runtime sessions and refresh handles are memory. Restart drops them.
 - No database. No multi-replica consensus.
@@ -29,6 +28,7 @@ Honest residuals for the design phase and the first implementation slices. This 
 - `LABSSO_HTTPS_PORT` escape breaks SUTs that cannot set dest port.
 - Management loopback-unauth is powerful on a shared workstation.
 - In-memory audit ring; no fail-closed external sink in v1.
+- List APIs support cursor pagination; filtering remains unimplemented. The generated configuration schema and capability/binding manifests do not include full OpenAPI or all per-capability input/output schemas.
 - Integrator pin is last and is not in this repository.
 - Duo / SiteMinder live `iss` suffixes (`/oidc/{appId}`, `/affwebservices/CASSO/oidc/{client}`) and Shibboleth EntityID `/idp/shibboleth` are not copied; LabSSO keeps the exact issuer. Live Duo SAML EntityID is often the metadata URL; LabSSO still uses the exact issuer.
 

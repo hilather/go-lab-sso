@@ -1,0 +1,750 @@
+[
+  {
+    "id": "sso.health.live",
+    "title": "Health live",
+    "version": "v1",
+    "description": "Health live",
+    "requiredScopes": null,
+    "mutating": false,
+    "idempotent": true,
+    "restOnly": true,
+    "rest": {
+      "method": "GET",
+      "path": "/v1/health/live"
+    },
+    "mcp": {}
+  },
+  {
+    "id": "sso.health.ready",
+    "title": "Health ready",
+    "version": "v1",
+    "description": "Health ready",
+    "requiredScopes": null,
+    "mutating": false,
+    "idempotent": true,
+    "restOnly": true,
+    "rest": {
+      "method": "GET",
+      "path": "/v1/health/ready"
+    },
+    "mcp": {}
+  },
+  {
+    "id": "sso.version.get",
+    "title": "Version",
+    "version": "v1",
+    "description": "Version",
+    "requiredScopes": [
+      "sso.read"
+    ],
+    "mutating": false,
+    "idempotent": true,
+    "restOnly": false,
+    "rest": {
+      "method": "GET",
+      "path": "/v1/version"
+    },
+    "mcp": {
+      "tool": "sso_version_get"
+    }
+  },
+  {
+    "id": "sso.capabilities.get",
+    "title": "Capabilities",
+    "version": "v1",
+    "description": "Capabilities",
+    "requiredScopes": [
+      "sso.read"
+    ],
+    "mutating": false,
+    "idempotent": true,
+    "restOnly": false,
+    "rest": {
+      "method": "GET",
+      "path": "/v1/capabilities"
+    },
+    "mcp": {
+      "tool": "sso_capabilities_get",
+      "resource": "labsso://capabilities"
+    }
+  },
+  {
+    "id": "sso.status.get",
+    "title": "Status",
+    "version": "v1",
+    "description": "Status",
+    "requiredScopes": [
+      "sso.read"
+    ],
+    "mutating": false,
+    "idempotent": true,
+    "restOnly": false,
+    "rest": {
+      "method": "GET",
+      "path": "/v1/status"
+    },
+    "mcp": {
+      "tool": "sso_status_get",
+      "resource": "labsso://status"
+    }
+  },
+  {
+    "id": "sso.schema.config.get",
+    "title": "Config schema",
+    "version": "v1",
+    "description": "Config schema",
+    "requiredScopes": [
+      "sso.read"
+    ],
+    "mutating": false,
+    "idempotent": true,
+    "restOnly": false,
+    "rest": {
+      "method": "GET",
+      "path": "/v1/schema/config"
+    },
+    "mcp": {
+      "tool": "sso_schema_get",
+      "resource": "labsso://schema/config"
+    }
+  },
+  {
+    "id": "sso.state.get",
+    "title": "Get state",
+    "version": "v1",
+    "description": "Get state",
+    "requiredScopes": [
+      "sso.read"
+    ],
+    "mutating": false,
+    "idempotent": true,
+    "restOnly": false,
+    "rest": {
+      "method": "GET",
+      "path": "/v1/state"
+    },
+    "mcp": {
+      "tool": "sso_state_get",
+      "resource": "labsso://state"
+    }
+  },
+  {
+    "id": "sso.state.validate",
+    "title": "Validate state",
+    "version": "v1",
+    "description": "Validate state",
+    "requiredScopes": [
+      "sso.write"
+    ],
+    "mutating": false,
+    "idempotent": true,
+    "restOnly": false,
+    "rest": {
+      "method": "POST",
+      "path": "/v1/state:validate"
+    },
+    "mcp": {
+      "tool": "sso_state_validate"
+    }
+  },
+  {
+    "id": "sso.change.plan",
+    "title": "Plan changes",
+    "version": "v1",
+    "description": "Plan changes",
+    "requiredScopes": [
+      "sso.write"
+    ],
+    "mutating": false,
+    "idempotent": true,
+    "restOnly": false,
+    "rest": {
+      "method": "POST",
+      "path": "/v1/changes:plan"
+    },
+    "mcp": {
+      "tool": "sso_change_plan"
+    }
+  },
+  {
+    "id": "sso.change.apply",
+    "title": "Apply changes",
+    "version": "v1",
+    "description": "Apply changes",
+    "requiredScopes": [
+      "sso.write"
+    ],
+    "mutating": true,
+    "idempotent": true,
+    "restOnly": false,
+    "rest": {
+      "method": "POST",
+      "path": "/v1/changes:apply"
+    },
+    "mcp": {
+      "tool": "sso_change_apply"
+    }
+  },
+  {
+    "id": "sso.state.export",
+    "title": "Export state",
+    "version": "v1",
+    "description": "Export state",
+    "requiredScopes": [
+      "sso.read"
+    ],
+    "mutating": false,
+    "idempotent": true,
+    "restOnly": false,
+    "rest": {
+      "method": "GET",
+      "path": "/v1/state:export"
+    },
+    "mcp": {
+      "tool": "sso_state_export"
+    }
+  },
+  {
+    "id": "sso.state.reset",
+    "title": "Reset state",
+    "version": "v1",
+    "description": "Reset state",
+    "requiredScopes": [
+      "sso.admin"
+    ],
+    "mutating": true,
+    "idempotent": false,
+    "restOnly": false,
+    "rest": {
+      "method": "POST",
+      "path": "/v1/state:reset"
+    },
+    "mcp": {
+      "tool": "sso_state_reset"
+    }
+  },
+  {
+    "id": "sso.clients.list",
+    "title": "List clients",
+    "version": "v1",
+    "description": "List clients",
+    "requiredScopes": [
+      "sso.read"
+    ],
+    "mutating": false,
+    "idempotent": true,
+    "restOnly": false,
+    "rest": {
+      "method": "GET",
+      "path": "/v1/clients"
+    },
+    "mcp": {
+      "tool": "sso_clients_list"
+    }
+  },
+  {
+    "id": "sso.client.get",
+    "title": "Get client",
+    "version": "v1",
+    "description": "Get client",
+    "requiredScopes": [
+      "sso.read"
+    ],
+    "mutating": false,
+    "idempotent": true,
+    "restOnly": false,
+    "rest": {
+      "method": "GET",
+      "path": "/v1/clients/{id}"
+    },
+    "mcp": {
+      "tool": "sso_client_get",
+      "resource": "labsso://clients/{id}"
+    }
+  },
+  {
+    "id": "sso.users.list",
+    "title": "List users",
+    "version": "v1",
+    "description": "List users",
+    "requiredScopes": [
+      "sso.read"
+    ],
+    "mutating": false,
+    "idempotent": true,
+    "restOnly": false,
+    "rest": {
+      "method": "GET",
+      "path": "/v1/users"
+    },
+    "mcp": {
+      "tool": "sso_users_list"
+    }
+  },
+  {
+    "id": "sso.user.get",
+    "title": "Get user",
+    "version": "v1",
+    "description": "Get user",
+    "requiredScopes": [
+      "sso.read"
+    ],
+    "mutating": false,
+    "idempotent": true,
+    "restOnly": false,
+    "rest": {
+      "method": "GET",
+      "path": "/v1/users/{id}"
+    },
+    "mcp": {
+      "tool": "sso_user_get",
+      "resource": "labsso://users/{id}"
+    }
+  },
+  {
+    "id": "sso.auth.mfa.set",
+    "title": "Set MFA mode",
+    "version": "v1",
+    "description": "Set MFA mode",
+    "requiredScopes": [
+      "sso.write"
+    ],
+    "mutating": true,
+    "idempotent": true,
+    "restOnly": false,
+    "rest": {
+      "method": "POST",
+      "path": "/v1/auth/mfa"
+    },
+    "mcp": {
+      "tool": "sso_auth_mfa_set"
+    }
+  },
+  {
+    "id": "sso.user.totp.enroll",
+    "title": "Enroll TOTP overlay",
+    "version": "v1",
+    "description": "Enroll TOTP overlay",
+    "requiredScopes": [
+      "sso.write"
+    ],
+    "mutating": true,
+    "idempotent": false,
+    "restOnly": false,
+    "rest": {
+      "method": "POST",
+      "path": "/v1/users/{id}/totp:enroll"
+    },
+    "mcp": {
+      "tool": "sso_user_totp_enroll"
+    }
+  },
+  {
+    "id": "sso.user.totp.clear",
+    "title": "Clear TOTP overlay",
+    "version": "v1",
+    "description": "Clear TOTP overlay",
+    "requiredScopes": [
+      "sso.write"
+    ],
+    "mutating": true,
+    "idempotent": true,
+    "restOnly": false,
+    "rest": {
+      "method": "POST",
+      "path": "/v1/users/{id}/totp:clear"
+    },
+    "mcp": {
+      "tool": "sso_user_totp_clear"
+    }
+  },
+  {
+    "id": "sso.groups.list",
+    "title": "List groups",
+    "version": "v1",
+    "description": "List groups",
+    "requiredScopes": [
+      "sso.read"
+    ],
+    "mutating": false,
+    "idempotent": true,
+    "restOnly": false,
+    "rest": {
+      "method": "GET",
+      "path": "/v1/groups"
+    },
+    "mcp": {
+      "tool": "sso_groups_list"
+    }
+  },
+  {
+    "id": "sso.group.get",
+    "title": "Get group",
+    "version": "v1",
+    "description": "Get group",
+    "requiredScopes": [
+      "sso.read"
+    ],
+    "mutating": false,
+    "idempotent": true,
+    "restOnly": false,
+    "rest": {
+      "method": "GET",
+      "path": "/v1/groups/{id}"
+    },
+    "mcp": {
+      "tool": "sso_group_get",
+      "resource": "labsso://groups/{id}"
+    }
+  },
+  {
+    "id": "sso.sessions.list",
+    "title": "List sessions",
+    "version": "v1",
+    "description": "List sessions",
+    "requiredScopes": [
+      "sso.sessions"
+    ],
+    "mutating": false,
+    "idempotent": true,
+    "restOnly": false,
+    "rest": {
+      "method": "GET",
+      "path": "/v1/sessions"
+    },
+    "mcp": {
+      "tool": "sso_sessions_list"
+    }
+  },
+  {
+    "id": "sso.session.expire",
+    "title": "Expire session",
+    "version": "v1",
+    "description": "Expire session",
+    "requiredScopes": [
+      "sso.sessions"
+    ],
+    "mutating": true,
+    "idempotent": true,
+    "restOnly": false,
+    "rest": {
+      "method": "POST",
+      "path": "/v1/sessions/{id}:expire"
+    },
+    "mcp": {
+      "tool": "sso_session_expire"
+    }
+  },
+  {
+    "id": "sso.tunable.token.pause",
+    "title": "Pause token",
+    "version": "v1",
+    "description": "Pause token",
+    "requiredScopes": [
+      "sso.tunables"
+    ],
+    "mutating": true,
+    "idempotent": true,
+    "restOnly": false,
+    "rest": {
+      "method": "POST",
+      "path": "/v1/tunables/token:pause"
+    },
+    "mcp": {
+      "tool": "sso_tunable_token_pause"
+    }
+  },
+  {
+    "id": "sso.tunable.token.resume",
+    "title": "Resume token",
+    "version": "v1",
+    "description": "Resume token",
+    "requiredScopes": [
+      "sso.tunables"
+    ],
+    "mutating": true,
+    "idempotent": true,
+    "restOnly": false,
+    "rest": {
+      "method": "POST",
+      "path": "/v1/tunables/token:resume"
+    },
+    "mcp": {
+      "tool": "sso_tunable_token_resume"
+    }
+  },
+  {
+    "id": "sso.tunable.auth.force_fail",
+    "title": "Force auth fail",
+    "version": "v1",
+    "description": "Force auth fail",
+    "requiredScopes": [
+      "sso.tunables"
+    ],
+    "mutating": true,
+    "idempotent": true,
+    "restOnly": false,
+    "rest": {
+      "method": "POST",
+      "path": "/v1/tunables/auth:force-fail"
+    },
+    "mcp": {
+      "tool": "sso_tunable_auth_force_fail"
+    }
+  },
+  {
+    "id": "sso.tunable.error.inject",
+    "title": "Inject error",
+    "version": "v1",
+    "description": "Inject error",
+    "requiredScopes": [
+      "sso.tunables"
+    ],
+    "mutating": true,
+    "idempotent": true,
+    "restOnly": false,
+    "rest": {
+      "method": "POST",
+      "path": "/v1/tunables/error:inject"
+    },
+    "mcp": {
+      "tool": "sso_tunable_error_inject"
+    }
+  },
+  {
+    "id": "sso.tunable.vendor.swap",
+    "title": "Swap vendor clothes",
+    "version": "v1",
+    "description": "Swap vendor clothes",
+    "requiredScopes": [
+      "sso.tunables"
+    ],
+    "mutating": true,
+    "idempotent": true,
+    "restOnly": false,
+    "rest": {
+      "method": "POST",
+      "path": "/v1/tunables/vendor:swap"
+    },
+    "mcp": {
+      "tool": "sso_tunable_vendor_swap"
+    }
+  },
+  {
+    "id": "sso.tunable.overage.set",
+    "title": "Set group overage",
+    "version": "v1",
+    "description": "Set group overage",
+    "requiredScopes": [
+      "sso.tunables"
+    ],
+    "mutating": true,
+    "idempotent": true,
+    "restOnly": false,
+    "rest": {
+      "method": "POST",
+      "path": "/v1/tunables/overage:set"
+    },
+    "mcp": {
+      "tool": "sso_tunable_overage_set"
+    }
+  },
+  {
+    "id": "sso.tunable.consent.force",
+    "title": "Force consent",
+    "version": "v1",
+    "description": "Force consent",
+    "requiredScopes": [
+      "sso.tunables"
+    ],
+    "mutating": true,
+    "idempotent": true,
+    "restOnly": false,
+    "rest": {
+      "method": "POST",
+      "path": "/v1/tunables/consent:force"
+    },
+    "mcp": {
+      "tool": "sso_tunable_consent_force"
+    }
+  },
+  {
+    "id": "sso.tunable.token.mint",
+    "title": "Mint token",
+    "version": "v1",
+    "description": "Mint token",
+    "requiredScopes": [
+      "sso.tunables"
+    ],
+    "mutating": true,
+    "idempotent": true,
+    "restOnly": false,
+    "rest": {
+      "method": "POST",
+      "path": "/v1/tunables/token:mint"
+    },
+    "mcp": {
+      "tool": "sso_tunable_token_mint"
+    }
+  },
+  {
+    "id": "sso.session.create",
+    "title": "Create operator session",
+    "version": "v1",
+    "description": "Create operator session",
+    "requiredScopes": null,
+    "mutating": false,
+    "idempotent": false,
+    "restOnly": true,
+    "rest": {
+      "method": "POST",
+      "path": "/v1/session"
+    },
+    "mcp": {}
+  },
+  {
+    "id": "sso.session.get",
+    "title": "Get operator session",
+    "version": "v1",
+    "description": "Get operator session",
+    "requiredScopes": null,
+    "mutating": false,
+    "idempotent": true,
+    "restOnly": true,
+    "rest": {
+      "method": "GET",
+      "path": "/v1/session"
+    },
+    "mcp": {}
+  },
+  {
+    "id": "sso.session.delete",
+    "title": "Delete operator session",
+    "version": "v1",
+    "description": "Delete operator session",
+    "requiredScopes": null,
+    "mutating": false,
+    "idempotent": true,
+    "restOnly": true,
+    "rest": {
+      "method": "DELETE",
+      "path": "/v1/session"
+    },
+    "mcp": {}
+  },
+  {
+    "id": "sso.audit.list",
+    "title": "List audit",
+    "version": "v1",
+    "description": "List audit",
+    "requiredScopes": [
+      "sso.audit.read"
+    ],
+    "mutating": false,
+    "idempotent": true,
+    "restOnly": false,
+    "rest": {
+      "method": "GET",
+      "path": "/v1/audit"
+    },
+    "mcp": {
+      "tool": "sso_audit_query",
+      "resource": "labsso://audit/recent"
+    }
+  },
+  {
+    "id": "sso.audit.get",
+    "title": "Get audit event",
+    "version": "v1",
+    "description": "Get audit event",
+    "requiredScopes": [
+      "sso.audit.read"
+    ],
+    "mutating": false,
+    "idempotent": true,
+    "restOnly": false,
+    "rest": {
+      "method": "GET",
+      "path": "/v1/audit/{eventId}"
+    },
+    "mcp": {
+      "tool": "sso_audit_get"
+    }
+  },
+  {
+    "id": "sso.sessions.expire_all",
+    "title": "Expire all sessions",
+    "version": "v1",
+    "description": "Expire all sessions",
+    "requiredScopes": [
+      "sso.sessions"
+    ],
+    "mutating": true,
+    "idempotent": true,
+    "restOnly": false,
+    "rest": {
+      "method": "POST",
+      "path": "/v1/sessions:expire-all"
+    },
+    "mcp": {
+      "tool": "sso_sessions_expire_all"
+    }
+  },
+  {
+    "id": "sso.import.plan",
+    "title": "Import plan",
+    "version": "v1",
+    "description": "Import plan",
+    "requiredScopes": [
+      "sso.write"
+    ],
+    "mutating": false,
+    "idempotent": true,
+    "restOnly": false,
+    "rest": {
+      "method": "POST",
+      "path": "/v1/import:plan"
+    },
+    "mcp": {
+      "tool": "sso_import_plan"
+    }
+  },
+  {
+    "id": "sso.import.apply",
+    "title": "Import apply",
+    "version": "v1",
+    "description": "Import apply",
+    "requiredScopes": [
+      "sso.write"
+    ],
+    "mutating": true,
+    "idempotent": true,
+    "restOnly": false,
+    "rest": {
+      "method": "POST",
+      "path": "/v1/import:apply"
+    },
+    "mcp": {
+      "tool": "sso_import_apply"
+    }
+  },
+  {
+    "id": "sso.tunable.redirect.rewrite",
+    "title": "Rewrite redirect URIs",
+    "version": "v1",
+    "description": "Rewrite redirect URIs",
+    "requiredScopes": [
+      "sso.tunables"
+    ],
+    "mutating": true,
+    "idempotent": true,
+    "restOnly": false,
+    "rest": {
+      "method": "POST",
+      "path": "/v1/tunables/client/redirect:rewrite"
+    },
+    "mcp": {
+      "tool": "sso_tunable_redirect_rewrite"
+    }
+  }
+]

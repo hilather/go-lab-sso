@@ -2,7 +2,7 @@
 
 Status: through VEN-003 (OIDC + login + clothes + overage + SAML + WS-Fed + file-ref TOTP)
 Owners: Protocols, Application
-Last reviewed: 2026-09-01
+Last reviewed: 2026-10-03
 Related ADRs: 0002, 0005, 0009, 0010, 0011
 
 ## Problem statement
@@ -229,3 +229,15 @@ Enabling a protocol, renaming a generic path, or changing `iss` derivation is a 
 - Whether `id_token` encryption is ever needed in lab (default: unsigned request objects, signed tokens only).
 - UserInfo vs token group placement per vendor beyond the clothes table.
 - SAML EntityID exactly equal to issuer (sweep 2: **yes**; a later ADR would be required to change it).
+
+## Protocol hardening
+
+OIDC accepts RFC 7636 S256 challenges and 43–128 character unreserved verifiers. Registered scopes, when nonempty, restrict requests to that list; an omitted list permits the implemented `openid profile email groups offline_access` scopes. Refresh requests may narrow their original scope and cannot widen it. Current user, client, redirect, protocol, and MFA policy are checked before issuance. Token responses, including errors, and userinfo use `Cache-Control: no-store` and `Pragma: no-cache`.
+
+Discovery reflects the loaded signing key: RSA uses RS256; P-256, P-384, and P-521 use ES256, ES384, and ES512. JWKS and JWT key IDs are stable SHA-256 public-key thumbprints and change when the key changes.
+
+SAML AuthnRequest validates its namespace, root, version, issuer, and optional Destination against the active SSO URL. Unsupported ForceAuthn and IsPassive requests reject. SAML and WS-Fed completion revalidate the live recipient registration and enabled user; revoked pending flows cannot produce assertions. WS-Fed metadata includes its signing certificate and protocol declaration.
+
+OIDC state, SAML RelayState, and WS-Fed wctx are limited to 4096 bytes; nonce, scope, and SAML request ID are limited to 1024 bytes. The complete pending record has a 16 KiB context budget. Oversized values reject without truncation, including cookie-reuse flows. SAML POST forms have a 512 KiB body limit, allowing the existing 64 KiB XML request budget plus base64/form encoding overhead. The Entra group stub applies the same local access-token generation, current-client, user, and force-fail checks as userinfo and requires the `groups` scope.
+
+OAuth client HTTP Basic authentication form-decodes the client ID and secret once, as required by RFC 6749; malformed percent escapes reject. Form-body credentials arrive decoded from form parsing and are not decoded a second time.

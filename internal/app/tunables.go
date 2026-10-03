@@ -49,50 +49,50 @@ func (a *App) ListSessions(actor auth.Actor) ([]oidc.LoginSession, error) {
 	return a.oidc.Runtime().ListSessions(), nil
 }
 
-func (a *App) ExpireSession(actor auth.Actor, id string) error {
+func (a *App) ExpireSession(actor auth.Actor, id string, reasons ...string) error {
 	if err := a.authorize(actor, "sso.session.expire"); err != nil {
 		return err
 	}
 	if a.oidc == nil || !a.oidc.Runtime().ExpireSession(id) {
 		return domainerr.NotFound("session " + id)
 	}
-	a.audit.EmitOK(actor, "sso.session.expire", "expire session", "", "")
+	a.audit.EmitOK(actor, "sso.session.expire", auditReason("expire session", reasons), "", "")
 	return nil
 }
 
-func (a *App) PauseToken(actor auth.Actor) error {
+func (a *App) PauseToken(actor auth.Actor, reasons ...string) error {
 	if err := a.authorize(actor, "sso.tunable.token.pause"); err != nil {
 		return err
 	}
 	a.oidc.Runtime().SetPaused(true)
-	a.audit.EmitOK(actor, "sso.tunable.token.pause", "pause token", "", "")
+	a.audit.EmitOK(actor, "sso.tunable.token.pause", auditReason("pause token", reasons), "", "")
 	return nil
 }
 
-func (a *App) ResumeToken(actor auth.Actor) error {
+func (a *App) ResumeToken(actor auth.Actor, reasons ...string) error {
 	if err := a.authorize(actor, "sso.tunable.token.resume"); err != nil {
 		return err
 	}
 	a.oidc.Runtime().SetPaused(false)
-	a.audit.EmitOK(actor, "sso.tunable.token.resume", "resume token", "", "")
+	a.audit.EmitOK(actor, "sso.tunable.token.resume", auditReason("resume token", reasons), "", "")
 	return nil
 }
 
-func (a *App) ForceFail(actor auth.Actor, on bool) error {
+func (a *App) ForceFail(actor auth.Actor, on bool, reasons ...string) error {
 	if err := a.authorize(actor, "sso.tunable.auth.force_fail"); err != nil {
 		return err
 	}
 	a.oidc.Runtime().SetForceFail(on)
-	a.audit.EmitOK(actor, "sso.tunable.auth.force_fail", "force-fail", "", "")
+	a.audit.EmitOK(actor, "sso.tunable.auth.force_fail", auditReason("force-fail", reasons), "", "")
 	return nil
 }
 
-func (a *App) InjectError(actor auth.Actor, code string) error {
+func (a *App) InjectError(actor auth.Actor, code string, reasons ...string) error {
 	if err := a.authorize(actor, "sso.tunable.error.inject"); err != nil {
 		return err
 	}
 	a.oidc.Runtime().SetInject(code)
-	a.audit.EmitOK(actor, "sso.tunable.error.inject", code, "", "")
+	a.audit.EmitOK(actor, "sso.tunable.error.inject", auditReason(code, reasons), "", "")
 	return nil
 }
 
@@ -108,6 +108,13 @@ func (a *App) SwapVendor(actor auth.Actor, in SwapVendorIn) (*ApplyResult, error
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	replay, fp, err := a.replayTyped(actor, "sso.tunable.vendor.swap", in.IdempotencyKey, in)
+	if err != nil {
+		return nil, err
+	}
+	if replay != nil {
+		return replay, nil
+	}
 	prev := a.store.Load()
 	if prev == nil || prev.Canonical == nil {
 		return nil, domainerr.Validation("no active snapshot")
@@ -122,6 +129,7 @@ func (a *App) SwapVendor(actor auth.Actor, in SwapVendorIn) (*ApplyResult, error
 		return nil, err
 	}
 	return a.applyLocked(actor, "sso.tunable.vendor.swap", ChangeIn{
+		fingerprint:      fp,
 		ExpectedRevision: in.ExpectedRevision,
 		IdempotencyKey:   in.IdempotencyKey,
 		Reason:           in.Reason,
@@ -137,6 +145,13 @@ func (a *App) SetOverage(actor auth.Actor, in SetOverageIn) (*ApplyResult, error
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	replay, fp, err := a.replayTyped(actor, "sso.tunable.overage.set", in.IdempotencyKey, in)
+	if err != nil {
+		return nil, err
+	}
+	if replay != nil {
+		return replay, nil
+	}
 	prev := a.store.Load()
 	if prev == nil || prev.Canonical == nil {
 		return nil, domainerr.Validation("no active snapshot")
@@ -156,6 +171,7 @@ func (a *App) SetOverage(actor auth.Actor, in SetOverageIn) (*ApplyResult, error
 		return nil, err
 	}
 	return a.applyLocked(actor, "sso.tunable.overage.set", ChangeIn{
+		fingerprint:      fp,
 		ExpectedRevision: in.ExpectedRevision,
 		IdempotencyKey:   in.IdempotencyKey,
 		Reason:           in.Reason,
@@ -165,12 +181,12 @@ func (a *App) SetOverage(actor auth.Actor, in SetOverageIn) (*ApplyResult, error
 	})
 }
 
-func (a *App) ForceConsent(actor auth.Actor, on bool) error {
+func (a *App) ForceConsent(actor auth.Actor, on bool, reasons ...string) error {
 	if err := a.authorize(actor, "sso.tunable.consent.force"); err != nil {
 		return err
 	}
 	a.oidc.Runtime().SetForceConsent(on)
-	a.audit.EmitOK(actor, "sso.tunable.consent.force", "force-consent", "", "")
+	a.audit.EmitOK(actor, "sso.tunable.consent.force", auditReason("force-consent", reasons), "", "")
 	return nil
 }
 
@@ -202,4 +218,11 @@ func (a *App) MintToken(actor auth.Actor, in MintTokenIn) (*MintTokenOut, error)
 	}
 	a.audit.EmitOK(actor, "sso.tunable.token.mint", "mint token", "", "")
 	return &MintTokenOut{AccessToken: access, IDToken: idTok, TokenType: "Bearer", ExpiresIn: 3600}, nil
+}
+
+func auditReason(fallback string, reasons []string) string {
+	if len(reasons) > 0 && reasons[0] != "" {
+		return reasons[0]
+	}
+	return fallback
 }

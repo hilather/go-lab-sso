@@ -2,7 +2,7 @@
 
 Status: all enum clothes implemented (VEN-001 + VEN-002 + VEN-003). Group overage (OVR-001) implemented.
 Owners: Protocols, Application
-Last reviewed: 2026-08-31
+Last reviewed: 2026-10-03
 Related ADRs: 0005, 0010
 
 ## Problem statement
@@ -135,3 +135,7 @@ Adding a vendor value is additive. Removing or renaming one is breaking. Changin
 ## Open questions
 
 - None for VEN-003. `metadata.name` is the path segment for Keycloak realm, Duo app id, and SiteMinder client name (`Resolve` uses `lab` only if called with an empty name). `genericCap` is the frozen Entra/generic threshold (default 200). Live issuer suffixes and Duo metadata-as-EntityID are not copied; see [docs/known-limitations.md](known-limitations.md).
+
+## Signing and pending-flow safety
+
+Vendor clothes retain the loaded key's actual OIDC signature algorithm and public-key-derived `kid`. WS-Fed metadata, including ADFS clothes, publishes the compiled signing certificate. Browser completion checks the registered ACS or reply URL and realm again; protocol, recipient, user, or authentication-policy revocation invalidates pending flows. Each HTTPS request retains one immutable snapshot.

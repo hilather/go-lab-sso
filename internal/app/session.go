@@ -60,7 +60,7 @@ func (a *App) LookupOperatorSession(id string) (OperatorSession, bool) {
 	return a.opsess.Get(id)
 }
 
-func (a *App) ExpireAllSessions(actor auth.Actor) (int, error) {
+func (a *App) ExpireAllSessions(actor auth.Actor, reasons ...string) (int, error) {
 	if err := a.authorize(actor, "sso.sessions.expire_all"); err != nil {
 		return 0, err
 	}
@@ -68,7 +68,7 @@ func (a *App) ExpireAllSessions(actor auth.Actor) (int, error) {
 	if a.oidc != nil {
 		n = a.oidc.Runtime().ExpireAll()
 	}
-	a.audit.EmitOK(actor, "sso.sessions.expire_all", "expire all", "", "")
+	a.audit.EmitOK(actor, "sso.sessions.expire_all", auditReason("expire all", reasons), "", "")
 	return n, nil
 }
 

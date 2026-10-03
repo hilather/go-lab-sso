@@ -2,11 +2,11 @@
 
 Status: through VEN-003 implemented; INT-001 documented; SCIM design-only
 Owners: Program, Quality
-Last reviewed: 2026-09-07
+Last reviewed: 2026-10-03
 
-## Design landing (this repository)
+## Historical design landing
 
-The design is accepted when all of the following are true on `main`:
+These were the acceptance criteria for the original documentation-only landing. They are historical evidence, not requirements to remove the implementation or CI:
 
 1. `README.md` states **Status: design (not implemented)** and has no fake CI/Go/Release badges.
 2. `docs/01-architecture.md` describes two planes, snapshot, issuer, ports, TLS, with mermaid.

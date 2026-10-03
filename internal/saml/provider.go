@@ -50,8 +50,8 @@ func (p *Provider) Mount(mux *http.ServeMux) {
 }
 
 func (p *Provider) requireMeta(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		snap := p.snapSAML(w)
+	return p.rt.AuditRejected("federation_request_rejected", snapshot.Capture(p.store, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		snap := p.snapSAML(w, r)
 		if snap == nil {
 			return
 		}
@@ -61,12 +61,12 @@ func (p *Provider) requireMeta(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 		next(w, r)
-	}
+	}))).ServeHTTP
 }
 
 func (p *Provider) requireSSO(method string, next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		snap := p.snapSAML(w)
+	return p.rt.AuditRejected("federation_request_rejected", snapshot.Capture(p.store, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		snap := p.snapSAML(w, r)
 		if snap == nil {
 			return
 		}
@@ -79,11 +79,11 @@ func (p *Provider) requireSSO(method string, next http.HandlerFunc) http.Handler
 			return
 		}
 		next(w, r)
-	}
+	}))).ServeHTTP
 }
 
-func (p *Provider) snapSAML(w http.ResponseWriter) *snapshot.Snapshot {
-	snap := p.store.Load()
+func (p *Provider) snapSAML(w http.ResponseWriter, r *http.Request) *snapshot.Snapshot {
+	snap := snapshot.FromRequest(r, p.store)
 	if snap == nil {
 		http.Error(w, "not ready", http.StatusServiceUnavailable)
 		return nil
@@ -96,7 +96,7 @@ func (p *Provider) snapSAML(w http.ResponseWriter) *snapshot.Snapshot {
 }
 
 func (p *Provider) metadata(w http.ResponseWriter, r *http.Request) {
-	snap := p.snapSAML(w)
+	snap := p.snapSAML(w, r)
 	if snap == nil {
 		return
 	}
@@ -116,10 +116,11 @@ func (p *Provider) metadata(w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *Provider) sso(w http.ResponseWriter, r *http.Request) {
-	snap := p.snapSAML(w)
+	snap := p.snapSAML(w, r)
 	if snap == nil {
 		return
 	}
+	r.Body = http.MaxBytesReader(w, r.Body, 512<<10)
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "invalid_request", http.StatusBadRequest)
 		return
@@ -129,6 +130,14 @@ func (p *Provider) sso(w http.ResponseWriter, r *http.Request) {
 	req, err := decodeSAMLRequest(raw, deflated)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if (req.Destination != "" && req.Destination != snap.Issuer+r.URL.Path) || req.ForceAuthn || req.IsPassive {
+		http.Error(w, "unsupported AuthnRequest", http.StatusBadRequest)
+		return
+	}
+	if !oidc.PendingBounded(oidc.Pending{RequestID: req.ID, RelayState: r.FormValue("RelayState")}) {
+		http.Error(w, "invalid_request", http.StatusBadRequest)
 		return
 	}
 	cl, ok := snap.ClientsBySAMLEntity[req.Issuer]
@@ -161,7 +170,7 @@ func (p *Provider) sso(w http.ResponseWriter, r *http.Request) {
 		writeHTML(w, htmlForm)
 		return
 	}
-	pend := p.rt.PutPending(oidc.Pending{
+	pend := p.rt.PutPending(oidc.Pending{Generation: snap.Generation,
 		Protocol:    oidc.ProtocolSAML,
 		ClientID:    clientKey(cl),
 		ACSURL:      acs,
@@ -170,11 +179,15 @@ func (p *Provider) sso(w http.ResponseWriter, r *http.Request) {
 		RelayState:  r.FormValue("RelayState"),
 		RedirectURI: acs,
 	})
+	if pend.ID == "" {
+		http.Error(w, "invalid_request", http.StatusBadRequest)
+		return
+	}
 	iss := strings.TrimRight(snap.Issuer, "/")
 	if sid, err := r.Cookie(oidc.CookieName(snap)); err == nil && sid.Value != "" {
-		if sess, ok := p.rt.GetSession(sid.Value); ok && oidc.SessionUsable(sess, mfa) {
+		if sess, ok := p.rt.GetSession(sid.Value); ok && oidc.SessionUsable(sess, mfa) && oidc.UserUsable(snap, sess.UserID) {
 			if cl.PreConsent && !p.rt.ForceConsent() {
-				htmlForm, err := p.completeUser(pend.ID, sess.UserID, sess.Username, sess.MFACompleted)
+				htmlForm, err := p.CompleteSnapshot(snap, pend.ID, sess.UserID, sess.Username, sess.MFACompleted)
 				if err != nil {
 					http.Error(w, err.Error(), http.StatusBadRequest)
 					return
@@ -194,28 +207,27 @@ func (p *Provider) Complete(pendingID, userID, username string, mfa bool) (strin
 }
 
 func (p *Provider) Deny(pendingID string) (string, error) {
-	return p.finishPending(pendingID, "", "", false, false)
+	return p.finishPending(p.store.Load(), pendingID, "", "", false, false)
 }
 
 func (p *Provider) completeUser(pendingID, userID, username string, mfa bool) (string, error) {
 	if p.rt.ForceFail() {
 		return "", fmt.Errorf("access_denied")
 	}
-	return p.finishPending(pendingID, userID, username, true, mfa)
+	return p.finishPending(p.store.Load(), pendingID, userID, username, true, mfa)
 }
 
-func (p *Provider) finishPending(pendingID, userID, username string, success, mfa bool) (string, error) {
+func (p *Provider) finishPending(snap *snapshot.Snapshot, pendingID, userID, username string, success, mfa bool) (string, error) {
 	pend, ok := p.rt.GetPending(pendingID)
-	if !ok || pend.Protocol != oidc.ProtocolSAML {
+	if !ok || !oidc.PendingUsable(snap, pend) || pend.Protocol != oidc.ProtocolSAML {
 		return "", fmt.Errorf("pending request not found")
 	}
-	snap := p.store.Load()
 	if snap == nil {
 		return "", fmt.Errorf("not ready")
 	}
 	user, ok := snap.UsersByID[userID]
-	if !ok {
-		user = model.User{ID: userID, Username: username}
+	if success && (!ok || !oidc.UserUsable(snap, userID) || !oidc.SessionUsable(oidc.LoginSession{MFACompleted: mfa}, snap.Canonical.Spec.Auth.MFA.Mode) || p.rt.ForceFail() || !p.rt.GenerationUsable(snap.Generation)) {
+		return "", fmt.Errorf("access_denied")
 	}
 	htmlForm, err := p.responseHTML(snap, user, pend.ACSURL, pend.RequestID, pend.SPEntityID, pend.RelayState, success, mfa)
 	if err != nil {
@@ -280,6 +292,15 @@ func clientKey(c model.Client) string {
 }
 
 func writeHTML(w http.ResponseWriter, body string) {
+	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_, _ = w.Write([]byte(body))
+}
+
+func (p *Provider) CompleteSnapshot(snap *snapshot.Snapshot, pendingID, userID, username string, mfa bool) (string, error) {
+	return p.finishPending(snap, pendingID, userID, username, true, mfa)
+}
+
+func (p *Provider) DenySnapshot(snap *snapshot.Snapshot, pendingID string) (string, error) {
+	return p.finishPending(snap, pendingID, "", "", false, false)
 }

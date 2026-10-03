@@ -23,6 +23,14 @@ func (l *limiter) allow(key string) bool {
 	defer l.mu.Unlock()
 	now := time.Now()
 	cut := now.Add(-l.window)
+	for k, hits := range l.hits {
+		if len(hits) == 0 || !hits[len(hits)-1].After(cut) {
+			delete(l.hits, k)
+		}
+	}
+	if _, exists := l.hits[key]; !exists && len(l.hits) >= 4096 {
+		return false
+	}
 	cur := l.hits[key]
 	kept := cur[:0]
 	for _, t := range cur {
