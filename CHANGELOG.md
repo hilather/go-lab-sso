@@ -66,7 +66,7 @@ Before rc.3 the changelog kept every entry under `[Unreleased]`. The entries bel
 - SCIM-001: Design-only outbound client (`docs/23-scim-outbound.md`). No inbound server. No SCIM YAML or catalog rows.
 - OVR-001: `spec.groupOverage.genericCap` (Normalize `0 → 200`; also the Entra threshold). Scope-gated group claims on access token + id_token + userinfo. Generic cap omit + audit; Entra `_claim_names`/`_claim_sources` + local Graph stub `POST /v1.0/users/{oid}/getMemberGroups`; stub-off overage fails the token; Okta `oktaFailAt` fails code/refresh. `POST /v1/tunables/overage:set` / `sso_tunable_overage_set` pointer-merge. Leftover OIDC tunables: `consent:force`, `token:mint`. Canonicalize of YAML that omitted `genericCap` now emits `genericCap: 200`.
 - UI-001: Operator SPA in `internal/web` (no app import). Cookie `labsso_session` + CSRF `X-LabSSO-CSRF`. Bearer wins; CSRF on non-GET cookie calls; MCP ignores cookies. REST-only `POST/GET/DELETE /v1/session`. Audit list/get + `labsso://audit/recent`. `POST /v1/sessions:expire-all`. `ui.enabled: false` 404s `GET /` only. First SPA is ready for Mira review (checklist in `docs/22-operator-spa.md`).
-- SAML-001: SP-initiated SSO. `GET /saml/metadata` EntityID = exact issuer. `GET|POST /saml/sso`. Protocol-neutral pending (`oidc` | `saml`); same login/consent HTML; SAML completion auto-POSTs a signed assertion. `spec.clients[].saml.entityID` / `acsURLs` (empty ACS → `redirectURIs`). Compiler synthesizes a lab self-signed X.509 from `signing.keyRef`. Hardened XML (no DTD/ENTITY, 64KiB). New dep: `github.com/russellhaering/goxmldsig` (signing XML we generate; not a full IdP wrap). `saml.enabled: false` 404s.
+- (reworded in rc.2) SAML-001: SP-initiated SSO. `GET /saml/metadata` EntityID = exact issuer. `GET|POST /saml/sso`. Protocol-neutral pending (`oidc` | `saml`); same login/consent HTML; SAML completion auto-POSTs a signed assertion. `spec.clients[].saml.entityID` / `acsURLs` (empty ACS → `redirectURIs`). Compiler synthesizes a lab self-signed X.509 from `signing.keyRef`. Hardened XML (no DTD/ENTITY, 64KiB). New dep: `github.com/russellhaering/goxmldsig` (signing XML we generate; not a full IdP wrap). `saml.enabled: false` 404s.
 - Cursor `.cursor/rules/` summaries of `AGENTS.md` (`repo-conventions.mdc`,
   `go-tests.mdc`). These are not vendored Origin/Cursor agent-skills.
 - `go.mod` (Go 1.26), fail-closed Makefile, `.gitignore`.
@@ -74,7 +74,7 @@ Before rc.3 the changelog kept every entry under `[Unreleased]`. The entries bel
 - YAML sketch `certRef`/`keyRef`/`signing.keyRef` fields.
 - README, START-HERE, AGENTS, SECURITY, CONTRIBUTING, MANIFEST, Apache-2.0 LICENSE.
 - Normative docs `docs/01`–`docs/11`, `docs/18`–`docs/21`, known limitations, skeptic notes.
-- ADRs 0001–0010 (ADR 0010 in rc.2).
+- (reworded in rc.2) ADRs 0001–0010.
 - Program board and reviewer/agent templates.
 - YAML fixtures and a non-runnable Compose sketch.
 
