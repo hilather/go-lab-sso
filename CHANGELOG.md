@@ -7,6 +7,10 @@ This project will use [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Changed
+
+- Go toolchain pinned to go1.26.8 (go.mod `toolchain`, CI `GO_VERSION`); 1.26.0–1.26.7 lack current stdlib security fixes. The image stays `golang:1.26-alpine` (not patch-pinned).
+
 ## [1.0.0-rc.4] - 2026-10-04
 
 Deep-review hardening ([#5](https://github.com/hilather/go-lab-sso/pull/5)), refresh-grant atomicity ([#6](https://github.com/hilather/go-lab-sso/pull/6)), and named force-fail token denials with the Entra 90033 mapping ([#7](https://github.com/hilather/go-lab-sso/pull/7)) after v1.0.0-rc.3. These are all the changes merged since rc.3.
