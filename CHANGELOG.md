@@ -10,6 +10,7 @@ This project will use [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 ### Changed
 
 - Go toolchain pinned to go1.26.8 (go.mod `toolchain`, CI `GO_VERSION`); 1.26.0–1.26.7 lack current stdlib security fixes. The image stays `golang:1.26-alpine` (not patch-pinned).
+- `golang.org/x/crypto` moves v0.47.0 to v0.56.0 and `golang.org/x/sys` moves v0.41.0 to v0.47.0 (go directive `go 1.26` to `go 1.26.0`). This clears all 16 fixable govulncheck advisories in x/crypto v0.47.0 (GO-2026-5005, GO-2026-5006, GO-2026-5013 through GO-2026-5021, GO-2026-5023, GO-2026-5033, GO-2026-6303, GO-2026-6354, GO-2026-6355) and GO-2026-5024 in x/sys v0.41.0. GO-2026-5932 remains (`golang.org/x/crypto/openpgp` is unmaintained; no fix available).
 
 ## [1.0.0-rc.4] - 2026-10-04
 
