@@ -2,7 +2,7 @@ module github.com/hilather/go-lab-sso
 
 go 1.26.0
 
-toolchain go1.26.8
+toolchain go1.26.9
 
 require (
 	github.com/beevik/etree v1.6.0

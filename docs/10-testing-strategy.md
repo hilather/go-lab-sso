@@ -62,7 +62,7 @@ format lint unit race fuzz-smoke generated integration documentation
 security-scan container-test changelog parity config-compat
 ```
 
-The workflow pins action revisions and Go 1.26.8. Docker-dependent checks remain mandatory in CI.
+The workflow pins action revisions and Go 1.26.9. Docker-dependent checks remain mandatory in CI.
 
 All required Make targets execute real checks.
 
