@@ -4,7 +4,7 @@
 # Run with a read-only root filesystem, cap_drop ALL, and no-new-privileges.
 # Host port 443 maps to container 10443. Management is :8080 (never 443).
 
-FROM golang:1.26-alpine AS build
+FROM golang:1.26.9-alpine AS build
 WORKDIR /src
 
 RUN apk add --no-cache ca-certificates tzdata
