@@ -7,6 +7,10 @@ This project will use [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Changed
+
+- Go toolchain 1.26.9 → 1.26.10 (go.mod `toolchain`, CI `GO_VERSION`, Dockerfile `golang:1.26.10-alpine`, `docs/10-testing-strategy.md`). 1.26.9 lacks the crypto/x509 fix for GO-2026-6809.
+
 ## [1.0.0-rc.5] - 2026-10-19
 
 Go toolchain pin to go1.26.9 and `golang.org/x/crypto` / `golang.org/x/sys` bumps ([#9](https://github.com/hilather/go-lab-sso/pull/9), [#10](https://github.com/hilather/go-lab-sso/pull/10)) after v1.0.0-rc.4. These are all the changes merged since rc.4.
