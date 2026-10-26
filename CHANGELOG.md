@@ -7,6 +7,10 @@ This project will use [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [1.0.0-rc.6] - 2026-10-26
+
+Go toolchain 1.26.10 for GO-2026-6809 ([#12](https://github.com/hilather/go-lab-sso/pull/12)) after v1.0.0-rc.5. This is the only change merged since rc.5.
+
 ### Changed
 
 - Go toolchain 1.26.9 → 1.26.10 (go.mod `toolchain`, CI `GO_VERSION`, Dockerfile `golang:1.26.10-alpine`, `docs/10-testing-strategy.md`). 1.26.9 lacks the crypto/x509 fix for GO-2026-6809.
@@ -111,7 +115,8 @@ Before rc.3 the changelog kept every entry under `[Unreleased]`. The entries bel
 - Skeptic review of the default-ship landing: PKCE errors no longer 302 to an unvalidated `redirect_uri`; token binds `client_id` and authenticates confidential clients; refresh tokens rotate; UserInfo rejects expired tokens and `id_token`; consent deny is an OAuth redirect; apply re-validates secret refs and unknown JSON fields; trailing YAML documents reject; plan impact sees in-place membership edits; reset clears the OIDC runtime; REST reset/tunable bodies fail closed; management REST uses `CrossOriginProtection`; `Validate` clones before applying ops; `domainerr.CodeOf` unwraps wrapped errors.
 - Follow-up: RP logout honors registered `post_logout_redirect_uri`; optional user `email` plus UserInfo scoped claims; consent Deny button; `oidc.enabled: false` 404s protocol routes; compile failures are `validation_failed`; YAML MFA `force-fail` applies on authorize; authorize/token rate limits and 10m pending TTL; loopback Host allowlist; MCP resource templates and tool error codes; session expire requires `:expire`; unique usernames; pinned Argon2id params; SHA-256 password compare.
 
-[Unreleased]: https://github.com/hilather/go-lab-sso/compare/v1.0.0-rc.5...HEAD
+[Unreleased]: https://github.com/hilather/go-lab-sso/compare/v1.0.0-rc.6...HEAD
+[1.0.0-rc.6]: https://github.com/hilather/go-lab-sso/compare/v1.0.0-rc.5...v1.0.0-rc.6
 [1.0.0-rc.5]: https://github.com/hilather/go-lab-sso/compare/v1.0.0-rc.4...v1.0.0-rc.5
 [1.0.0-rc.4]: https://github.com/hilather/go-lab-sso/compare/v1.0.0-rc.3...v1.0.0-rc.4
 [1.0.0-rc.3]: https://github.com/hilather/go-lab-sso/compare/v1.0.0-rc.2...v1.0.0-rc.3
