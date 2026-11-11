@@ -7,6 +7,10 @@ This project will use [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Changed
+
+- Go toolchain 1.26.10 → 1.26.11 (go.mod `toolchain`, CI `GO_VERSION`, Dockerfile `golang:1.26.11-alpine`, `docs/10-testing-strategy.md`); go1.26.11 includes security fixes to cgo, the go command, the compiler, the linker and net/http.
+
 ## [1.0.0-rc.6] - 2026-10-26
 
 Go toolchain 1.26.10 for GO-2026-6809 ([#12](https://github.com/hilather/go-lab-sso/pull/12)) after v1.0.0-rc.5. This is the only change merged since rc.5.
